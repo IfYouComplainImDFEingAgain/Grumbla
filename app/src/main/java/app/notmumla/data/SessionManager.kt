@@ -247,11 +247,25 @@ class SessionManager @Inject constructor(
         markChatRead()
     }
 
+    /** Load, compress and send [uri] as an inline image to [channelId]. */
+    fun sendImage(channelId: Int, uri: android.net.Uri) {
+        scope.launch {
+            val bytes = ImageUtil.loadCompressed(context, uri, _state.value.imageMessageLength)
+                ?: return@launch
+            client?.sendText(channelId, ImageUtil.toImageHtml(bytes))
+            appendChat(
+                ChatLine(chatId++, "You", "", System.currentTimeMillis(), isMe = true, imageBytes = bytes),
+            )
+            markChatRead()
+        }
+    }
+
     private fun onIncomingText(text: app.notmumla.protocol.IncomingText) {
         val selfSession = _state.value.sessionId
         if (text.actorSession != null && text.actorSession == selfSession) return // our own echo, if any
         val name = text.actorSession?.let { _state.value.users[it]?.name } ?: "Server"
-        val clean = stripHtml(text.message)
+        val image = ImageUtil.extractImage(text.message)
+        val clean = stripHtml(if (image != null) ImageUtil.stripImageTags(text.message) else text.message)
         appendChat(
             ChatLine(
                 id = chatId++,
@@ -259,13 +273,15 @@ class SessionManager @Inject constructor(
                 text = clean,
                 timeMillis = System.currentTimeMillis(),
                 isSystem = text.actorSession == null,
+                imageBytes = image,
             ),
         )
         _unread.value += 1
 
         val myName = _state.value.self?.name ?: lastServer?.username
         val mention = myName != null && clean.contains(myName, ignoreCase = true)
-        if (settings.ttsReadAloud) tts.speak("$name says $clean")
+        val spoken = if (clean.isBlank() && image != null) "$name sent an image" else "$name says $clean"
+        if (settings.ttsReadAloud && (clean.isNotBlank() || image != null)) tts.speak(spoken)
         // Notify on mentions (plain channel messages would be too noisy).
         if (mention) notifier.postMessage(sender = name, text = clean, mention = true, sound = settings.mentionSound)
     }

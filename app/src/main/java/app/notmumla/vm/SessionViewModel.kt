@@ -30,6 +30,8 @@ class SessionViewModel @Inject constructor(
 
     fun sendText(channelId: Int, message: String) = sessionManager.sendText(channelId, message)
 
+    fun sendImage(channelId: Int, uri: android.net.Uri) = sessionManager.sendImage(channelId, uri)
+
     fun onAudioPermissionGranted() = sessionManager.onAudioPermissionGranted()
 
     // Voice controls.

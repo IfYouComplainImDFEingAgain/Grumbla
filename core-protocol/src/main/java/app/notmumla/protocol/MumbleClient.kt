@@ -29,6 +29,7 @@ import MumbleProto.ChannelRemove
 import MumbleProto.ChannelState
 import MumbleProto.Ping
 import MumbleProto.Reject
+import MumbleProto.ServerConfig
 import MumbleProto.ServerSync
 import MumbleProto.TextMessage
 import MumbleProto.UserRemove
@@ -190,6 +191,7 @@ class MumbleClient(
             MessageType.SERVER_SYNC -> onServerSync(ServerSync.ADAPTER.decode(frame.payload))
             MessageType.TEXT_MESSAGE -> onText(TextMessage.ADAPTER.decode(frame.payload))
             MessageType.REJECT -> onReject(Reject.ADAPTER.decode(frame.payload))
+            MessageType.SERVER_CONFIG -> onServerConfig(ServerConfig.ADAPTER.decode(frame.payload))
             // The UDPTunnel message body is the raw UDP audio packet, not a protobuf wrapper.
             MessageType.UDP_TUNNEL -> onAudioPacket(frame.payload)
             MessageType.PING -> Unit
@@ -258,6 +260,15 @@ class MumbleClient(
     private fun onServerVersion(msg: PVersion) {
         val v = msg.version_v2 ?: msg.version_v1?.let { legacyToFull(it) }
         if (v != null) serverVersion = v
+    }
+
+    private fun onServerConfig(msg: ServerConfig) {
+        _state.update {
+            it.copy(
+                imageMessageLength = msg.image_message_length ?: it.imageMessageLength,
+                allowHtml = msg.allow_html ?: it.allowHtml,
+            )
+        }
     }
 
     /**
