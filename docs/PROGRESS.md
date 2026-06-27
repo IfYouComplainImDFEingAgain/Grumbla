@@ -48,6 +48,12 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - [x] Auto-reconnect with exponential backoff (1s..15s, 8 tries), rejoins last channel.
 - [x] Mention notifications (sound/vibrate gated by setting) + TTS read-aloud; licenses screen.
 
+### Added since M5
+- **Legacy voice protocol** (pre-1.5 servers): auto-selects the legacy Opus packet format when
+  the server (or our advertised version) predates 1.5.0, so voice works on 1.3.x/1.4.x servers;
+  inbound format is auto-detected by header byte. Verified by `LegacyVoiceTest`. The 1.5 protobuf
+  path is unchanged.
+
 ### Fixes since M5 (user-reported)
 - **Stale auto-reconnect** → a pending reconnect to a former server could fire after switching
   servers. `connect()` now cancels any pending reconnect; the delayed retry verifies it still
@@ -78,6 +84,9 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - On-device UI automation is unreliable on the test phone (auto-locks to PIN, multi-display). Live
   driving needs the user to keep it unlocked. See CLAUDE.md "On-device notes".
 - Integration tests need a running server on `127.0.0.1:64738` or they skip.
+- The full integration suite makes >10 rapid connections and trips Mumble's brute-force auto-ban
+  (default 10/120s). Run the docker test server with `-e MUMBLE_CONFIG_autobanAttempts=0`, or
+  restart it between full runs.
 
 ## Verification quick-reference
 - Unit/integration: `./gradlew :core-protocol:test` (with the docker test server up).
