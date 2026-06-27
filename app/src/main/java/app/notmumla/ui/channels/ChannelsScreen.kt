@@ -41,6 +41,7 @@ import app.notmumla.ui.ChannelLayout
 import app.notmumla.ui.SpeakingBars
 import app.notmumla.ui.TransmissionMode
 import app.notmumla.ui.UiChannel
+import app.notmumla.ui.UiMessage
 import app.notmumla.ui.UiUser
 import app.notmumla.ui.UserStatus
 import app.notmumla.ui.chat.ChatPanel
@@ -53,21 +54,25 @@ fun ChannelsScreen(
     serverInitial: String,
     connectionLabel: String,
     channels: List<UiChannel>,
+    chatMessages: List<UiMessage>,
     selfMuted: Boolean,
     selfDeafened: Boolean,
     transmitting: Boolean,
     unreadCount: Int,
+    currentChannelName: String,
     onJoinChannel: (Int) -> Unit,
     onPttHeld: (Boolean) -> Unit,
     onModeChange: (TransmissionMode) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
     onSendText: (String) -> Unit,
+    onChatRead: () -> Unit,
     onOpenSettings: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
     var tab by remember { mutableStateOf(0) } // 0 = channels, 1 = chat
+    androidx.compose.runtime.LaunchedEffect(tab) { if (tab == 1) onChatRead() }
     var layout by remember { mutableStateOf(ChannelLayout.TREE) }
     var mode by remember { mutableStateOf(TransmissionMode.PTT) }
     var quickSettings by remember { mutableStateOf(false) }
@@ -85,7 +90,11 @@ fun ChannelsScreen(
                         ChannelLayout.SPEAKERS -> SpeakersLayout(channels, onJoinChannel)
                         ChannelLayout.COMPACT -> CompactLayout(channels, onJoinChannel)
                     }
-                    else -> ChatPanel(onSend = onSendText)
+                    else -> ChatPanel(
+                        onSend = onSendText,
+                        messages = chatMessages,
+                        channelName = currentChannelName,
+                    )
                 }
             }
 

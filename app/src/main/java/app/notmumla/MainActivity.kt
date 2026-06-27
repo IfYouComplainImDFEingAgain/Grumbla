@@ -45,6 +45,22 @@ private fun UiTransmissionMode.toAudioMode(): AudioTransmissionMode = when (this
     UiTransmissionMode.VAD -> AudioTransmissionMode.VAD
 }
 
+private val chatTimeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+
+private fun app.notmumla.data.ChatLine.toUiMessage(): app.notmumla.ui.UiMessage = app.notmumla.ui.UiMessage(
+    id = id.toInt(),
+    kind = when {
+        isSystem -> app.notmumla.ui.ChatKind.SYSTEM
+        isMe -> app.notmumla.ui.ChatKind.ME
+        else -> app.notmumla.ui.ChatKind.OTHER
+    },
+    name = senderName,
+    initials = app.notmumla.ui.channels.initialsFor(senderName),
+    avatar = app.notmumla.ui.channels.avatarColorFor(senderName),
+    time = chatTimeFmt.format(java.util.Date(timeMillis)),
+    text = text,
+)
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -97,6 +113,8 @@ private fun AppNav(onToggleTheme: () -> Unit) {
             val serverLabel by vm.serverLabel.collectAsState()
             val speaking by vm.speakingSessions.collectAsState()
             val transmitting by vm.localTransmitting.collectAsState()
+            val chat by vm.chat.collectAsState()
+            val unread by vm.unreadChat.collectAsState()
 
             // Request microphone access; start the audio engine once granted.
             val ctx = LocalContext.current
@@ -125,16 +143,19 @@ private fun AppNav(onToggleTheme: () -> Unit) {
                 ConnectionState.DISCONNECTED -> "Disconnected"
             }
             val serverName = serverLabel.ifBlank { "Mumble server" }
+            val currentChannelName = self?.channelId?.let { state.channels[it]?.name } ?: "chat"
 
             ChannelsScreen(
                 serverName = serverName,
                 serverInitial = initialsFor(serverName).take(1),
                 connectionLabel = connectionLabel,
                 channels = state.toUiChannels(speaking),
+                chatMessages = chat.map { it.toUiMessage() },
                 selfMuted = self?.selfMute ?: false,
                 selfDeafened = self?.selfDeaf ?: false,
                 transmitting = transmitting,
-                unreadCount = 0,
+                unreadCount = unread,
+                currentChannelName = currentChannelName,
                 onJoinChannel = vm::joinChannel,
                 onPttHeld = vm::setPttHeld,
                 onModeChange = { vm.setTransmissionMode(it.toAudioMode()) },
@@ -149,6 +170,7 @@ private fun AppNav(onToggleTheme: () -> Unit) {
                     vm.setMuted(muted = newDeaf || (s?.selfMute ?: false), deaf = newDeaf)
                 },
                 onSendText = { msg -> self?.channelId?.let { vm.sendText(it, msg) } },
+                onChatRead = vm::markChatRead,
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onDisconnect = {
                     vm.disconnect()
