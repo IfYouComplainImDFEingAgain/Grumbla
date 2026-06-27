@@ -147,11 +147,14 @@ class MumbleClient(
     private fun startPing() {
         pingJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
-                // ~6 s keeps the link (and the phone's Wi-Fi radio) warm so the first message
-                // after an idle moment isn't delayed by the radio waking from power-save.
-                delay(6_000)
-                runCatching {
-                    channel?.send(Ping(timestamp = System.nanoTime() / 1000))
+                // Only ping when the link has actually been idle ~6 s. During a call, audio/voice
+                // traffic keeps it warm so no extra pings are sent (saves battery); when idle, the
+                // 6 s keep-alive prevents the radio dropping into power-save and delaying the next
+                // message. The 2 s tick is CPU-only and does not wake the radio.
+                delay(2_000)
+                val ch = channel ?: continue
+                if (ch.idleMs() >= IDLE_PING_MS) {
+                    runCatching { ch.send(Ping(timestamp = System.nanoTime() / 1000)) }
                 }
             }
         }
@@ -318,6 +321,9 @@ class MumbleClient(
     companion object {
         /** UDP message type prefix byte for the protobuf audio format (0 = Audio, 1 = Ping). */
         private const val UDP_TYPE_AUDIO = 0
+
+        /** Send a keep-alive only after this much idle time on the control channel. */
+        private const val IDLE_PING_MS = 6_000L
 
         /** Pack a Mumble v2 version: 16 bits each for major/minor/patch in the high 48 bits. */
         fun encodeVersion(major: Int, minor: Int, patch: Int): Long =

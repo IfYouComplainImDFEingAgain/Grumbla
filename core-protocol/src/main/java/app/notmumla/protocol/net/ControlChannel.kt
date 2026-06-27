@@ -23,6 +23,11 @@ class ControlChannel(
     private var input: DataInputStream? = null
     private var output: DataOutputStream? = null
 
+    @Volatile private var lastActivity = System.currentTimeMillis()
+    /** Milliseconds since the last send or receive — used to skip redundant keep-alive pings. */
+    fun idleMs(): Long = System.currentTimeMillis() - lastActivity
+    private fun touch() { lastActivity = System.currentTimeMillis() }
+
     /** A raw framed message read off the wire. */
     data class Frame(val typeId: Int, val payload: ByteArray)
 
@@ -61,6 +66,7 @@ class ControlChannel(
         out.writeInt(body.size)
         out.write(body)
         out.flush()
+        touch()
     }
 
     /** Send a pre-encoded payload under a raw type id (used for the UDP-over-TCP audio tunnel). */
@@ -71,6 +77,7 @@ class ControlChannel(
         out.writeInt(body.size)
         out.write(body)
         out.flush()
+        touch()
     }
 
     /** Blocking read of the next frame. Throws on EOF / socket error. */
@@ -81,6 +88,7 @@ class ControlChannel(
         require(length in 0..0x7FFFFF) { "Frame length out of range: $length" }
         val payload = ByteArray(length)
         inp.readFully(payload)
+        touch()
         return Frame(type, payload)
     }
 
