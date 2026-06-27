@@ -1,6 +1,8 @@
 package app.notmumla.data
 
 import android.os.Build
+import app.notmumla.audio.AudioEngine
+import app.notmumla.audio.TransmissionMode
 import app.notmumla.data.db.ServerDao
 import app.notmumla.data.db.ServerEntity
 import app.notmumla.protocol.ConnectConfig
@@ -38,11 +40,24 @@ class SessionManager @Inject constructor(
     val events = MutableSharedFlow<MumbleClient.Event>(extraBufferCapacity = 32)
 
     private var client: MumbleClient? = null
+    private var engine: AudioEngine? = null
     private var mirrorJob: Job? = null
     private var eventJob: Job? = null
+    private var audioStarted = false
     private var activeServerId: Long? = null
 
     val activeClient: MumbleClient? get() = client
+
+    /** Remote sessions currently transmitting (drives speaking indicators). */
+    private val _speaking = MutableStateFlow<Set<Int>>(emptySet())
+    val speakingSessions: StateFlow<Set<Int>> = _speaking.asStateFlow()
+
+    private val _localTransmitting = MutableStateFlow(false)
+    val localTransmitting: StateFlow<Boolean> = _localTransmitting.asStateFlow()
+
+    /** True once RECORD_AUDIO is granted and the engine has been started. */
+    var audioPermissionGranted = false
+        private set
 
     /** Connect to a saved server, generating the identity on first use. */
     fun connect(server: ServerEntity) {
@@ -57,6 +72,12 @@ class SessionManager @Inject constructor(
             osVersion = Build.VERSION.RELEASE ?: "",
         )
         client = mc
+
+        val eng = AudioEngine(sendFrame = { opus, terminator -> mc.sendAudio(opus, terminator) })
+        mc.voiceSink = eng
+        engine = eng
+        scope.launch { eng.speakingSessions.collect { _speaking.value = it } }
+        scope.launch { eng.transmitting.collect { _localTransmitting.value = it } }
 
         mirrorJob = scope.launch {
             mc.state.collect { s ->
@@ -78,6 +99,7 @@ class SessionManager @Inject constructor(
     }
 
     private fun onConnected(server: ServerEntity, state: ServerState) {
+        if (audioPermissionGranted && !audioStarted) startAudio()
         val id = activeServerId ?: return
         scope.launch {
             val fp = state.serverFingerprintSha256
@@ -85,6 +107,22 @@ class SessionManager @Inject constructor(
             serverDao.markConnected(id, System.currentTimeMillis(), state.self?.channelId)
         }
     }
+
+    /** Called by the UI once RECORD_AUDIO is granted; (re)starts the capture/playback engine. */
+    fun onAudioPermissionGranted() {
+        audioPermissionGranted = true
+        if (!audioStarted && _state.value.connection == ConnectionState.CONNECTED) startAudio()
+    }
+
+    private fun startAudio() {
+        engine?.start()
+        audioStarted = true
+    }
+
+    // Engine controls surfaced to the UI.
+    fun setPttHeld(held: Boolean) { engine?.setPttHeld(held) }
+    fun setTransmissionMode(mode: TransmissionMode) { engine?.mode = mode }
+    fun setMicMuted(muted: Boolean) { engine?.muted = muted }
 
     fun joinChannel(channelId: Int) = client?.joinChannel(channelId)
 
@@ -95,9 +133,14 @@ class SessionManager @Inject constructor(
     fun disconnect() {
         mirrorJob?.cancel()
         eventJob?.cancel()
+        engine?.stop()
+        engine = null
+        audioStarted = false
         client?.disconnect()
         client = null
         activeServerId = null
+        _speaking.value = emptySet()
+        _localTransmitting.value = false
         _state.value = ServerState(connection = ConnectionState.DISCONNECTED)
     }
 }

@@ -7,9 +7,27 @@ android {
     namespace = "app.notmumla.audio"
     compileSdk = 35
 
+    ndkVersion = "27.0.12077973"
+
     defaultConfig {
         minSdk = 31
         consumerProguardFiles("consumer-rules.pro")
+        externalNativeBuild {
+            cmake {
+                arguments += "-DANDROID_STL=c++_shared"
+            }
+        }
+        ndk {
+            // Match the dev device (arm64) plus the common emulator ABI.
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     compileOptions {

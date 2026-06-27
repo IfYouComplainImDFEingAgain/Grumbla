@@ -1,9 +1,14 @@
 package app.notmumla
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -16,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -30,7 +36,14 @@ import app.notmumla.ui.theme.MumbleTheme
 import app.notmumla.ui.theme.NotMumlaTheme
 import app.notmumla.vm.ConnectViewModel
 import app.notmumla.vm.SessionViewModel
+import app.notmumla.ui.TransmissionMode as UiTransmissionMode
+import app.notmumla.audio.TransmissionMode as AudioTransmissionMode
 import dagger.hilt.android.AndroidEntryPoint
+
+private fun UiTransmissionMode.toAudioMode(): AudioTransmissionMode = when (this) {
+    UiTransmissionMode.PTT -> AudioTransmissionMode.PTT
+    UiTransmissionMode.VAD -> AudioTransmissionMode.VAD
+}
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -82,6 +95,19 @@ private fun AppNav(onToggleTheme: () -> Unit) {
             val vm: SessionViewModel = hiltViewModel()
             val state by vm.state.collectAsState()
             val serverLabel by vm.serverLabel.collectAsState()
+            val speaking by vm.speakingSessions.collectAsState()
+            val transmitting by vm.localTransmitting.collectAsState()
+
+            // Request microphone access; start the audio engine once granted.
+            val ctx = LocalContext.current
+            val micPermission = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission(),
+            ) { granted -> if (granted) vm.onAudioPermissionGranted() }
+            LaunchedEffect(Unit) {
+                if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED
+                ) vm.onAudioPermissionGranted() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+            }
 
             // Leave the session screen if the connection is rejected/fails.
             LaunchedEffect(state.connection) {
@@ -104,20 +130,23 @@ private fun AppNav(onToggleTheme: () -> Unit) {
                 serverName = serverName,
                 serverInitial = initialsFor(serverName).take(1),
                 connectionLabel = connectionLabel,
-                channels = state.toUiChannels(),
+                channels = state.toUiChannels(speaking),
                 selfMuted = self?.selfMute ?: false,
                 selfDeafened = self?.selfDeaf ?: false,
+                transmitting = transmitting,
                 unreadCount = 0,
                 onJoinChannel = vm::joinChannel,
+                onPttHeld = vm::setPttHeld,
+                onModeChange = { vm.setTransmissionMode(it.toAudioMode()) },
                 onToggleMute = {
                     val s = state.self
-                    vm.setSelfMuteDeaf(mute = !(s?.selfMute ?: false), deaf = s?.selfDeaf ?: false)
+                    vm.setMuted(muted = !(s?.selfMute ?: false), deaf = s?.selfDeaf ?: false)
                 },
                 onToggleDeafen = {
                     val s = state.self
                     val newDeaf = !(s?.selfDeaf ?: false)
                     // Deafening implies muting, per Mumble semantics.
-                    vm.setSelfMuteDeaf(mute = newDeaf || (s?.selfMute ?: false), deaf = newDeaf)
+                    vm.setMuted(muted = newDeaf || (s?.selfMute ?: false), deaf = newDeaf)
                 },
                 onSendText = { msg -> self?.channelId?.let { vm.sendText(it, msg) } },
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },

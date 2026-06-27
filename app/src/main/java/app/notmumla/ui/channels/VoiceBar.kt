@@ -49,13 +49,14 @@ fun VoiceBar(
     mode: TransmissionMode,
     muted: Boolean,
     deafened: Boolean,
+    transmitting: Boolean,
     onMode: (TransmissionMode) -> Unit,
+    onPttHeld: (Boolean) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
     onLongPressSettings: () -> Unit,
 ) {
     val c = MumbleTheme.colors
-    var talking by remember { mutableStateOf(false) }
 
     Column(
         Modifier.fillMaxWidth().background(c.surfContainer)
@@ -81,8 +82,8 @@ fun VoiceBar(
                 onClick = onToggleMute,
             )
 
-            // Big PTT / VAD button
-            val active = talking || mode == TransmissionMode.VAD
+            // Big PTT / VAD button. `transmitting` reflects the engine's live state.
+            val active = transmitting || (mode == TransmissionMode.VAD)
             Box(
                 Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(28.dp))
                     .background(if (active) c.primary else c.surfHigh)
@@ -91,9 +92,9 @@ fun VoiceBar(
                             onLongPress = { onLongPressSettings() },
                             onPress = {
                                 if (mode == TransmissionMode.PTT) {
-                                    talking = true
+                                    onPttHeld(true)
                                     tryAwaitRelease()
-                                    talking = false
+                                    onPttHeld(false)
                                 }
                             },
                         )
@@ -111,7 +112,7 @@ fun VoiceBar(
                     Text(
                         when {
                             mode == TransmissionMode.VAD -> "Voice Activated"
-                            talking -> "Transmitting…"
+                            transmitting -> "Transmitting…"
                             else -> "Hold to Talk"
                         },
                         color = if (active) c.onPrimary else c.onSurface,

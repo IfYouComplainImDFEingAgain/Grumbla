@@ -9,6 +9,8 @@ import app.notmumla.protocol.model.User
 import app.notmumla.protocol.net.ControlChannel
 import app.notmumla.protocol.net.TofuTrustManager
 import app.notmumla.protocol.proto.MessageType
+import MumbleUDP.Audio as UdpAudio
+import okio.ByteString.Companion.toByteString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,6 +33,11 @@ import MumbleProto.TextMessage
 import MumbleProto.UserRemove
 import MumbleProto.UserState
 import MumbleProto.Version as PVersion
+
+/** Receives decoded incoming voice frames from the active session. */
+interface VoiceSink {
+    fun onIncomingAudio(session: Int, sequence: Long, opus: ByteArray, terminator: Boolean)
+}
 
 /** Parameters for a single connection attempt. */
 data class ConnectConfig(
@@ -76,6 +83,11 @@ class MumbleClient(
     private var channel: ControlChannel? = null
     private var readJob: Job? = null
     private var pingJob: Job? = null
+
+    /** Set by the audio engine to receive inbound voice frames. */
+    @Volatile var voiceSink: VoiceSink? = null
+
+    private var audioSequence = 0L
 
     fun connect(config: ConnectConfig) {
         _state.update { ServerState(connection = ConnectionState.CONNECTING) }
@@ -162,6 +174,8 @@ class MumbleClient(
             MessageType.SERVER_SYNC -> onServerSync(ServerSync.ADAPTER.decode(frame.payload))
             MessageType.TEXT_MESSAGE -> onText(TextMessage.ADAPTER.decode(frame.payload))
             MessageType.REJECT -> onReject(Reject.ADAPTER.decode(frame.payload))
+            // The UDPTunnel message body is the raw UDP audio packet, not a protobuf wrapper.
+            MessageType.UDP_TUNNEL -> onAudioPacket(frame.payload)
             MessageType.PING -> Unit
             else -> Unit // unhandled types (ACL, stats, codec, crypt-setup) — wired up in later milestones
         }
@@ -225,6 +239,41 @@ class MumbleClient(
         events.tryEmit(Event.Text(IncomingText(msg.actor, msg.message)))
     }
 
+    /** Parse a raw inbound UDP audio packet (`[type][MumbleUDP.Audio]`) and surface it. */
+    private fun onAudioPacket(packet: ByteArray) {
+        if (packet.isEmpty() || packet[0].toInt() != UDP_TYPE_AUDIO) return // 0 = Audio, 1 = Ping
+        val audio = runCatching { UdpAudio.ADAPTER.decode(packet.copyOfRange(1, packet.size)) }
+            .getOrNull() ?: return
+        voiceSink?.onIncomingAudio(
+            session = audio.sender_session,
+            sequence = audio.frame_number,
+            opus = audio.opus_data.toByteArray(),
+            terminator = audio.is_terminator,
+        )
+    }
+
+    /**
+     * Send one encoded Opus frame to the server. Uses the Mumble 1.5 protobuf audio format
+     * (`[0x00 type][MumbleUDP.Audio]`) sent as the raw body of an UDPTunnel control message; the
+     * UDP+OCB2 path is added later as an optimization. target 0 = normal talking.
+     */
+    fun sendAudio(opus: ByteArray, terminator: Boolean, target: Int = 0) {
+        val audio = UdpAudio(
+            target = target,
+            frame_number = audioSequence,
+            opus_data = opus.toByteString(),
+            is_terminator = terminator,
+        )
+        audioSequence += 1
+        if (terminator) audioSequence = 0
+        val body = UdpAudio.ADAPTER.encode(audio)
+        val packet = ByteArray(body.size + 1).also {
+            it[0] = UDP_TYPE_AUDIO.toByte()
+            body.copyInto(it, 1)
+        }
+        runCatching { channel?.sendRaw(MessageType.UDP_TUNNEL.id, packet) }
+    }
+
     private fun onReject(msg: Reject) {
         val reason = msg.reason ?: msg.type?.name ?: "Connection rejected"
         _state.update { it.copy(connection = ConnectionState.FAILED, error = reason) }
@@ -263,6 +312,9 @@ class MumbleClient(
     }
 
     companion object {
+        /** UDP message type prefix byte for the protobuf audio format (0 = Audio, 1 = Ping). */
+        private const val UDP_TYPE_AUDIO = 0
+
         /** Pack a Mumble v2 version: 16 bits each for major/minor/patch in the high 48 bits. */
         fun encodeVersion(major: Int, minor: Int, patch: Int): Long =
             (major.toLong() shl 48) or (minor.toLong() shl 32) or (patch.toLong() shl 16)
