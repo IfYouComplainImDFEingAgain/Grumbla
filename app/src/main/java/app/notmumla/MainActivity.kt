@@ -46,6 +46,24 @@ private fun UiTransmissionMode.toAudioMode(): AudioTransmissionMode = when (this
     UiTransmissionMode.VAD -> AudioTransmissionMode.VAD
 }
 
+/**
+ * Ask the OS to exempt the app from battery optimization so the foreground voice service is not
+ * killed in the background. No-op if already exempted. Important on aggressive OEMs (e.g. Unihertz).
+ */
+private fun android.content.Context.requestUnrestrictedBackground() {
+    val pm = getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+    if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+        runCatching {
+            startActivity(
+                android.content.Intent(
+                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    android.net.Uri.parse("package:$packageName"),
+                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+}
+
 private val chatTimeFmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
 
 private fun app.notmumla.data.ChatLine.toUiMessage(): app.notmumla.ui.UiMessage = app.notmumla.ui.UiMessage(
@@ -103,19 +121,47 @@ private object Routes {
 }
 
 @Composable
+private fun CertChangedDialog(fingerprint: String, onTrust: () -> Unit, onCancel: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onCancel,
+        title = { androidx.compose.material3.Text("Server certificate changed") },
+        text = {
+            androidx.compose.material3.Text(
+                "This server's security certificate is different from the one you trusted before. " +
+                    "This is normal if the server was reinstalled — but could also mean someone is " +
+                    "intercepting the connection.\n\nNew fingerprint (SHA-256):\n$fingerprint",
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onTrust) {
+                androidx.compose.material3.Text("Trust & reconnect")
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onCancel) {
+                androidx.compose.material3.Text("Cancel")
+            }
+        },
+    )
+}
+
+@Composable
 private fun AppNav() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = Routes.CONNECT) {
         composable(Routes.CONNECT) {
             val vm: ConnectViewModel = hiltViewModel()
             val servers by vm.savedServers.collectAsState()
+            val ctx = LocalContext.current
             ConnectScreen(
                 savedServers = servers,
                 onConnectNew = { host, port, user, pass ->
+                    ctx.requestUnrestrictedBackground()
                     vm.connectNew(host, port, user, pass)
                     nav.navigate(Routes.CHANNELS)
                 },
                 onConnectSaved = {
+                    ctx.requestUnrestrictedBackground()
                     vm.connectSaved(it)
                     nav.navigate(Routes.CHANNELS)
                 },
@@ -142,11 +188,23 @@ private fun AppNav() {
                 ) vm.onAudioPermissionGranted() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
             }
 
-            // Leave the session screen if the connection is rejected/fails.
-            LaunchedEffect(state.connection) {
-                if (state.connection == ConnectionState.FAILED) {
+            // Leave the session screen if the connection is rejected/fails — unless it's a cert
+            // change, which we surface as a trust prompt instead.
+            LaunchedEffect(state.connection, state.certMismatchFingerprint) {
+                if (state.connection == ConnectionState.FAILED && state.certMismatchFingerprint == null) {
                     nav.popBackStack(Routes.CONNECT, inclusive = false)
                 }
+            }
+
+            state.certMismatchFingerprint?.let { fp ->
+                CertChangedDialog(
+                    fingerprint = fp,
+                    onTrust = { vm.trustNewCertificate() },
+                    onCancel = {
+                        vm.disconnect()
+                        nav.popBackStack(Routes.CONNECT, inclusive = false)
+                    },
+                )
             }
 
             val self = state.self
