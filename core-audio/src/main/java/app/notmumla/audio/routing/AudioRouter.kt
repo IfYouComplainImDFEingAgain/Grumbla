@@ -124,7 +124,6 @@ class AudioRouter(context: Context) {
      */
     fun select(route: OutputRoute): RouteConfig {
         val config = configFor(route)
-        am.mode = config.audioMode
         val commId = config.communicationDeviceId
         if (commId != null) {
             am.availableCommunicationDevices.firstOrNull { it.id == commId }
@@ -132,7 +131,14 @@ class AudioRouter(context: Context) {
         } else {
             am.clearCommunicationDevice()
         }
+        am.mode = config.audioMode
         _current.value = route
         return config
+    }
+
+    /** Restore the system audio mode/routing after a call ends. */
+    fun reset() {
+        runCatching { am.clearCommunicationDevice() }
+        runCatching { am.mode = AudioManager.MODE_NORMAL }
     }
 }

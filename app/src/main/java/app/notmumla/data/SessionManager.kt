@@ -87,9 +87,10 @@ class SessionManager @Inject constructor(
         client = mc
 
         val eng = AudioEngine(audioManager) { opus, terminator -> mc.sendAudio(opus, terminator) }
-        eng.applyRoute(router.configFor(router.current.value))
         mc.voiceSink = eng
         engine = eng
+        // Apply the current route (configures AudioManager mode/device + engine) before audio starts.
+        selectRoute(router.current.value)
         scope.launch { eng.speakingSessions.collect { _speaking.value = it } }
         scope.launch { eng.transmitting.collect { _localTransmitting.value = it } }
 
@@ -158,6 +159,7 @@ class SessionManager @Inject constructor(
         engine?.stop()
         engine = null
         audioStarted = false
+        router.reset()
         client?.disconnect()
         client = null
         activeServerId = null

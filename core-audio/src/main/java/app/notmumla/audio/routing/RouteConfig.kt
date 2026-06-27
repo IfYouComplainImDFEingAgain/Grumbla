@@ -37,10 +37,13 @@ data class RouteConfig(
     val communicationDeviceId: Int?,
 ) {
     companion object {
-        /** Default phone speaker/mic route used before any Bluetooth selection. */
+        /**
+         * Default phone loudspeaker/mic route. We use MODE_NORMAL (not MODE_IN_COMMUNICATION) so
+         * voice plays out the **loudspeaker** rather than being routed to the earpiece receiver.
+         */
         val PHONE = RouteConfig(
             route = OutputRoute.PHONE_SPEAKER,
-            audioMode = AudioManager.MODE_IN_COMMUNICATION,
+            audioMode = AudioManager.MODE_NORMAL,
             recordSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             recordDeviceId = null,
             trackUsage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
