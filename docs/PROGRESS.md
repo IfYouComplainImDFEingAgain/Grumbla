@@ -39,21 +39,21 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   phone-speaker route now `MODE_NORMAL` (loudspeaker) so received audio is audible.
 - **Needs user**: A2DP↔SCO switching can only be validated with real Bluetooth headphones.
 
-### M5 — Text chat + polish ⬜ (NEXT)
-- [ ] Render **inbound** chat messages (sending already works; wire `MumbleClient.Event.Text` →
-      a per-channel message list in the Chat tab; resolve actor session → name).
-- [ ] Persist settings via DataStore and actually apply them (see "Settings wiring" below).
-- [ ] Auto-reconnect (rejoin last channel; `ServerEntity.lastChannelId` already stored).
-- [ ] Notifications: channel-message + mention notifications, vibrate, TTS read-aloud.
-- [ ] OSS licenses screen; About → version already shown.
+### M5 — Text chat + polish ✅
+- [x] Inbound chat: `Event.Text` → chat list, actor→name, HTML-stripped; unread badge; own
+      messages added locally. `TextMessageTest` verifies routing through the real server.
+- [x] Settings persisted via DataStore + applied: theme, transmission mode, mic gain, VAD,
+      noise suppression, echo cancellation (hardware AudioEffects), Opus bitrate, avatars,
+      keep-awake; SettingsViewModel + interactive Settings screen.
+- [x] Auto-reconnect with exponential backoff (1s..15s, 8 tries), rejoins last channel.
+- [x] Mention notifications (sound/vibrate gated by setting) + TTS read-aloud; licenses screen.
 
 ---
 
-## Backlog / not-yet-wired (surface these in M5 or later)
-- **Settings wiring** — these toggles/sliders are currently visual only and not applied:
-  noise suppression, echo cancellation, input sensitivity / VAD threshold, mic gain, audio quality
-  (Opus bitrate / `max_bandwidth`), master volume, show avatars, keep-screen-awake, priority speaker,
-  join/leave sounds, dark-theme persistence, channel-layout persistence.
+## Backlog / not-yet-wired (post-M5)
+- **Still visual-only settings**: master volume, priority speaker, join/leave sounds,
+  channel-layout persistence (engine gets the persisted transmission mode, but the in-call
+  VoiceBar/QuickSettings layout+mode toggles remain ephemeral and aren't persisted).
 - **UDP + OCB2** voice path — currently audio uses only the TCP tunnel (works everywhere). Add a UDP
   socket with OCB2-AES128 (`CryptSetup` already arrives) + UDP-ping-based switch for lower latency.
   (`:core-protocol/udp/` is the home for this; port `~/git/mumble/src/crypto/CryptStateOCB2.cpp`.)
