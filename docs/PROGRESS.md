@@ -52,6 +52,8 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - **Inline image messages**: chat `+` button → photo picker → downscaled/compressed JPEG sent as a
   base64 `<img>` data URI (sized to `ServerConfig.image_message_length`); inbound images are parsed
   and rendered in the bubble. Verified by `ImageMessageTest`. (Doesn't yet act on `allow_html=false`.)
+  Thumbnails are aspect-bounded (240×300dp) so they never overflow; tap opens a full-screen viewer
+  with pinch-zoom + pan.
 - **Legacy voice protocol** (pre-1.5 servers): auto-selects the legacy Opus packet format when
   the server (or our advertised version) predates 1.5.0, so voice works on 1.3.x/1.4.x servers;
   inbound format is auto-detected by header byte. Verified by `LegacyVoiceTest`. The 1.5 protobuf
