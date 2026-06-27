@@ -16,3 +16,6 @@ local.properties
 # Design handoff archive (kept as unpacked folder, not the zip)
 *.zip
 core-audio/src/main/cpp/opus/
+
+# Claude project guide (local only)
+CLAUDE.md
