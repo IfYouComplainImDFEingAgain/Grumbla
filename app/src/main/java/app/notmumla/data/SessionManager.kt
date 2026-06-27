@@ -35,6 +35,8 @@ class SessionManager @Inject constructor(
     private val identityStore: IdentityStore,
     private val serverDao: ServerDao,
     private val settingsRepo: SettingsRepository,
+    private val tts: TtsManager,
+    private val notifier: Notifier,
 ) {
     private val scope = CoroutineScope(SupervisorJob())
 
@@ -255,6 +257,12 @@ class SessionManager @Inject constructor(
             ),
         )
         _unread.value += 1
+
+        val myName = _state.value.self?.name ?: lastServer?.username
+        val mention = myName != null && clean.contains(myName, ignoreCase = true)
+        if (settings.ttsReadAloud) tts.speak("$name says $clean")
+        // Notify on mentions (plain channel messages would be too noisy).
+        if (mention) notifier.postMessage(sender = name, text = clean, mention = true, sound = settings.mentionSound)
     }
 
     private fun appendChat(line: ChatLine) {

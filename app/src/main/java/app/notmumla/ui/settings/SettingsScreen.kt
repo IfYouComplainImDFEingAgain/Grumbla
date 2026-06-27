@@ -78,6 +78,7 @@ fun SettingsScreen(
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleTts: (Boolean) -> Unit,
     onToggleMentionSound: (Boolean) -> Unit,
+    onOpenLicenses: () -> Unit,
 ) {
     val c = MumbleTheme.colors
     val isDark = settings.theme == ThemeMode.DARK || (settings.theme == ThemeMode.SYSTEM && c.isDark)
@@ -224,7 +225,7 @@ fun SettingsScreen(
             SettingsGroup {
                 ValueRow(Icons.Filled.VerifiedUser, "Version", "0.1.0 (1)", showChevron = false)
                 Divider()
-                NavRow(Icons.Filled.BarChart, "Open-source licenses", null)
+                NavRow(Icons.Filled.BarChart, "Open-source licenses", null, onClick = onOpenLicenses)
             }
             Spacer(Modifier.height(20.dp))
         }
@@ -299,8 +300,8 @@ private fun RowBase(
 
 @Composable
 private fun NavRow(icon: ImageVector, title: String, subtitle: String?,
-                   trailing: @Composable () -> Unit = {}) {
-    RowBase(icon, title, subtitle, trailing = { trailing(); Chevron() }, onClick = {})
+                   trailing: @Composable () -> Unit = {}, onClick: () -> Unit = {}) {
+    RowBase(icon, title, subtitle, trailing = { trailing(); Chevron() }, onClick = onClick)
 }
 
 @Composable
