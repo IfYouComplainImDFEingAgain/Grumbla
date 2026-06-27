@@ -74,7 +74,8 @@ fun ChannelsScreen(
 
     Box(Modifier.fillMaxSize().background(c.surface)) {
         Column(Modifier.fillMaxSize()) {
-            ServerHeader(serverName, serverInitial, connectionLabel, onOpenSettings)
+            // The header overflow button opens quick settings (per the design mockup).
+            ServerHeader(serverName, serverInitial, connectionLabel, onOpenQuickSettings = { quickSettings = true })
             TabStrip(tab, unread = unreadCount, onSelect = { tab = it })
 
             Box(Modifier.weight(1f)) {
@@ -97,7 +98,6 @@ fun ChannelsScreen(
                 onPttHeld = onPttHeld,
                 onToggleMute = onToggleMute,
                 onToggleDeafen = onToggleDeafen,
-                onLongPressSettings = { quickSettings = true },
             )
         }
 
@@ -107,6 +107,7 @@ fun ChannelsScreen(
                 mode = mode,
                 onLayout = { layout = it },
                 onMode = { mode = it; onModeChange(it) },
+                onOpenAllSettings = { quickSettings = false; onOpenSettings() },
                 onDisconnect = onDisconnect,
                 onClose = { quickSettings = false },
             )
@@ -119,7 +120,7 @@ private fun ServerHeader(
     serverName: String,
     serverInitial: String,
     connectionLabel: String,
-    onOpenSettings: () -> Unit,
+    onOpenQuickSettings: () -> Unit,
 ) {
     val c = MumbleTheme.colors
     Row(
@@ -140,9 +141,9 @@ private fun ServerHeader(
             }
         }
         Box(
-            Modifier.size(42.dp).clip(CircleShape).clickable(onClick = onOpenSettings),
+            Modifier.size(42.dp).clip(CircleShape).clickable(onClick = onOpenQuickSettings),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Filled.MoreVert, "Settings", tint = c.onSurfaceVar) }
+        ) { Icon(Icons.Filled.MoreVert, "Quick settings", tint = c.onSurfaceVar) }
     }
 }
 

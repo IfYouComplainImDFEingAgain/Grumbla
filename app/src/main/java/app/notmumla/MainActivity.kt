@@ -157,7 +157,15 @@ private fun AppNav(onToggleTheme: () -> Unit) {
             )
         }
         composable(Routes.SETTINGS) {
-            SettingsScreen(onBack = { nav.popBackStack() })
+            val vm: SessionViewModel = hiltViewModel()
+            val routes by vm.availableRoutes.collectAsState()
+            val current by vm.currentRoute.collectAsState()
+            SettingsScreen(
+                onBack = { nav.popBackStack() },
+                availableRoutes = routes,
+                currentRoute = current,
+                onSelectRoute = vm::selectRoute,
+            )
         }
     }
 }

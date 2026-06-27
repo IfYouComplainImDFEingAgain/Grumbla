@@ -2,13 +2,14 @@ package app.notmumla.audio
 
 import android.annotation.SuppressLint
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
-import android.media.MediaRecorder
 import app.notmumla.audio.codec.OpusEncoder
 import app.notmumla.audio.playback.SpeakerMixer
+import app.notmumla.audio.routing.RouteConfig
 import app.notmumla.protocol.VoiceSink
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +27,7 @@ enum class TransmissionMode { PTT, VAD }
  * the AudioRecord/AudioTrack and the codec loops.
  */
 class AudioEngine(
+    private val audioManager: AudioManager,
     private val sendFrame: (opus: ByteArray, terminator: Boolean) -> Unit,
 ) : VoiceSink {
 
@@ -35,6 +37,16 @@ class AudioEngine(
     /** Normalized VAD threshold (RMS over full-scale). */
     @Volatile var vadThreshold: Float = 0.02f
     @Volatile private var pttHeld: Boolean = false
+
+    /** Current capture/playback route. Changing it restarts the audio threads. */
+    @Volatile var routeConfig: RouteConfig = RouteConfig.PHONE
+        private set
+
+    private fun deviceById(id: Int?): AudioDeviceInfo? {
+        if (id == null) return null
+        return audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS or AudioManager.GET_DEVICES_OUTPUTS)
+            .firstOrNull { it.id == id }
+    }
 
     private val _transmitting = MutableStateFlow(false)
     val transmitting: StateFlow<Boolean> = _transmitting
@@ -69,12 +81,22 @@ class AudioEngine(
     /** PTT button down/up. */
     fun setPttHeld(held: Boolean) { pttHeld = held }
 
+    /** Apply a new capture/playback route, restarting the audio threads if running. */
+    fun applyRoute(config: RouteConfig) {
+        routeConfig = config
+        if (running) {
+            stop()
+            start()
+        }
+    }
+
     override fun onIncomingAudio(session: Int, sequence: Long, opus: ByteArray, terminator: Boolean) {
         mixer.enqueue(session, sequence, opus, terminator)
     }
 
     @SuppressLint("MissingPermission") // caller ensures RECORD_AUDIO before start()
     private fun captureLoop() {
+        val config = routeConfig
         val frame = AudioConstants.FRAME_SAMPLES
         val minBuf = AudioRecord.getMinBufferSize(
             AudioConstants.SAMPLE_RATE,
@@ -83,12 +105,14 @@ class AudioEngine(
         ).coerceAtLeast(frame * 2 * 4)
 
         val record = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            config.recordSource,
             AudioConstants.SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
             minBuf,
         )
+        // Pin the input to the built-in mic for the A2DP-HQ route (A2DP carries no microphone).
+        deviceById(config.recordDeviceId)?.let { record.setPreferredDevice(it) }
         val encoder = OpusEncoder()
         val pcm = ShortArray(frame)
         var wasTransmitting = false
@@ -130,6 +154,7 @@ class AudioEngine(
     }
 
     private fun playbackLoop() {
+        val config = routeConfig
         val frame = AudioConstants.FRAME_SAMPLES
         val minBuf = AudioTrack.getMinBufferSize(
             AudioConstants.SAMPLE_RATE,
@@ -140,7 +165,7 @@ class AudioEngine(
         val track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                    .setUsage(config.trackUsage)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build(),
             )
@@ -154,6 +179,8 @@ class AudioEngine(
             .setBufferSizeInBytes(minBuf)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
+        // Route playback to the A2DP sink for the HQ route.
+        deviceById(config.trackDeviceId)?.let { track.setPreferredDevice(it) }
 
         val out = ShortArray(frame)
         try {

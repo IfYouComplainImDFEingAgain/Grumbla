@@ -45,12 +45,24 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.notmumla.ui.OutputRoute
+import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.ui.SegmentedToggle
 import app.notmumla.ui.theme.MumbleTheme
 
+private fun OutputRoute.displayLabel(): String = when (this) {
+    OutputRoute.PHONE_SPEAKER -> "Phone speaker"
+    OutputRoute.WIRED -> "Wired headset"
+    OutputRoute.BT_A2DP_HQ -> "Bluetooth (High Quality)"
+    OutputRoute.BT_HEADSET_SCO -> "Bluetooth headset"
+}
+
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    availableRoutes: List<OutputRoute>,
+    currentRoute: OutputRoute,
+    onSelectRoute: (OutputRoute) -> Unit,
+) {
     val c = MumbleTheme.colors
     var dark by remember { mutableStateOf(c.isDark) }
     var autoReconnect by remember { mutableStateOf(true) }
@@ -60,7 +72,6 @@ fun SettingsScreen(onBack: () -> Unit) {
     var noiseSuppression by remember { mutableStateOf(true) }
     var echoCancel by remember { mutableStateOf(true) }
     var transmission by remember { mutableStateOf(0) }
-    var outputRoute by remember { mutableStateOf(OutputRoute.PHONE_SPEAKER) }
 
     Column(
         Modifier.fillMaxSize().background(c.surface).verticalScroll(rememberScrollState()),
@@ -158,17 +169,23 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
                     Spacer(Modifier.height(10.dp))
                     OutputRoute.entries.forEach { route ->
+                        val enabled = route in availableRoutes
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                                .clickable { outputRoute = route }.padding(vertical = 8.dp, horizontal = 4.dp),
+                                .clickable(enabled = enabled) { onSelectRoute(route) }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(route.label, fontSize = 14.sp, color = c.onSurface,
-                                modifier = Modifier.weight(1f))
-                            RadioDot(selected = route == outputRoute)
+                            Text(
+                                route.displayLabel() + if (!enabled) " (unavailable)" else "",
+                                fontSize = 14.sp,
+                                color = if (enabled) c.onSurface else c.onSurfaceVar.copy(alpha = 0.5f),
+                                modifier = Modifier.weight(1f),
+                            )
+                            RadioDot(selected = route == currentRoute)
                         }
                     }
-                    if (outputRoute == OutputRoute.BT_A2DP_HQ) {
+                    if (currentRoute == OutputRoute.BT_A2DP_HQ) {
                         Text(
                             "High-quality audio to your Bluetooth headphones, mic from the phone. " +
                                 "Higher latency — push-to-talk recommended.",

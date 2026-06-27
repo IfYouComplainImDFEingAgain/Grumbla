@@ -58,11 +58,3 @@ data class UiMessage(
 enum class ChannelLayout { TREE, SPEAKERS, COMPACT }
 
 enum class TransmissionMode { PTT, VAD }
-
-/** Output routes exposed in Settings; BT_A2DP_HQ + BT_HEADSET_SCO are the two Bluetooth modes. */
-enum class OutputRoute(val label: String) {
-    PHONE_SPEAKER("Phone speaker"),
-    WIRED("Wired headset"),
-    BT_A2DP_HQ("Bluetooth (High Quality)"),
-    BT_HEADSET_SCO("Bluetooth headset"),
-}

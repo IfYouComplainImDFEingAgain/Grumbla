@@ -54,7 +54,6 @@ fun VoiceBar(
     onPttHeld: (Boolean) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
-    onLongPressSettings: () -> Unit,
 ) {
     val c = MumbleTheme.colors
 
@@ -89,7 +88,6 @@ fun VoiceBar(
                     .background(if (active) c.primary else c.surfHigh)
                     .pointerInput(mode) {
                         detectTapGestures(
-                            onLongPress = { onLongPressSettings() },
                             onPress = {
                                 if (mode == TransmissionMode.PTT) {
                                     onPttHeld(true)

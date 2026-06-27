@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +39,7 @@ fun QuickSettingsSheet(
     mode: TransmissionMode,
     onLayout: (ChannelLayout) -> Unit,
     onMode: (TransmissionMode) -> Unit,
+    onOpenAllSettings: () -> Unit,
     onDisconnect: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -86,6 +88,16 @@ fun QuickSettingsSheet(
                     selectedIndex = if (mode == TransmissionMode.PTT) 0 else 1,
                     onSelect = { onMode(if (it == 0) TransmissionMode.PTT else TransmissionMode.VAD) },
                 )
+            }
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.surface)
+                    .clickable(onClick = onOpenAllSettings).padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Tune, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.size(14.dp))
+                Text("All settings", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
             }
             Spacer(Modifier.height(14.dp))
             Row(

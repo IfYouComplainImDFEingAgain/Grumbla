@@ -1,9 +1,14 @@
 package app.notmumla.data
 
+import android.content.Context
+import android.media.AudioManager
 import android.os.Build
 import app.notmumla.audio.AudioEngine
 import app.notmumla.audio.TransmissionMode
+import app.notmumla.audio.routing.AudioRouter
+import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.data.db.ServerDao
+import dagger.hilt.android.qualifiers.ApplicationContext
 import app.notmumla.data.db.ServerEntity
 import app.notmumla.protocol.ConnectConfig
 import app.notmumla.protocol.MumbleClient
@@ -26,10 +31,18 @@ import javax.inject.Singleton
  */
 @Singleton
 class SessionManager @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val identityStore: IdentityStore,
     private val serverDao: ServerDao,
 ) {
     private val scope = CoroutineScope(SupervisorJob())
+
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val router = AudioRouter(context).also { it.startObserving() }
+
+    /** Output routes selectable given current hardware (incl. the two Bluetooth modes). */
+    val availableRoutes: StateFlow<List<OutputRoute>> = router.available
+    val currentRoute: StateFlow<OutputRoute> = router.current
 
     private val _state = MutableStateFlow(ServerState())
     val state: StateFlow<ServerState> = _state.asStateFlow()
@@ -73,7 +86,8 @@ class SessionManager @Inject constructor(
         )
         client = mc
 
-        val eng = AudioEngine(sendFrame = { opus, terminator -> mc.sendAudio(opus, terminator) })
+        val eng = AudioEngine(audioManager) { opus, terminator -> mc.sendAudio(opus, terminator) }
+        eng.applyRoute(router.configFor(router.current.value))
         mc.voiceSink = eng
         engine = eng
         scope.launch { eng.speakingSessions.collect { _speaking.value = it } }
@@ -117,12 +131,20 @@ class SessionManager @Inject constructor(
     private fun startAudio() {
         engine?.start()
         audioStarted = true
+        // Start the foreground service now that RECORD_AUDIO is granted (FGS microphone type).
+        app.notmumla.service.VoiceService.start(context)
     }
 
     // Engine controls surfaced to the UI.
     fun setPttHeld(held: Boolean) { engine?.setPttHeld(held) }
     fun setTransmissionMode(mode: TransmissionMode) { engine?.mode = mode }
     fun setMicMuted(muted: Boolean) { engine?.muted = muted }
+
+    /** Switch the audio output route (phone / wired / Bluetooth HQ / Bluetooth headset). */
+    fun selectRoute(route: OutputRoute) {
+        val config = router.select(route)
+        engine?.applyRoute(config)
+    }
 
     fun joinChannel(channelId: Int) = client?.joinChannel(channelId)
 
@@ -142,5 +164,6 @@ class SessionManager @Inject constructor(
         _speaking.value = emptySet()
         _localTransmitting.value = false
         _state.value = ServerState(connection = ConnectionState.DISCONNECTED)
+        app.notmumla.service.VoiceService.stop(context)
     }
 }
