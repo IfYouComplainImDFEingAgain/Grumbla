@@ -147,7 +147,9 @@ class MumbleClient(
     private fun startPing() {
         pingJob = scope.launch(Dispatchers.IO) {
             while (isActive) {
-                delay(15_000)
+                // ~6 s keeps the link (and the phone's Wi-Fi radio) warm so the first message
+                // after an idle moment isn't delayed by the radio waking from power-save.
+                delay(6_000)
                 runCatching {
                     channel?.send(Ping(timestamp = System.nanoTime() / 1000))
                 }
@@ -296,10 +298,12 @@ class MumbleClient(
         }
     }
 
-    /** Send a text message to [channelId]. */
+    /** Send a text message to [channelId]. Dispatched off the caller (UI) thread. */
     fun sendText(channelId: Int, message: String) {
-        runCatching {
-            channel?.send(TextMessage(message = message, channel_id = listOf(channelId)))
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                channel?.send(TextMessage(message = message, channel_id = listOf(channelId)))
+            }
         }
     }
 

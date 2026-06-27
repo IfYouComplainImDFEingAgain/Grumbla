@@ -42,7 +42,8 @@ class ControlChannel(
         val s = ctx.socketFactory.createSocket() as SSLSocket
         s.connect(java.net.InetSocketAddress(host, port), connectTimeoutMs)
         s.startHandshake()
-        s.tcpNoDelay = true
+        s.tcpNoDelay = true   // disable Nagle so small messages go out immediately
+        s.keepAlive = true    // keep the connection (and Wi-Fi radio) responsive when idle
 
         socket = s
         input = DataInputStream(s.inputStream.buffered())
