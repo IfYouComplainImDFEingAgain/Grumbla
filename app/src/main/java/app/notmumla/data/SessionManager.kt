@@ -105,9 +105,23 @@ class SessionManager @Inject constructor(
     var audioPermissionGranted = false
         private set
 
+    private var lastServer: ServerEntity? = null
+    private var userInitiatedDisconnect = false
+    private var reconnectAttempts = 0
+    private var reconnectJob: Job? = null
+    private var lastKnownChannelId: Int? = null
+
     /** Connect to a saved server, generating the identity on first use. */
     fun connect(server: ServerEntity) {
-        disconnect()
+        reconnectAttempts = 0
+        lastKnownChannelId = null
+        doConnect(server)
+    }
+
+    private fun doConnect(server: ServerEntity) {
+        teardown(toState = ConnectionState.CONNECTING)
+        userInitiatedDisconnect = false
+        lastServer = server
         activeServerId = server.id.takeIf { it != 0L }
         _serverLabel.value = server.label.ifBlank { server.host }
 
@@ -130,8 +144,15 @@ class SessionManager @Inject constructor(
 
         mirrorJob = scope.launch {
             mc.state.collect { s ->
-                _state.value = s
-                if (s.connection == ConnectionState.CONNECTED) onConnected(server, s)
+                s.self?.channelId?.let { lastKnownChannelId = it }
+                if (s.connection == ConnectionState.FAILED && shouldReconnect()) {
+                    // Suppress the failure from the UI and retry instead of dropping to Connect.
+                    _state.value = s.copy(connection = ConnectionState.CONNECTING, error = null)
+                    scheduleReconnect(server)
+                } else {
+                    _state.value = s
+                    if (s.connection == ConnectionState.CONNECTED) onConnected(server, s)
+                }
             }
         }
         eventJob = scope.launch {
@@ -154,11 +175,31 @@ class SessionManager @Inject constructor(
 
     private fun onConnected(server: ServerEntity, state: ServerState) {
         if (audioPermissionGranted && !audioStarted) startAudio()
+        // After a reconnect, return to the channel we were in before the drop.
+        val target = lastKnownChannelId
+        if (reconnectAttempts > 0 && target != null && target != state.self?.channelId) {
+            client?.joinChannel(target)
+        }
+        reconnectAttempts = 0
         val id = activeServerId ?: return
         scope.launch {
             val fp = state.serverFingerprintSha256
             if (fp != null && server.pinnedSha256 == null) serverDao.setPin(id, fp)
             serverDao.markConnected(id, System.currentTimeMillis(), state.self?.channelId)
+        }
+    }
+
+    private fun shouldReconnect(): Boolean =
+        settings.autoReconnect && !userInitiatedDisconnect && lastServer != null &&
+            reconnectAttempts < MAX_RECONNECT_ATTEMPTS
+
+    private fun scheduleReconnect(server: ServerEntity) {
+        reconnectAttempts += 1
+        val backoffMs = (1000L * (1 shl (reconnectAttempts - 1).coerceAtMost(4))).coerceAtMost(15_000)
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            kotlinx.coroutines.delay(backoffMs)
+            if (!userInitiatedDisconnect && lastServer != null) doConnect(server)
         }
     }
 
@@ -231,7 +272,18 @@ class SessionManager @Inject constructor(
             .replace("&quot;", "\"").replace("&#39;", "'").replace("&nbsp;", " ")
             .trim()
 
+    /** User-initiated disconnect: tears down and suppresses auto-reconnect. */
     fun disconnect() {
+        userInitiatedDisconnect = true
+        lastServer = null
+        reconnectJob?.cancel()
+        teardown(ConnectionState.DISCONNECTED)
+        _chat.value = emptyList()
+        _unread.value = 0
+    }
+
+    /** Cleanup shared by user disconnect and reconnect; [toState] is the resulting connection state. */
+    private fun teardown(toState: ConnectionState) {
         mirrorJob?.cancel()
         eventJob?.cancel()
         engine?.stop()
@@ -243,9 +295,11 @@ class SessionManager @Inject constructor(
         activeServerId = null
         _speaking.value = emptySet()
         _localTransmitting.value = false
-        _chat.value = emptyList()
-        _unread.value = 0
-        _state.value = ServerState(connection = ConnectionState.DISCONNECTED)
+        _state.value = ServerState(connection = toState)
         app.notmumla.service.VoiceService.stop(context)
+    }
+
+    private companion object {
+        const val MAX_RECONNECT_ATTEMPTS = 8
     }
 }
