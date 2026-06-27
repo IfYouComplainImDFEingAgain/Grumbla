@@ -60,6 +60,7 @@ private fun app.notmumla.data.ChatLine.toUiMessage(): app.notmumla.ui.UiMessage 
     avatar = app.notmumla.ui.channels.avatarColorFor(senderName),
     time = chatTimeFmt.format(java.util.Date(timeMillis)),
     text = text,
+    imageBytes = imageBytes,
 )
 
 @AndroidEntryPoint
@@ -184,6 +185,7 @@ private fun AppNav() {
                     vm.setMuted(muted = newDeaf || (s?.selfMute ?: false), deaf = newDeaf)
                 },
                 onSendText = { msg -> self?.channelId?.let { vm.sendText(it, msg) } },
+                onSendImage = { uri -> self?.channelId?.let { vm.sendImage(it, uri) } },
                 onChatRead = vm::markChatRead,
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onDisconnect = {

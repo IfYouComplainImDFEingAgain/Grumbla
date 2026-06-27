@@ -8,4 +8,6 @@ data class ChatLine(
     val timeMillis: Long,
     val isMe: Boolean = false,
     val isSystem: Boolean = false,
+    /** Decoded image bytes when the message carried an inline `<img>` data URI. */
+    val imageBytes: ByteArray? = null,
 )

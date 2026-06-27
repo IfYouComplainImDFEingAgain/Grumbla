@@ -38,6 +38,9 @@ data class ServerState(
     val users: Map<Int, User> = emptyMap(),
     val welcomeText: String? = null,
     val serverFingerprintSha256: String? = null,
+    /** Max length of an image (HTML) message the server accepts; 0 = unknown (use a safe default). */
+    val imageMessageLength: Int = 0,
+    val allowHtml: Boolean = true,
     val error: String? = null,
 ) {
     val self: User? get() = sessionId?.let { users[it] }

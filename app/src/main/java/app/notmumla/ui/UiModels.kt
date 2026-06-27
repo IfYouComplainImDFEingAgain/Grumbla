@@ -53,6 +53,8 @@ data class UiMessage(
     val text: String = "",
     val fileName: String = "",
     val fileSize: String = "",
+    /** Inline image bytes (JPEG/PNG) when this message carries an image. */
+    val imageBytes: ByteArray? = null,
 )
 
 enum class ChannelLayout { TREE, SPEAKERS, COMPACT }

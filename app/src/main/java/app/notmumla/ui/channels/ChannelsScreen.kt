@@ -66,6 +66,7 @@ fun ChannelsScreen(
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
     onSendText: (String) -> Unit,
+    onSendImage: (android.net.Uri) -> Unit,
     onChatRead: () -> Unit,
     onOpenSettings: () -> Unit,
     onDisconnect: () -> Unit,
@@ -92,6 +93,7 @@ fun ChannelsScreen(
                     }
                     else -> ChatPanel(
                         onSend = onSendText,
+                        onSendImage = onSendImage,
                         messages = chatMessages,
                         channelName = currentChannelName,
                     )
