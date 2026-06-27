@@ -115,6 +115,9 @@ class SessionManager @Inject constructor(
 
     /** Connect to a saved server, generating the identity on first use. */
     fun connect(server: ServerEntity) {
+        // A fresh user-initiated connection supersedes any pending auto-reconnect to a prior server.
+        reconnectJob?.cancel()
+        reconnectJob = null
         reconnectAttempts = 0
         lastKnownChannelId = null
         doConnect(server)
@@ -201,7 +204,9 @@ class SessionManager @Inject constructor(
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
             kotlinx.coroutines.delay(backoffMs)
-            if (!userInitiatedDisconnect && lastServer != null) doConnect(server)
+            // Only reconnect if this is still the intended server (guards against a stale job
+            // firing after the user switched servers).
+            if (!userInitiatedDisconnect && lastServer === server) doConnect(server)
         }
     }
 
