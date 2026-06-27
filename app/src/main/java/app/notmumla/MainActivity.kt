@@ -36,6 +36,7 @@ import app.notmumla.ui.theme.MumbleTheme
 import app.notmumla.ui.theme.NotMumlaTheme
 import app.notmumla.vm.ConnectViewModel
 import app.notmumla.vm.SessionViewModel
+import app.notmumla.vm.SettingsViewModel
 import app.notmumla.ui.TransmissionMode as UiTransmissionMode
 import app.notmumla.audio.TransmissionMode as AudioTransmissionMode
 import dagger.hilt.android.AndroidEntryPoint
@@ -67,14 +68,26 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val systemDark = isSystemInDarkTheme()
-            var dark by remember { mutableStateOf(systemDark) }
+            val settingsVm: SettingsViewModel = hiltViewModel()
+            val settings by settingsVm.settings.collectAsState()
+            val dark = when (settings.theme) {
+                app.notmumla.data.ThemeMode.DARK -> true
+                app.notmumla.data.ThemeMode.LIGHT -> false
+                app.notmumla.data.ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            }
+            LaunchedEffect(settings.keepScreenAwake) {
+                if (settings.keepScreenAwake) {
+                    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
             NotMumlaTheme(dark = dark) {
                 Surface(
                     Modifier.fillMaxSize().systemBarsPadding(),
                     color = MumbleTheme.colors.surface,
                 ) {
-                    AppNav(onToggleTheme = { dark = !dark })
+                    AppNav()
                 }
             }
         }
@@ -88,7 +101,7 @@ private object Routes {
 }
 
 @Composable
-private fun AppNav(onToggleTheme: () -> Unit) {
+private fun AppNav() {
     val nav = rememberNavController()
     NavHost(navController = nav, startDestination = Routes.CONNECT) {
         composable(Routes.CONNECT) {
@@ -179,14 +192,29 @@ private fun AppNav(onToggleTheme: () -> Unit) {
             )
         }
         composable(Routes.SETTINGS) {
-            val vm: SessionViewModel = hiltViewModel()
-            val routes by vm.availableRoutes.collectAsState()
-            val current by vm.currentRoute.collectAsState()
+            val session: SessionViewModel = hiltViewModel()
+            val settingsVm: SettingsViewModel = hiltViewModel()
+            val routes by session.availableRoutes.collectAsState()
+            val current by session.currentRoute.collectAsState()
+            val settings by settingsVm.settings.collectAsState()
             SettingsScreen(
                 onBack = { nav.popBackStack() },
+                settings = settings,
                 availableRoutes = routes,
                 currentRoute = current,
-                onSelectRoute = vm::selectRoute,
+                onSelectRoute = session::selectRoute,
+                onSetTheme = settingsVm::setTheme,
+                onSetTransmission = settingsVm::setTransmissionMode,
+                onSetVad = settingsVm::setVadSensitivity,
+                onSetMicGainDb = settingsVm::setMicGainDb,
+                onToggleNoiseSuppression = settingsVm::setNoiseSuppression,
+                onToggleEchoCancellation = settingsVm::setEchoCancellation,
+                onSetBitrate = settingsVm::setAudioBitrate,
+                onToggleAvatars = settingsVm::setShowAvatars,
+                onToggleKeepAwake = settingsVm::setKeepScreenAwake,
+                onToggleAutoReconnect = settingsVm::setAutoReconnect,
+                onToggleTts = settingsVm::setTtsReadAloud,
+                onToggleMentionSound = settingsVm::setMentionSound,
             )
         }
     }

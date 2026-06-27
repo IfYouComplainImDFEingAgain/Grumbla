@@ -27,16 +27,13 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,9 +42,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.notmumla.audio.TransmissionMode
 import app.notmumla.audio.routing.OutputRoute
+import app.notmumla.data.AppSettings
+import app.notmumla.data.ThemeMode
 import app.notmumla.ui.SegmentedToggle
 import app.notmumla.ui.theme.MumbleTheme
+import kotlin.math.roundToInt
 
 private fun OutputRoute.displayLabel(): String = when (this) {
     OutputRoute.PHONE_SPEAKER -> "Phone speaker"
@@ -56,26 +57,32 @@ private fun OutputRoute.displayLabel(): String = when (this) {
     OutputRoute.BT_HEADSET_SCO -> "Bluetooth headset"
 }
 
+private val BITRATES = listOf(16_000, 24_000, 40_000, 72_000, 96_000)
+
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    settings: AppSettings,
     availableRoutes: List<OutputRoute>,
     currentRoute: OutputRoute,
     onSelectRoute: (OutputRoute) -> Unit,
+    onSetTheme: (ThemeMode) -> Unit,
+    onSetTransmission: (TransmissionMode) -> Unit,
+    onSetVad: (Float) -> Unit,
+    onSetMicGainDb: (Float) -> Unit,
+    onToggleNoiseSuppression: (Boolean) -> Unit,
+    onToggleEchoCancellation: (Boolean) -> Unit,
+    onSetBitrate: (Int) -> Unit,
+    onToggleAvatars: (Boolean) -> Unit,
+    onToggleKeepAwake: (Boolean) -> Unit,
+    onToggleAutoReconnect: (Boolean) -> Unit,
+    onToggleTts: (Boolean) -> Unit,
+    onToggleMentionSound: (Boolean) -> Unit,
 ) {
     val c = MumbleTheme.colors
-    var dark by remember { mutableStateOf(c.isDark) }
-    var autoReconnect by remember { mutableStateOf(true) }
-    var priority by remember { mutableStateOf(false) }
-    var showAvatars by remember { mutableStateOf(true) }
-    var keepAwake by remember { mutableStateOf(false) }
-    var noiseSuppression by remember { mutableStateOf(true) }
-    var echoCancel by remember { mutableStateOf(true) }
-    var transmission by remember { mutableStateOf(0) }
+    val isDark = settings.theme == ThemeMode.DARK || (settings.theme == ThemeMode.SYSTEM && c.isDark)
 
-    Column(
-        Modifier.fillMaxSize().background(c.surface).verticalScroll(rememberScrollState()),
-    ) {
+    Column(Modifier.fillMaxSize().background(c.surface).verticalScroll(rememberScrollState())) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -98,9 +105,6 @@ fun SettingsScreen(
                 NavRow(Icons.Filled.VerifiedUser, "Identity certificate", null, trailing = {
                     Text("Verified", color = c.speaking, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 })
-                Divider()
-                ToggleRow(Icons.Filled.Star, "Priority speaker", "Cut through when you talk",
-                    priority) { priority = it }
             }
 
             SectionLabel("CONNECTION")
@@ -108,21 +112,27 @@ fun SettingsScreen(
                 ValueRow(Icons.Filled.Storage, "Server", "example.com:64738")
                 Divider()
                 ToggleRow(Icons.Filled.Autorenew, "Auto-reconnect", "Rejoin last channel automatically",
-                    autoReconnect) { autoReconnect = it }
+                    settings.autoReconnect, onToggleAutoReconnect)
                 Divider()
-                ValueRow(Icons.Filled.BarChart, "Audio quality", "High · 72 kbit/s")
+                ValueRow(
+                    Icons.Filled.BarChart, "Audio quality", "${settings.audioBitrate / 1000} kbit/s",
+                    onClick = {
+                        val next = BITRATES[(BITRATES.indexOf(settings.audioBitrate).coerceAtLeast(0) + 1) % BITRATES.size]
+                        onSetBitrate(next)
+                    },
+                )
             }
 
             SectionLabel("APPEARANCE")
             SettingsGroup {
-                ToggleRow(Icons.Filled.DarkMode, "Dark theme", "Match system or force dark",
-                    dark) { dark = it }
+                ToggleRow(Icons.Filled.DarkMode, "Dark theme", "Force dark theme",
+                    isDark) { onSetTheme(if (it) ThemeMode.DARK else ThemeMode.LIGHT) }
                 Divider()
                 ToggleRow(Icons.Filled.Person, "Show user avatars", null,
-                    showAvatars) { showAvatars = it }
+                    settings.showAvatars, onToggleAvatars)
                 Divider()
                 ToggleRow(Icons.Filled.Mic, "Keep screen awake in voice", null,
-                    keepAwake) { keepAwake = it }
+                    settings.keepScreenAwake, onToggleKeepAwake)
             }
 
             SectionLabel("AUDIO · INPUT")
@@ -140,25 +150,31 @@ fun SettingsScreen(
                     Spacer(Modifier.height(10.dp))
                     SegmentedToggle(
                         options = listOf("Push-to-Talk", "Voice Activated"),
-                        selectedIndex = transmission, onSelect = { transmission = it },
+                        selectedIndex = if (settings.transmissionMode == TransmissionMode.PTT) 0 else 1,
+                        onSelect = { onSetTransmission(if (it == 0) TransmissionMode.PTT else TransmissionMode.VAD) },
                     )
                 }
                 Divider()
-                SliderRow("Input sensitivity", "−42 dB", 0.62f)
+                SliderRow(
+                    "Input sensitivity", "${(settings.vadSensitivity * 100).roundToInt()}%",
+                    value = settings.vadSensitivity, range = 0.001f..0.2f, onChange = onSetVad,
+                )
                 Divider()
-                SliderRow("Microphone gain", "+6 dB", 0.55f, icon = Icons.Filled.GraphicEq)
+                SliderRow(
+                    "Microphone gain", "${if (settings.micGainDb >= 0) "+" else ""}${settings.micGainDb.roundToInt()} dB",
+                    value = (settings.micGainDb + 20f) / 40f, range = 0f..1f,
+                    onChange = { onSetMicGainDb(it * 40f - 20f) }, icon = Icons.Filled.GraphicEq,
+                )
                 Divider()
                 ToggleRow(Icons.Filled.GraphicEq, "Noise suppression", null,
-                    noiseSuppression) { noiseSuppression = it }
+                    settings.noiseSuppression, onToggleNoiseSuppression)
                 Divider()
                 ToggleRow(Icons.Filled.GraphicEq, "Echo cancellation", null,
-                    echoCancel) { echoCancel = it }
+                    settings.echoCancellation, onToggleEchoCancellation)
             }
 
             SectionLabel("AUDIO · OUTPUT")
             SettingsGroup {
-                SliderRow("Master volume", "82%", 0.82f, icon = Icons.AutoMirrored.Filled.VolumeUp)
-                Divider()
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -196,9 +212,19 @@ fun SettingsScreen(
                 }
             }
 
+            SectionLabel("NOTIFICATIONS")
+            SettingsGroup {
+                ToggleRow(null, "Read messages aloud", "Text-to-speech",
+                    settings.ttsReadAloud, onToggleTts)
+                Divider()
+                ToggleRow(null, "Mention sound", null, settings.mentionSound, onToggleMentionSound)
+            }
+
             SectionLabel("ABOUT")
             SettingsGroup {
                 ValueRow(Icons.Filled.VerifiedUser, "Version", "0.1.0 (1)", showChevron = false)
+                Divider()
+                NavRow(Icons.Filled.BarChart, "Open-source licenses", null)
             }
             Spacer(Modifier.height(20.dp))
         }
@@ -222,7 +248,7 @@ private fun ProfileCard() {
         }
         Column(Modifier.weight(1f)) {
             Text("user", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.onSurface)
-            Text("Online · “shipping the build 🚀”", fontSize = 13.sp, color = c.onSurfaceVar)
+            Text("Connected", fontSize = 13.sp, color = c.onSurfaceVar)
         }
         Chevron()
     }
@@ -278,16 +304,17 @@ private fun NavRow(icon: ImageVector, title: String, subtitle: String?,
 }
 
 @Composable
-private fun ValueRow(icon: ImageVector, title: String, value: String, showChevron: Boolean = true) {
+private fun ValueRow(icon: ImageVector, title: String, value: String,
+                     showChevron: Boolean = true, onClick: (() -> Unit)? = null) {
     val c = MumbleTheme.colors
     RowBase(icon, title, null, trailing = {
         Text(value, fontSize = 14.sp, color = c.onSurfaceVar)
         if (showChevron) Chevron()
-    }, onClick = if (showChevron) ({}) else null)
+    }, onClick = onClick ?: if (showChevron) ({}) else null)
 }
 
 @Composable
-private fun ToggleRow(icon: ImageVector, title: String, subtitle: String?,
+private fun ToggleRow(icon: ImageVector?, title: String, subtitle: String?,
                       checked: Boolean, onChange: (Boolean) -> Unit) {
     RowBase(icon, title, subtitle, trailing = { ToggleSwitch(checked, onChange) },
         onClick = { onChange(!checked) })
@@ -310,9 +337,16 @@ private fun ToggleSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
 }
 
 @Composable
-private fun SliderRow(label: String, value: String, fraction: Float, icon: ImageVector? = null) {
+private fun SliderRow(
+    label: String,
+    valueText: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onChange: (Float) -> Unit,
+    icon: ImageVector? = null,
+) {
     val c = MumbleTheme.colors
-    Column(Modifier.fillMaxWidth().padding(16.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) {
                 Icon(icon, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
@@ -320,14 +354,16 @@ private fun SliderRow(label: String, value: String, fraction: Float, icon: Image
             }
             Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface,
                 modifier = Modifier.weight(1f))
-            Text(value, fontSize = 13.sp, color = c.onSurfaceVar)
+            Text(valueText, fontSize = 13.sp, color = c.onSurfaceVar)
         }
-        Spacer(Modifier.height(11.dp))
-        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
-            .background(c.surfHighest)) {
-            Box(Modifier.fillMaxWidth(fraction).height(6.dp).clip(RoundedCornerShape(3.dp))
-                .background(c.primary))
-        }
+        Slider(
+            value = value.coerceIn(range.start, range.endInclusive), onValueChange = onChange,
+            valueRange = range,
+            colors = SliderDefaults.colors(
+                thumbColor = c.primary, activeTrackColor = c.primary,
+                inactiveTrackColor = c.surfHighest,
+            ),
+        )
     }
 }
 

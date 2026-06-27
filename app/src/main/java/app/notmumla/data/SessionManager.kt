@@ -34,8 +34,33 @@ class SessionManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val identityStore: IdentityStore,
     private val serverDao: ServerDao,
+    private val settingsRepo: SettingsRepository,
 ) {
     private val scope = CoroutineScope(SupervisorJob())
+
+    @Volatile private var settings: AppSettings = AppSettings()
+
+    init {
+        scope.launch {
+            settingsRepo.settings.collect { s ->
+                settings = s
+                applyAudioSettings(s)
+            }
+        }
+    }
+
+    private fun applyAudioSettings(s: AppSettings) {
+        engine?.let { eng ->
+            eng.mode = s.transmissionMode
+            eng.applyAudioSettings(
+                micGain = Math.pow(10.0, s.micGainDb / 20.0).toFloat(),
+                vadThreshold = s.vadSensitivity,
+                bitrate = s.audioBitrate,
+                noiseSuppression = s.noiseSuppression,
+                echoCancellation = s.echoCancellation,
+            )
+        }
+    }
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val router = AudioRouter(context).also { it.startObserving() }
@@ -97,6 +122,7 @@ class SessionManager @Inject constructor(
         val eng = AudioEngine(audioManager) { opus, terminator -> mc.sendAudio(opus, terminator) }
         mc.voiceSink = eng
         engine = eng
+        applyAudioSettings(settings)
         // Apply the current route (configures AudioManager mode/device + engine) before audio starts.
         selectRoute(router.current.value)
         scope.launch { eng.speakingSessions.collect { _speaking.value = it } }
@@ -153,6 +179,8 @@ class SessionManager @Inject constructor(
     fun setPttHeld(held: Boolean) { engine?.setPttHeld(held) }
     fun setTransmissionMode(mode: TransmissionMode) { engine?.mode = mode }
     fun setMicMuted(muted: Boolean) { engine?.muted = muted }
+
+    val autoReconnectEnabled: Boolean get() = settings.autoReconnect
 
     /** Switch the audio output route (phone / wired / Bluetooth HQ / Bluetooth headset). */
     fun selectRoute(route: OutputRoute) {

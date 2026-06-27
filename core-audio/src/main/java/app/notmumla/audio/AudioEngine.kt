@@ -7,6 +7,8 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
+import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.NoiseSuppressor
 import app.notmumla.audio.codec.OpusEncoder
 import app.notmumla.audio.playback.SpeakerMixer
 import app.notmumla.audio.routing.RouteConfig
@@ -36,7 +38,32 @@ class AudioEngine(
     @Volatile var micGain: Float = 1.0f
     /** Normalized VAD threshold (RMS over full-scale). */
     @Volatile var vadThreshold: Float = 0.02f
+    @Volatile var noiseSuppression: Boolean = true
+    @Volatile var echoCancellation: Boolean = true
+    @Volatile var bitrate: Int = 40_000
     @Volatile private var pttHeld: Boolean = false
+    @Volatile private var encoderRef: OpusEncoder? = null
+
+    /**
+     * Apply audio-processing settings. Gain/VAD/bitrate take effect live; toggling the hardware
+     * effects (NS/AEC) requires recreating the capture, so we restart if those changed while running.
+     */
+    fun applyAudioSettings(
+        micGain: Float, vadThreshold: Float, bitrate: Int,
+        noiseSuppression: Boolean, echoCancellation: Boolean,
+    ) {
+        this.micGain = micGain
+        this.vadThreshold = vadThreshold
+        val effectsChanged = this.noiseSuppression != noiseSuppression ||
+            this.echoCancellation != echoCancellation
+        this.noiseSuppression = noiseSuppression
+        this.echoCancellation = echoCancellation
+        if (this.bitrate != bitrate) {
+            this.bitrate = bitrate
+            encoderRef?.setBitrate(bitrate)
+        }
+        if (effectsChanged && running) { stop(); start() }
+    }
 
     /** Current capture/playback route. Changing it restarts the audio threads. */
     @Volatile var routeConfig: RouteConfig = RouteConfig.PHONE
@@ -113,7 +140,16 @@ class AudioEngine(
         )
         // Pin the input to the built-in mic for the A2DP-HQ route (A2DP carries no microphone).
         deviceById(config.recordDeviceId)?.let { record.setPreferredDevice(it) }
-        val encoder = OpusEncoder()
+
+        // Attach hardware noise suppression / echo cancellation when enabled and available.
+        val sessionId = record.audioSessionId
+        val nsEffect = if (noiseSuppression && NoiseSuppressor.isAvailable())
+            runCatching { NoiseSuppressor.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
+        val aecEffect = if (echoCancellation && AcousticEchoCanceler.isAvailable())
+            runCatching { AcousticEchoCanceler.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
+
+        val encoder = OpusEncoder(bitrate = bitrate)
+        encoderRef = encoder
         val pcm = ShortArray(frame)
         var wasTransmitting = false
 
@@ -146,8 +182,11 @@ class AudioEngine(
         } catch (_: Throwable) {
             // surfaced via transmitting=false; engine stop() cleans up
         } finally {
+            runCatching { nsEffect?.release() }
+            runCatching { aecEffect?.release() }
             runCatching { record.stop() }
             runCatching { record.release() }
+            encoderRef = null
             encoder.release()
             _transmitting.value = false
         }
