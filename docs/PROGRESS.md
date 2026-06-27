@@ -48,6 +48,16 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - [x] Auto-reconnect with exponential backoff (1s..15s, 8 tries), rejoins last channel.
 - [x] Mention notifications (sound/vibrate gated by setting) + TTS read-aloud; licenses screen.
 
+### Fixes since M5 (user-reported)
+- **Stale auto-reconnect** → a pending reconnect to a former server could fire after switching
+  servers. `connect()` now cancels any pending reconnect; the delayed retry verifies it still
+  targets the current `lastServer`.
+- **Chat send latency** felt delayed on the remote client (local echo masked it). Protocol send is
+  ~1–3 ms (`TextLatencyTest`); the delay was the phone↔server link going idle. Now: TCP keep-alive
+  on the socket, text sends dispatched off the UI thread, and an **idle-aware keep-alive** — pings
+  only after ~6 s of real idle (no extra pings during a call → battery-friendly), via
+  `ControlChannel.idleMs()`.
+
 ---
 
 ## Backlog / not-yet-wired (post-M5)
