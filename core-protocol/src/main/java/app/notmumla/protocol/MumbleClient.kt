@@ -9,6 +9,7 @@ import app.notmumla.protocol.model.User
 import app.notmumla.protocol.net.ControlChannel
 import app.notmumla.protocol.net.TofuTrustManager
 import app.notmumla.protocol.proto.MessageType
+import app.notmumla.protocol.udp.LegacyAudio
 import MumbleUDP.Audio as UdpAudio
 import okio.ByteString.Companion.toByteString
 import kotlinx.coroutines.CoroutineScope
@@ -89,6 +90,15 @@ class MumbleClient(
 
     private var audioSequence = 0L
 
+    /** The server's protocol version, learned from its Version message during the handshake. */
+    @Volatile private var serverVersion: Long = Long.MAX_VALUE
+    /**
+     * Use the legacy audio format when either side predates protobuf (1.5.0): old servers only know
+     * legacy, and a ≥1.5 server decodes our audio according to *our* advertised version.
+     */
+    private val useLegacyAudio: Boolean
+        get() = serverVersion < PROTOBUF_VERSION || clientVersion < PROTOBUF_VERSION
+
     fun connect(config: ConnectConfig) {
         _state.update { ServerState(connection = ConnectionState.CONNECTING) }
         readJob = scope.launch(Dispatchers.IO) {
@@ -127,6 +137,7 @@ class MumbleClient(
     private fun sendHandshake(control: ControlChannel, config: ConnectConfig) {
         control.send(
             PVersion(
+                version_v1 = legacyVersionOf(clientVersion), // old servers read the legacy field
                 version_v2 = clientVersion,
                 release = clientName,
                 os = osName,
@@ -171,7 +182,7 @@ class MumbleClient(
 
     private fun handleFrame(frame: ControlChannel.Frame) {
         when (MessageType.fromId(frame.typeId)) {
-            MessageType.VERSION -> Unit // server version; ignored for now
+            MessageType.VERSION -> onServerVersion(PVersion.ADAPTER.decode(frame.payload))
             MessageType.CHANNEL_STATE -> onChannelState(ChannelState.ADAPTER.decode(frame.payload))
             MessageType.CHANNEL_REMOVE -> onChannelRemove(ChannelRemove.ADAPTER.decode(frame.payload))
             MessageType.USER_STATE -> onUserState(UserState.ADAPTER.decode(frame.payload))
@@ -244,38 +255,60 @@ class MumbleClient(
         events.tryEmit(Event.Text(IncomingText(msg.actor, msg.message)))
     }
 
-    /** Parse a raw inbound UDP audio packet (`[type][MumbleUDP.Audio]`) and surface it. */
-    private fun onAudioPacket(packet: ByteArray) {
-        if (packet.isEmpty() || packet[0].toInt() != UDP_TYPE_AUDIO) return // 0 = Audio, 1 = Ping
-        val audio = runCatching { UdpAudio.ADAPTER.decode(packet.copyOfRange(1, packet.size)) }
-            .getOrNull() ?: return
-        voiceSink?.onIncomingAudio(
-            session = audio.sender_session,
-            sequence = audio.frame_number,
-            opus = audio.opus_data.toByteArray(),
-            terminator = audio.is_terminator,
-        )
+    private fun onServerVersion(msg: PVersion) {
+        val v = msg.version_v2 ?: msg.version_v1?.let { legacyToFull(it) }
+        if (v != null) serverVersion = v
     }
 
     /**
-     * Send one encoded Opus frame to the server. Uses the Mumble 1.5 protobuf audio format
-     * (`[0x00 type][MumbleUDP.Audio]`) sent as the raw body of an UDPTunnel control message; the
-     * UDP+OCB2 path is added later as an optimization. target 0 = normal talking.
+     * Parse a raw inbound UDP audio packet and surface it. Auto-detects the format by the header
+     * byte: protobuf Audio = `0x00`; legacy Opus = top 3 bits == 4 (`0x80`..`0x9F`).
+     */
+    private fun onAudioPacket(packet: ByteArray) {
+        if (packet.isEmpty()) return
+        when {
+            packet[0].toInt() == UDP_TYPE_AUDIO -> { // protobuf
+                val audio = runCatching { UdpAudio.ADAPTER.decode(packet.copyOfRange(1, packet.size)) }
+                    .getOrNull() ?: return
+                voiceSink?.onIncomingAudio(
+                    session = audio.sender_session,
+                    sequence = audio.frame_number,
+                    opus = audio.opus_data.toByteArray(),
+                    terminator = audio.is_terminator,
+                )
+            }
+            LegacyAudio.isLegacyOpus(packet) -> {
+                val a = LegacyAudio.decodeIncoming(packet) ?: return
+                voiceSink?.onIncomingAudio(a.session, a.sequence, a.opus, a.terminator)
+            }
+            // else: ping packets (protobuf type 1, legacy 0x20) — ignored
+        }
+    }
+
+    /**
+     * Send one encoded Opus frame to the server, as the raw body of an UDPTunnel control message.
+     * Uses the Mumble 1.5 protobuf audio format for ≥1.5.0 servers and the legacy packet format for
+     * older servers (which predate protobuf). target 0 = normal talking.
      */
     fun sendAudio(opus: ByteArray, terminator: Boolean, target: Int = 0) {
-        val audio = UdpAudio(
-            target = target,
-            frame_number = audioSequence,
-            opus_data = opus.toByteString(),
-            is_terminator = terminator,
-        )
+        val packet = if (useLegacyAudio) {
+            LegacyAudio.encodeOutgoing(audioSequence, opus, terminator, target)
+        } else {
+            val body = UdpAudio.ADAPTER.encode(
+                UdpAudio(
+                    target = target,
+                    frame_number = audioSequence,
+                    opus_data = opus.toByteString(),
+                    is_terminator = terminator,
+                ),
+            )
+            ByteArray(body.size + 1).also {
+                it[0] = UDP_TYPE_AUDIO.toByte()
+                body.copyInto(it, 1)
+            }
+        }
         audioSequence += 1
         if (terminator) audioSequence = 0
-        val body = UdpAudio.ADAPTER.encode(audio)
-        val packet = ByteArray(body.size + 1).also {
-            it[0] = UDP_TYPE_AUDIO.toByte()
-            body.copyInto(it, 1)
-        }
         runCatching { channel?.sendRaw(MessageType.UDP_TUNNEL.id, packet) }
     }
 
@@ -325,8 +358,23 @@ class MumbleClient(
         /** Send a keep-alive only after this much idle time on the control channel. */
         private const val IDLE_PING_MS = 6_000L
 
+        /** Audio protobuf format was introduced in Mumble 1.5.0; older servers use the legacy one. */
+        private val PROTOBUF_VERSION = encodeVersion(1, 5, 0)
+
         /** Pack a Mumble v2 version: 16 bits each for major/minor/patch in the high 48 bits. */
         fun encodeVersion(major: Int, minor: Int, patch: Int): Long =
             (major.toLong() shl 48) or (minor.toLong() shl 32) or (patch.toLong() shl 16)
+
+        /** Legacy v1 version: major in bits 16-31, minor 8-15, patch 0-7. */
+        private fun legacyVersionOf(v2: Long): Int {
+            val major = (v2 ushr 48 and 0xFFFF).toInt()
+            val minor = (v2 ushr 32 and 0xFFFF).toInt()
+            val patch = (v2 ushr 16 and 0xFFFF).toInt()
+            return (major shl 16) or (minor shl 8) or (patch and 0xFF)
+        }
+
+        /** Expand a legacy v1 version into the full 64-bit form for comparison. */
+        private fun legacyToFull(v1: Int): Long =
+            encodeVersion((v1 ushr 16) and 0xFFFF, (v1 ushr 8) and 0xFF, v1 and 0xFF)
     }
 }
