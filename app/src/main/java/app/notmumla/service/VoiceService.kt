@@ -44,10 +44,23 @@ class VoiceService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Always promote to foreground immediately to satisfy the startForegroundService contract.
-        startForeground(NOTIFICATION_ID, buildNotification())
+        // A null intent means the system restarted us (sticky). There is no live session in a fresh
+        // process and starting a microphone FGS from the background is disallowed — just bail out.
+        if (intent == null || sessionManager.state.value.connection == ConnectionState.DISCONNECTED) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
-        when (intent?.action) {
+        // Promote to foreground immediately to satisfy the startForegroundService contract. Guard
+        // against the background-start restriction so a race can never crash the app.
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification())
+        } catch (t: Throwable) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        when (intent.action) {
             ACTION_TOGGLE_MUTE -> {
                 val muted = sessionManager.state.value.self?.selfMute ?: false
                 sessionManager.setMicMuted(!muted)
@@ -71,7 +84,7 @@ class VoiceService : Service() {
                     }
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
