@@ -98,6 +98,7 @@ private object Routes {
     const val CONNECT = "connect"
     const val CHANNELS = "channels"
     const val SETTINGS = "settings"
+    const val LICENSES = "licenses"
 }
 
 @Composable
@@ -215,7 +216,11 @@ private fun AppNav() {
                 onToggleAutoReconnect = settingsVm::setAutoReconnect,
                 onToggleTts = settingsVm::setTtsReadAloud,
                 onToggleMentionSound = settingsVm::setMentionSound,
+                onOpenLicenses = { nav.navigate(Routes.LICENSES) },
             )
+        }
+        composable(Routes.LICENSES) {
+            app.notmumla.ui.settings.LicensesScreen(onBack = { nav.popBackStack() })
         }
     }
 }
