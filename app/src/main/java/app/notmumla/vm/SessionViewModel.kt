@@ -20,8 +20,11 @@ class SessionViewModel @Inject constructor(
     val localTransmitting: StateFlow<Boolean> = sessionManager.localTransmitting
     val availableRoutes: StateFlow<List<OutputRoute>> = sessionManager.availableRoutes
     val currentRoute: StateFlow<OutputRoute> = sessionManager.currentRoute
+    val chat: StateFlow<List<app.notmumla.data.ChatLine>> = sessionManager.chat
+    val unreadChat: StateFlow<Int> = sessionManager.unreadChat
 
     fun selectRoute(route: OutputRoute) = sessionManager.selectRoute(route)
+    fun markChatRead() = sessionManager.markChatRead()
 
     fun joinChannel(channelId: Int) = sessionManager.joinChannel(channelId)
 

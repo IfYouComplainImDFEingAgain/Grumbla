@@ -52,6 +52,14 @@ class SessionManager @Inject constructor(
 
     val events = MutableSharedFlow<MumbleClient.Event>(extraBufferCapacity = 32)
 
+    private val _chat = MutableStateFlow<List<ChatLine>>(emptyList())
+    val chat: StateFlow<List<ChatLine>> = _chat.asStateFlow()
+
+    private val _unread = MutableStateFlow(0)
+    val unreadChat: StateFlow<Int> = _unread.asStateFlow()
+
+    private var chatId = 0L
+
     private var client: MumbleClient? = null
     private var engine: AudioEngine? = null
     private var mirrorJob: Job? = null
@@ -100,7 +108,12 @@ class SessionManager @Inject constructor(
                 if (s.connection == ConnectionState.CONNECTED) onConnected(server, s)
             }
         }
-        eventJob = scope.launch { mc.events.collect { events.tryEmit(it) } }
+        eventJob = scope.launch {
+            mc.events.collect { event ->
+                if (event is MumbleClient.Event.Text) onIncomingText(event.text)
+                events.tryEmit(event)
+            }
+        }
 
         mc.connect(
             ConnectConfig(
@@ -151,7 +164,44 @@ class SessionManager @Inject constructor(
 
     fun setSelfMuteDeaf(mute: Boolean, deaf: Boolean) = client?.setSelfMuteDeaf(mute, deaf)
 
-    fun sendText(channelId: Int, message: String) = client?.sendText(channelId, message)
+    fun sendText(channelId: Int, message: String) {
+        client?.sendText(channelId, message)
+        // The server does not echo our own messages back, so add it locally.
+        appendChat(ChatLine(chatId++, "You", message, System.currentTimeMillis(), isMe = true))
+        markChatRead()
+    }
+
+    private fun onIncomingText(text: app.notmumla.protocol.IncomingText) {
+        val selfSession = _state.value.sessionId
+        if (text.actorSession != null && text.actorSession == selfSession) return // our own echo, if any
+        val name = text.actorSession?.let { _state.value.users[it]?.name } ?: "Server"
+        val clean = stripHtml(text.message)
+        appendChat(
+            ChatLine(
+                id = chatId++,
+                senderName = name,
+                text = clean,
+                timeMillis = System.currentTimeMillis(),
+                isSystem = text.actorSession == null,
+            ),
+        )
+        _unread.value += 1
+    }
+
+    private fun appendChat(line: ChatLine) {
+        _chat.value = (_chat.value + line).takeLast(500)
+    }
+
+    /** Mark the chat as read (call when the Chat tab is shown). */
+    fun markChatRead() { _unread.value = 0 }
+
+    /** Strip server-permitted HTML to plain text for display. */
+    private fun stripHtml(html: String): String =
+        html.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
+            .replace(Regex("<[^>]*>"), "")
+            .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+            .replace("&quot;", "\"").replace("&#39;", "'").replace("&nbsp;", " ")
+            .trim()
 
     fun disconnect() {
         mirrorJob?.cancel()
@@ -165,6 +215,8 @@ class SessionManager @Inject constructor(
         activeServerId = null
         _speaking.value = emptySet()
         _localTransmitting.value = false
+        _chat.value = emptyList()
+        _unread.value = 0
         _state.value = ServerState(connection = ConnectionState.DISCONNECTED)
         app.notmumla.service.VoiceService.stop(context)
     }
