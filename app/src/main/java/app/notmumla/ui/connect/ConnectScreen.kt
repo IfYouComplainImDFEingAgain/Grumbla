@@ -13,40 +13,54 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.notmumla.ui.Avatar
-import app.notmumla.ui.MockData
-import app.notmumla.ui.UiServer
+import app.notmumla.data.db.ServerEntity
+import app.notmumla.protocol.Mumble
+import app.notmumla.ui.channels.avatarColorFor
+import app.notmumla.ui.channels.initialsFor
 import app.notmumla.ui.theme.MumbleTheme
 
 @Composable
 fun ConnectScreen(
-    onConnect: () -> Unit,
+    savedServers: List<ServerEntity>,
+    onConnectNew: (host: String, port: Int, username: String, password: String?) -> Unit,
+    onConnectSaved: (ServerEntity) -> Unit,
+    onDelete: (ServerEntity) -> Unit,
 ) {
     val c = MumbleTheme.colors
+    var host by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf(Mumble.DEFAULT_PORT.toString()) }
+    var username by remember { mutableStateOf("user") }
+
     Column(
-        Modifier
-            .fillMaxSize()
-            .background(c.surface)
-            .verticalScroll(rememberScrollState())
+        Modifier.fillMaxSize().background(c.surface).verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 18.dp),
     ) {
-        // App identity header
         Column(
             Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 30.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -54,67 +68,96 @@ fun ConnectScreen(
             Box(
                 Modifier.size(78.dp).clip(RoundedCornerShape(24.dp)).background(c.primary),
                 contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Filled.Mic, null, tint = c.onPrimary, modifier = Modifier.size(40.dp))
-            }
+            ) { Icon(Icons.Filled.Mic, null, tint = c.onPrimary, modifier = Modifier.size(40.dp)) }
             Spacer(Modifier.height(16.dp))
             Text("Mumble", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = c.onSurface)
             Text("Connect to a voice server", fontSize = 14.sp, color = c.onSurfaceVar,
                 modifier = Modifier.padding(top = 4.dp))
         }
 
-        // Connect form
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(c.surfContainer)
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            FormField(label = "Server address") {
-                Text("example.com", color = c.onSurface, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                Text(":64738", color = c.onSurfaceVar, fontSize = 15.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.weight(1f)) {
+                    LabeledField("Server address", host, "example.com") { host = it }
+                }
+                Box(Modifier.width(110.dp)) {
+                    LabeledField("Port", port, "64738", numeric = true) {
+                        port = it.filter(Char::isDigit).take(5)
+                    }
+                }
             }
-            FormField(label = "Username") {
-                Text("user", color = c.onSurface, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-            }
+            LabeledField("Username", username, "user") { username = it }
+            val canConnect = host.isNotBlank() && username.isNotBlank()
             Box(
                 Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(16.dp))
-                    .background(c.primary).clickable(onClick = onConnect).padding(15.dp),
+                    .background(if (canConnect) c.primary else c.surfHighest)
+                    .clickable(enabled = canConnect) {
+                        onConnectNew(host.trim(), port.toIntOrNull() ?: Mumble.DEFAULT_PORT,
+                            username.trim(), null)
+                    }
+                    .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("Connect", color = c.onPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Connect", color = if (canConnect) c.onPrimary else c.onSurfaceVar,
+                    fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
 
-        Text(
-            "RECENT SERVERS",
-            color = c.onSurfaceVar, fontWeight = FontWeight.Bold, fontSize = 12.sp,
-            letterSpacing = 0.06.sp,
-            modifier = Modifier.padding(top = 24.dp, bottom = 8.dp, start = 4.dp),
-        )
-        MockData.servers.forEach { server ->
-            ServerRow(server, onClick = onConnect)
-            Spacer(Modifier.height(8.dp))
+        if (savedServers.isNotEmpty()) {
+            Text("RECENT SERVERS", color = c.onSurfaceVar, fontWeight = FontWeight.Bold,
+                fontSize = 12.sp, letterSpacing = 0.06.sp,
+                modifier = Modifier.padding(top = 24.dp, bottom = 8.dp, start = 4.dp))
+            savedServers.forEach { server ->
+                ServerRow(server, onClick = { onConnectSaved(server) }, onLongPress = { onDelete(server) })
+                Spacer(Modifier.height(8.dp))
+            }
         }
     }
 }
 
 @Composable
-private fun FormField(label: String, content: @Composable () -> Unit) {
+private fun LabeledField(
+    label: String,
+    value: String,
+    placeholder: String,
+    numeric: Boolean = false,
+    onChange: (String) -> Unit,
+) {
     val c = MumbleTheme.colors
     Column {
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.onSurfaceVar,
             modifier = Modifier.padding(bottom = 6.dp, start = 4.dp))
-        Row(
+        Box(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.surface)
                 .border(1.dp, c.outlineVariant, RoundedCornerShape(14.dp))
                 .padding(horizontal = 16.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) { content() }
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text,
+                ),
+                textStyle = LocalTextStyle.current.copy(color = c.onSurface, fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium),
+                cursorBrush = SolidColor(c.primary),
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { inner ->
+                    if (value.isEmpty()) Text(placeholder, color = c.onSurfaceVar, fontSize = 15.sp)
+                    inner()
+                },
+            )
+        }
     }
 }
 
 @Composable
-private fun ServerRow(server: UiServer, onClick: () -> Unit) {
+private fun ServerRow(server: ServerEntity, onClick: () -> Unit, onLongPress: () -> Unit) {
     val c = MumbleTheme.colors
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.surfContainer)
@@ -123,19 +166,20 @@ private fun ServerRow(server: UiServer, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(
-            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(server.accent),
+            Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(avatarColorFor(server.label)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(server.initial, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(initialsFor(server.label), color = Color.White, fontWeight = FontWeight.Bold,
+                fontSize = 16.sp)
         }
         Column(Modifier.weight(1f)) {
             Text(server.label, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = c.onSurface)
-            Text("${server.onlineCount} online · ${server.pingMs} ms",
+            Text("${server.host}:${server.port} · ${server.username}",
                 fontSize = 13.sp, color = c.onSurfaceVar)
         }
-        Box(
-            Modifier.size(8.dp).clip(CircleShape)
-                .background(if (server.online) c.speaking else c.outline),
-        )
+        Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onLongPress),
+            contentAlignment = Alignment.Center) {
+            Text("✕", color = c.onSurfaceVar, fontSize = 14.sp)
+        }
     }
 }

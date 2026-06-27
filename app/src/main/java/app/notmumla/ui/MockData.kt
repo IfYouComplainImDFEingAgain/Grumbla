@@ -38,7 +38,7 @@ object MockData {
     )
 
     val servers = listOf(
-        UiServer(1, "example.com", 64738, "example.com", "D", green, 12, 18, online = true),
+        UiServer(1, "example.com", 64738, "example.com", "E", green, 12, 18, online = true),
         UiServer(2, "raidnight.gg", 64738, "raidnight.gg", "R", purple, 3, 41, online = false),
     )
 

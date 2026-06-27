@@ -19,19 +19,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Headset
-import androidx.compose.material.icons.filled.HeadsetOff
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +38,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.notmumla.ui.Avatar
 import app.notmumla.ui.ChannelLayout
-import app.notmumla.ui.MockData
 import app.notmumla.ui.SpeakingBars
 import app.notmumla.ui.TransmissionMode
 import app.notmumla.ui.UiChannel
@@ -53,6 +49,17 @@ import app.notmumla.ui.theme.MumbleTheme
 
 @Composable
 fun ChannelsScreen(
+    serverName: String,
+    serverInitial: String,
+    connectionLabel: String,
+    channels: List<UiChannel>,
+    selfMuted: Boolean,
+    selfDeafened: Boolean,
+    unreadCount: Int,
+    onJoinChannel: (Int) -> Unit,
+    onToggleMute: () -> Unit,
+    onToggleDeafen: () -> Unit,
+    onSendText: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
@@ -60,33 +67,31 @@ fun ChannelsScreen(
     var tab by remember { mutableStateOf(0) } // 0 = channels, 1 = chat
     var layout by remember { mutableStateOf(ChannelLayout.TREE) }
     var mode by remember { mutableStateOf(TransmissionMode.PTT) }
-    var muted by remember { mutableStateOf(false) }
-    var deafened by remember { mutableStateOf(false) }
     var quickSettings by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(c.surface)) {
         Column(Modifier.fillMaxSize()) {
-            ServerHeader(onOpenSettings = onOpenSettings)
-            TabStrip(tab, unread = 3, onSelect = { tab = it })
+            ServerHeader(serverName, serverInitial, connectionLabel, onOpenSettings)
+            TabStrip(tab, unread = unreadCount, onSelect = { tab = it })
 
             Box(Modifier.weight(1f)) {
                 when (tab) {
                     0 -> when (layout) {
-                        ChannelLayout.TREE -> TreeLayout()
-                        ChannelLayout.SPEAKERS -> SpeakersLayout()
-                        ChannelLayout.COMPACT -> CompactLayout()
+                        ChannelLayout.TREE -> TreeLayout(channels, onJoinChannel)
+                        ChannelLayout.SPEAKERS -> SpeakersLayout(channels, onJoinChannel)
+                        ChannelLayout.COMPACT -> CompactLayout(channels, onJoinChannel)
                     }
-                    else -> ChatPanel()
+                    else -> ChatPanel(onSend = onSendText)
                 }
             }
 
             VoiceBar(
                 mode = mode,
-                muted = muted,
-                deafened = deafened,
+                muted = selfMuted,
+                deafened = selfDeafened,
                 onMode = { mode = it },
-                onToggleMute = { muted = !muted },
-                onToggleDeafen = { deafened = !deafened },
+                onToggleMute = onToggleMute,
+                onToggleDeafen = onToggleDeafen,
                 onLongPressSettings = { quickSettings = true },
             )
         }
@@ -105,7 +110,12 @@ fun ChannelsScreen(
 }
 
 @Composable
-private fun ServerHeader(onOpenSettings: () -> Unit) {
+private fun ServerHeader(
+    serverName: String,
+    serverInitial: String,
+    connectionLabel: String,
+    onOpenSettings: () -> Unit,
+) {
     val c = MumbleTheme.colors
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
@@ -113,15 +123,15 @@ private fun ServerHeader(onOpenSettings: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
-            Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFF1F8A5B)),
+            Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(c.speaking),
             contentAlignment = Alignment.Center,
-        ) { Text("D", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
+        ) { Text(serverInitial, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
         Column(Modifier.weight(1f)) {
-            Text("example.com", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = c.onSurface)
+            Text(serverName, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = c.onSurface)
             Row(verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.size(7.dp).clip(CircleShape).background(c.speaking))
-                Text("Connected · 18 ms", fontSize = 12.sp, color = c.onSurfaceVar)
+                Text(connectionLabel, fontSize = 12.sp, color = c.onSurfaceVar)
             }
         }
         Box(
@@ -134,10 +144,7 @@ private fun ServerHeader(onOpenSettings: () -> Unit) {
 @Composable
 private fun TabStrip(selected: Int, unread: Int, onSelect: (Int) -> Unit) {
     val c = MumbleTheme.colors
-    Row(
-        Modifier.fillMaxWidth().height(48.dp)
-            .background(c.surface),
-    ) {
+    Row(Modifier.fillMaxWidth().height(48.dp).background(c.surface)) {
         TabButton("Channels", selected == 0, Modifier.weight(1f)) { onSelect(0) }
         TabButton("Chat", selected == 1, Modifier.weight(1f), badge = unread) { onSelect(1) }
     }
@@ -171,32 +178,42 @@ private fun TabButton(
     }
 }
 
+@Composable
+private fun EmptyChannels() {
+    val c = MumbleTheme.colors
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("Connecting…", color = c.onSurfaceVar, fontSize = 14.sp)
+    }
+}
+
 /* ---------------- Tree layout ---------------- */
 
 @Composable
-private fun TreeLayout() {
+private fun TreeLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
     val c = MumbleTheme.colors
+    if (channels.isEmpty()) { EmptyChannels(); return }
     LazyColumn(Modifier.fillMaxSize().padding(10.dp)) {
         item {
             Text("VOICE CHANNELS", color = c.onSurfaceVar, fontWeight = FontWeight.Bold,
                 fontSize = 11.sp, letterSpacing = 0.07.sp,
                 modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 6.dp))
         }
-        items(MockData.channels) { channel ->
-            ChannelHeaderRow(channel)
+        items(channels) { channel ->
+            ChannelHeaderRow(channel, onJoin)
             channel.users.forEach { user -> UserRow(user) }
         }
     }
 }
 
 @Composable
-private fun ChannelHeaderRow(channel: UiChannel) {
+private fun ChannelHeaderRow(channel: UiChannel, onJoin: (Int) -> Unit) {
     val c = MumbleTheme.colors
     val bg = if (channel.isCurrent) c.primaryContainer else Color.Transparent
     val fg = if (channel.isCurrent) c.onPrimaryContainer else c.onSurface
     Row(
         Modifier.fillMaxWidth().padding(start = (channel.depth * 16).dp)
             .clip(RoundedCornerShape(14.dp)).background(bg)
+            .clickable { onJoin(channel.id) }
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -229,8 +246,7 @@ private fun UserRow(user: UiUser) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        Avatar(user.initials, user.avatar, size = 28.dp,
-            dimmed = user.status == UserStatus.AFK)
+        Avatar(user.initials, user.avatar, size = 28.dp, dimmed = user.status == UserStatus.AFK)
         Text(user.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.onSurface,
             modifier = Modifier.weight(1f))
         when (user.status) {
@@ -243,10 +259,7 @@ private fun UserRow(user: UiUser) {
         }
         if (user.isYou) {
             Spacer(Modifier.width(6.dp))
-            Box(
-                Modifier.clip(RoundedCornerShape(8.dp))
-                    .padding(horizontal = 7.dp, vertical = 1.dp),
-            ) { Text("YOU", color = c.primary, fontWeight = FontWeight.Bold, fontSize = 11.sp) }
+            Text("YOU", color = c.primary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
     }
 }
@@ -254,10 +267,12 @@ private fun UserRow(user: UiUser) {
 /* ---------------- Speakers layout ---------------- */
 
 @Composable
-private fun SpeakersLayout() {
+private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
     val c = MumbleTheme.colors
-    val speakers = MockData.generalUsers.filter { it.status == UserStatus.SPEAKING }
-    val others = MockData.generalUsers.filter { it.status != UserStatus.SPEAKING && !it.isYou }
+    val current = channels.firstOrNull { it.isCurrent } ?: channels.firstOrNull()
+    if (current == null) { EmptyChannels(); return }
+    val speakers = current.users.filter { it.status == UserStatus.SPEAKING }
+    val others = current.users.filter { it.status != UserStatus.SPEAKING }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 12.dp)) {
         item {
             Column(
@@ -270,17 +285,16 @@ private fun SpeakersLayout() {
                     Text("${speakers.size} talking now", fontWeight = FontWeight.Bold,
                         fontSize = 13.sp, color = c.onSurface)
                 }
-                Spacer(Modifier.height(16.dp))
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-                ) {
-                    speakers.forEach { SpeakerBubble(it, speaking = true) }
-                    SpeakerBubble(MockData.you, speaking = false)
+                if (speakers.isNotEmpty()) {
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
+                    ) { speakers.forEach { SpeakerBubble(it) } }
                 }
             }
             Spacer(Modifier.height(16.dp))
-            Text("ALSO IN CHANNEL", color = c.onSurfaceVar, fontWeight = FontWeight.Bold,
+            Text("IN ${current.name.uppercase()}", color = c.onSurfaceVar, fontWeight = FontWeight.Bold,
                 fontSize = 11.sp, letterSpacing = 0.06.sp,
                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
         }
@@ -297,35 +311,35 @@ private fun SpeakersLayout() {
                     color = c.onSurface, modifier = Modifier.weight(1f))
                 if (user.status == UserStatus.MUTED)
                     Icon(Icons.Filled.MicOff, "muted", tint = c.muted, modifier = Modifier.size(16.dp))
-                if (user.status == UserStatus.AFK)
-                    Text("AFK", color = c.afk, fontWeight = FontWeight.Bold, fontFamily = MonoFamily,
-                        fontSize = 11.sp)
+                if (user.isYou) Text("YOU", color = c.primary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
             }
         }
     }
 }
 
 @Composable
-private fun SpeakerBubble(user: UiUser, speaking: Boolean) {
+private fun SpeakerBubble(user: UiUser) {
     val c = MumbleTheme.colors
     Column(horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Avatar(user.initials, user.avatar, size = 56.dp, dimmed = !speaking)
+        Avatar(user.initials, user.avatar, size = 56.dp)
         Text(user.name.substringBefore(" "), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-            color = if (speaking) c.onSurface else c.onSurfaceVar)
+            color = c.onSurface)
     }
 }
 
 /* ---------------- Compact layout ---------------- */
 
 @Composable
-private fun CompactLayout() {
+private fun CompactLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
     val c = MumbleTheme.colors
+    if (channels.isEmpty()) { EmptyChannels(); return }
     LazyColumn(Modifier.fillMaxSize().padding(vertical = 6.dp)) {
-        items(MockData.channels) { channel ->
+        items(channels) { channel ->
             Row(
                 Modifier.fillMaxWidth().padding(start = (channel.depth * 20).dp)
                     .background(if (channel.isCurrent) c.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
+                    .clickable { onJoin(channel.id) }
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -337,9 +351,10 @@ private fun CompactLayout() {
                 )
                 Text(channel.name, fontWeight = FontWeight.Bold, fontSize = 14.sp,
                     color = c.onSurface, modifier = Modifier.weight(1f))
-                Text("${channel.users.size}", fontFamily = MonoFamily, fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (channel.isCurrent) c.primary else c.onSurfaceVar)
+                if (channel.users.isNotEmpty())
+                    Text("${channel.users.size}", fontFamily = MonoFamily, fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (channel.isCurrent) c.primary else c.onSurfaceVar)
             }
             channel.users.forEach { user ->
                 Row(
@@ -352,13 +367,12 @@ private fun CompactLayout() {
                         UserStatus.MUTED -> Icon(Icons.Filled.MicOff, null, tint = c.muted,
                             modifier = Modifier.size(14.dp))
                         else -> Box(Modifier.size(6.dp).clip(CircleShape)
-                            .background(if (user.status == UserStatus.AFK) c.afk else c.primary))
+                            .background(if (user.isYou) c.primary else c.outline))
                     }
                     Text(user.name, fontSize = 13.sp, color = c.onSurface,
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    if (user.status == UserStatus.AFK)
-                        Text("AFK", color = c.afk, fontWeight = FontWeight.Bold,
-                            fontFamily = MonoFamily, fontSize = 10.sp)
+                    if (user.isYou) Text("YOU", color = c.primary, fontWeight = FontWeight.Bold,
+                        fontFamily = MonoFamily, fontSize = 10.sp)
                 }
             }
         }

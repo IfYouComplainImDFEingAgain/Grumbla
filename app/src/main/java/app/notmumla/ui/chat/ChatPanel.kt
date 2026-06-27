@@ -1,6 +1,8 @@
 package app.notmumla.ui.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,12 +20,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,19 +42,23 @@ import app.notmumla.ui.UiMessage
 import app.notmumla.ui.theme.MumbleTheme
 
 @Composable
-fun ChatPanel() {
+fun ChatPanel(
+    onSend: (String) -> Unit = {},
+    messages: List<UiMessage> = MockData.messages,
+    channelName: String = "General",
+) {
     val c = MumbleTheme.colors
     Column(Modifier.fillMaxSize().background(c.surface)) {
-        Text("# General", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.onSurfaceVar,
+        Text("# $channelName", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.onSurfaceVar,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp))
         Box(Modifier.fillMaxWidth().size(1.dp).background(c.outlineVariant))
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth().padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(MockData.messages) { msg -> MessageRow(msg) }
+            items(messages) { msg -> MessageRow(msg) }
         }
-        Composer()
+        Composer(channelName, onSend)
     }
 }
 
@@ -101,8 +113,9 @@ private fun MessageRow(msg: UiMessage) {
 }
 
 @Composable
-private fun Composer() {
+private fun Composer(channelName: String, onSend: (String) -> Unit) {
     val c = MumbleTheme.colors
+    var text by remember { mutableStateOf("") }
     Box(Modifier.fillMaxWidth().size(1.dp).background(c.outlineVariant))
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -110,12 +123,28 @@ private fun Composer() {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(Icons.Filled.Add, "Attach", tint = c.onSurfaceVar, modifier = Modifier.size(24.dp))
+        Box(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(c.surfHigh)
+            .padding(horizontal = 16.dp, vertical = 11.dp)) {
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                textStyle = LocalTextStyle.current.copy(color = c.onSurface, fontSize = 14.sp),
+                cursorBrush = SolidColor(c.primary),
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { inner ->
+                    if (text.isEmpty()) Text("Message #$channelName", color = c.onSurfaceVar, fontSize = 14.sp)
+                    inner()
+                },
+            )
+        }
+        val send = {
+            val t = text.trim()
+            if (t.isNotEmpty()) { onSend(t); text = "" }
+        }
         Box(
-            Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(c.surfHigh)
-                .padding(horizontal = 16.dp, vertical = 11.dp),
-        ) { Text("Message #General", color = c.onSurfaceVar, fontSize = 14.sp) }
-        Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(c.primary),
+            Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(c.primary)
+                .clickable { send() },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = c.onPrimary, modifier = Modifier.size(20.dp)) }
     }
