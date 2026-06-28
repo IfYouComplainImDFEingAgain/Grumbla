@@ -48,6 +48,8 @@ import app.notmumla.data.AppSettings
 import app.notmumla.data.ThemeMode
 import app.notmumla.ui.SegmentedToggle
 import app.notmumla.ui.theme.MumbleTheme
+import kotlin.math.ln
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 private fun OutputRoute.displayLabel(): String = when (this) {
@@ -405,9 +407,15 @@ private fun VadSensitivityRow(level: Float, threshold: Float, onChange: (Float) 
                 contentAlignment = Alignment.CenterEnd,
             ) { Box(Modifier.width(3.dp).height(20.dp).background(c.primary)) }
         }
+        // Logarithmic mapping: most of the slider travel covers the sensitive low end (0.0004–0.15),
+        // which is where VAD actually operates, so fine adjustments are possible.
+        val minT = 0.0004f
+        val maxT = 0.15f
+        val pos = (ln((threshold / minT).coerceAtLeast(1f)) / ln(maxT / minT)).coerceIn(0f, 1f)
         Slider(
-            value = threshold.coerceIn(0.002f, meterMax), onValueChange = onChange,
-            valueRange = 0.002f..meterMax,
+            value = pos,
+            onValueChange = { p -> onChange(minT * (maxT / minT).pow(p)) },
+            valueRange = 0f..1f,
             colors = SliderDefaults.colors(
                 thumbColor = c.primary, activeTrackColor = c.primary.copy(alpha = 0.4f),
                 inactiveTrackColor = c.surfHighest,

@@ -25,7 +25,7 @@ data class AppSettings(
     val channelLayout: ChannelLayout = ChannelLayout.TREE,
     val transmissionMode: TransmissionMode = TransmissionMode.PTT,
     val micGainDb: Float = 0f,
-    val vadSensitivity: Float = 0.02f, // normalized RMS threshold
+    val vadSensitivity: Float = 0.008f, // normalized RMS threshold
     val noiseSuppression: Boolean = true,
     val echoCancellation: Boolean = true,
     val audioBitrate: Int = 72_000,
@@ -64,7 +64,7 @@ class SettingsRepository @Inject constructor(
             channelLayout = p[Keys.LAYOUT]?.let { runCatching { ChannelLayout.valueOf(it) }.getOrNull() } ?: ChannelLayout.TREE,
             transmissionMode = p[Keys.TX_MODE]?.let { runCatching { TransmissionMode.valueOf(it) }.getOrNull() } ?: TransmissionMode.PTT,
             micGainDb = p[Keys.MIC_GAIN] ?: 0f,
-            vadSensitivity = p[Keys.VAD] ?: 0.02f,
+            vadSensitivity = p[Keys.VAD] ?: 0.008f,
             noiseSuppression = p[Keys.NS] ?: true,
             echoCancellation = p[Keys.AEC] ?: true,
             audioBitrate = p[Keys.BITRATE] ?: 72_000,

@@ -37,7 +37,7 @@ class AudioEngine(
     @Volatile var muted: Boolean = false
     @Volatile var micGain: Float = 1.0f
     /** Normalized VAD threshold (RMS over full-scale). */
-    @Volatile var vadThreshold: Float = 0.02f
+    @Volatile var vadThreshold: Float = 0.008f
     @Volatile var noiseSuppression: Boolean = true
     @Volatile var echoCancellation: Boolean = true
     @Volatile var bitrate: Int = 72_000
