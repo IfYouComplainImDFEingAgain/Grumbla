@@ -25,6 +25,7 @@ class SettingsViewModel @Inject constructor(
     fun setChannelLayout(v: ChannelLayout) = update { repo.setChannelLayout(v) }
     fun setTransmissionMode(v: TransmissionMode) = update { repo.setTransmissionMode(v) }
     fun setMicGainDb(v: Float) = update { repo.setMicGainDb(v) }
+    fun setAutoGain(v: Boolean) = update { repo.setAutoGain(v) }
     fun setVadSensitivity(v: Float) = update { repo.setVadSensitivity(v) }
     fun setNoiseSuppression(v: Boolean) = update { repo.setNoiseSuppression(v) }
     fun setEchoCancellation(v: Boolean) = update { repo.setEchoCancellation(v) }

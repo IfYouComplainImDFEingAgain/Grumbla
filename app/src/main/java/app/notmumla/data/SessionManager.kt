@@ -60,6 +60,7 @@ class SessionManager @Inject constructor(
                 bitrate = s.audioBitrate,
                 noiseSuppression = s.noiseSuppression,
                 echoCancellation = s.echoCancellation,
+                autoGain = s.autoGain,
             )
         }
     }
