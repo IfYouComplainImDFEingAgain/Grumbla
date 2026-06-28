@@ -47,15 +47,36 @@ object ImageUtil {
         return "<img src=\"data:image/jpeg;base64,$b64\" />"
     }
 
+    // The data-URI value may be percent-encoded (%2F…) and/or wrapped across multiple lines, so the
+    // capture must allow base64 chars, '%', and whitespace (stripped/decoded below).
     private val IMG_DATA = Regex(
-        "data:image/[^;]+;base64,([A-Za-z0-9+/=\\s]+)", RegexOption.IGNORE_CASE,
+        "data:image/[^;]+;base64,([A-Za-z0-9+/=%\\s]+)", RegexOption.IGNORE_CASE,
     )
     private val IMG_TAG = Regex("<img[^>]*>", RegexOption.IGNORE_CASE)
 
     /** Extract the first inline image's decoded bytes from [html], if any. */
     fun extractImage(html: String): ByteArray? {
-        val b64 = IMG_DATA.find(html)?.groupValues?.get(1)?.replace(Regex("\\s"), "") ?: return null
+        val raw = IMG_DATA.find(html)?.groupValues?.get(1) ?: return null
+        // Some clients (e.g. the Mumble desktop client) percent-encode the base64 inside the data
+        // URI (`/` -> %2F, `+` -> %2B, …) and wrap it across lines. Strip whitespace first (joining
+        // wrapped lines), then decode %XX (leaving other chars, including '+', intact).
+        val b64 = percentDecode(raw.replace(Regex("\\s"), ""))
         return runCatching { Base64.decode(b64, Base64.DEFAULT) }.getOrNull()
+    }
+
+    private fun percentDecode(s: String): String {
+        if ('%' !in s) return s
+        val out = StringBuilder(s.length)
+        var i = 0
+        while (i < s.length) {
+            val ch = s[i]
+            if (ch == '%' && i + 2 < s.length) {
+                val code = s.substring(i + 1, i + 3).toIntOrNull(16)
+                if (code != null) { out.append(code.toChar()); i += 3; continue }
+            }
+            out.append(ch); i++
+        }
+        return out.toString()
     }
 
     /** Remove `<img>` tags so the remaining text can be shown alongside the image. */

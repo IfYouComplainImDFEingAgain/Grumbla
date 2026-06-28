@@ -18,6 +18,7 @@ class SessionViewModel @Inject constructor(
     val serverLabel: StateFlow<String> = sessionManager.serverLabel
     val speakingSessions: StateFlow<Set<Int>> = sessionManager.speakingSessions
     val localTransmitting: StateFlow<Boolean> = sessionManager.localTransmitting
+    val inputLevel: StateFlow<Float> = sessionManager.inputLevel
     val availableRoutes: StateFlow<List<OutputRoute>> = sessionManager.availableRoutes
     val currentRoute: StateFlow<OutputRoute> = sessionManager.currentRoute
     val chat: StateFlow<List<app.notmumla.data.ChatLine>> = sessionManager.chat
@@ -43,6 +44,8 @@ class SessionViewModel @Inject constructor(
         sessionManager.setMicMuted(muted)
         sessionManager.setSelfMuteDeaf(muted, deaf)
     }
+
+    fun trustNewCertificate() = sessionManager.trustNewCertificate()
 
     fun disconnect() = sessionManager.disconnect()
 }

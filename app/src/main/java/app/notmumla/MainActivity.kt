@@ -258,9 +258,11 @@ private fun AppNav() {
             val routes by session.availableRoutes.collectAsState()
             val current by session.currentRoute.collectAsState()
             val settings by settingsVm.settings.collectAsState()
+            val inputLevel by session.inputLevel.collectAsState()
             SettingsScreen(
                 onBack = { nav.popBackStack() },
                 settings = settings,
+                inputLevel = inputLevel,
                 availableRoutes = routes,
                 currentRoute = current,
                 onSelectRoute = session::selectRoute,

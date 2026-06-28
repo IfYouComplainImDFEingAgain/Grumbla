@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,6 +63,7 @@ private val BITRATES = listOf(16_000, 24_000, 40_000, 72_000, 96_000)
 fun SettingsScreen(
     onBack: () -> Unit,
     settings: AppSettings,
+    inputLevel: Float,
     availableRoutes: List<OutputRoute>,
     currentRoute: OutputRoute,
     onSelectRoute: (OutputRoute) -> Unit,
@@ -152,11 +154,14 @@ fun SettingsScreen(
                         onSelect = { onSetTransmission(if (it == 0) TransmissionMode.PTT else TransmissionMode.VAD) },
                     )
                 }
-                Divider()
-                SliderRow(
-                    "Input sensitivity", "${(settings.vadSensitivity * 100).roundToInt()}%",
-                    value = settings.vadSensitivity, range = 0.001f..0.2f, onChange = onSetVad,
-                )
+                if (settings.transmissionMode == TransmissionMode.VAD) {
+                    Divider()
+                    VadSensitivityRow(
+                        level = inputLevel,
+                        threshold = settings.vadSensitivity,
+                        onChange = onSetVad,
+                    )
+                }
                 Divider()
                 SliderRow(
                     "Microphone gain", "${if (settings.micGainDb >= 0) "+" else ""}${settings.micGainDb.roundToInt()} dB",
@@ -359,6 +364,52 @@ private fun SliderRow(
             valueRange = range,
             colors = SliderDefaults.colors(
                 thumbColor = c.primary, activeTrackColor = c.primary,
+                inactiveTrackColor = c.surfHighest,
+            ),
+        )
+    }
+}
+
+/**
+ * VAD calibration: a live mic-level meter with a draggable threshold. Speak and set the threshold
+ * just above the bar's resting (background-noise) level; the bar turns green when you're above it
+ * and transmitting. Far clearer than a blind percentage.
+ */
+@Composable
+private fun VadSensitivityRow(level: Float, threshold: Float, onChange: (Float) -> Unit) {
+    val c = MumbleTheme.colors
+    val meterMax = 0.3f // RMS scale: typical speech sits well within this
+    val levelFrac = (level / meterMax).coerceIn(0f, 1f)
+    val threshFrac = (threshold / meterMax).coerceIn(0f, 1f)
+    val transmitting = level >= threshold && level > 0.001f
+
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Mic, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.size(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Input sensitivity", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
+                Text("Speak, then set the line just above the bar's resting level",
+                    fontSize = 12.sp, color = c.onSurfaceVar)
+            }
+        }
+        Spacer(Modifier.size(10.dp))
+        // Live level meter with the threshold marker.
+        Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(c.surfHighest)) {
+            Box(
+                Modifier.fillMaxWidth(levelFrac).height(14.dp).clip(RoundedCornerShape(7.dp))
+                    .background(if (transmitting) c.speaking else c.outline),
+            )
+            Box(
+                Modifier.fillMaxWidth(threshFrac).height(14.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) { Box(Modifier.width(3.dp).height(20.dp).background(c.primary)) }
+        }
+        Slider(
+            value = threshold.coerceIn(0.002f, meterMax), onValueChange = onChange,
+            valueRange = 0.002f..meterMax,
+            colors = SliderDefaults.colors(
+                thumbColor = c.primary, activeTrackColor = c.primary.copy(alpha = 0.4f),
                 inactiveTrackColor = c.surfHighest,
             ),
         )

@@ -103,6 +103,10 @@ class SessionManager @Inject constructor(
     private val _localTransmitting = MutableStateFlow(false)
     val localTransmitting: StateFlow<Boolean> = _localTransmitting.asStateFlow()
 
+    private val _inputLevel = MutableStateFlow(0f)
+    /** Live mic input level (0..1) for VAD calibration in Settings. */
+    val inputLevel: StateFlow<Float> = _inputLevel.asStateFlow()
+
     /** True once RECORD_AUDIO is granted and the engine has been started. */
     var audioPermissionGranted = false
         private set
@@ -146,6 +150,7 @@ class SessionManager @Inject constructor(
         selectRoute(router.current.value)
         scope.launch { eng.speakingSessions.collect { _speaking.value = it } }
         scope.launch { eng.transmitting.collect { _localTransmitting.value = it } }
+        scope.launch { eng.inputLevel.collect { _inputLevel.value = it } }
 
         mirrorJob = scope.launch {
             mc.state.collect { s ->
@@ -335,6 +340,7 @@ class SessionManager @Inject constructor(
         activeServerId = null
         _speaking.value = emptySet()
         _localTransmitting.value = false
+        _inputLevel.value = 0f
         _state.value = ServerState(connection = toState)
         app.notmumla.service.VoiceService.stop(context)
     }
