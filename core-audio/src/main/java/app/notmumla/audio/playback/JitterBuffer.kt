@@ -42,19 +42,20 @@ class JitterBuffer(private val targetDepth: Int = 3, private val maxDepth: Int =
             return Pull.EMPTY
         }
         val opus = frames.remove(nextSequence)
-        return if (opus != null) {
+        if (opus != null) {
             nextSequence += 1
-            Pull(opus = opus)
-        } else {
-            // Gap: the expected sequence isn't here yet but later frames are → conceal one.
-            nextSequence += 1
-            Pull(lost = true)
+            return Pull(opus = opus)
         }
+        // Gap. If the *immediately next* frame is already buffered, recover this one from its
+        // forward-error-correction data (Opus FEC); otherwise fall back to concealment.
+        val next = frames[nextSequence + 1]
+        nextSequence += 1
+        return if (next != null) Pull(opus = next, fec = true) else Pull(lost = true)
     }
 
     val isIdle: Boolean get() = frames.isEmpty()
 
-    data class Pull(val opus: ByteArray? = null, val lost: Boolean = false) {
+    data class Pull(val opus: ByteArray? = null, val fec: Boolean = false, val lost: Boolean = false) {
         val isEmpty: Boolean get() = opus == null && !lost
         companion object { val EMPTY = Pull() }
     }

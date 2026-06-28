@@ -8,7 +8,7 @@ import app.notmumla.audio.AudioConstants
 class OpusEncoder(
     sampleRate: Int = AudioConstants.SAMPLE_RATE,
     channels: Int = AudioConstants.CHANNELS,
-    bitrate: Int = 40_000,
+    bitrate: Int = 72_000,
 ) {
     private var handle = OpusNative.encoderCreate(sampleRate, channels, bitrate)
     private val scratch = ByteArray(MAX_PACKET)
@@ -57,6 +57,15 @@ class OpusDecoder(
     fun decode(packet: ByteArray?, pcmOut: ShortArray, frameSize: Int): Int {
         if (handle == 0L) return -1
         return OpusNative.decode(handle, packet, packet?.size ?: 0, pcmOut, frameSize, false)
+    }
+
+    /**
+     * Recover a lost frame from the *next* packet's embedded forward-error-correction data.
+     * Falls back to packet-loss concealment internally if the packet carries no FEC.
+     */
+    fun decodeFec(nextPacket: ByteArray, pcmOut: ShortArray, frameSize: Int): Int {
+        if (handle == 0L) return -1
+        return OpusNative.decode(handle, nextPacket, nextPacket.size, pcmOut, frameSize, true)
     }
 
     /** Conceal one lost frame (no packet available). */
