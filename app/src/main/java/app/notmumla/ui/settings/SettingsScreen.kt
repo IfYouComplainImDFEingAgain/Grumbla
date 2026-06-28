@@ -73,6 +73,7 @@ fun SettingsScreen(
     onSetTransmission: (TransmissionMode) -> Unit,
     onSetVad: (Float) -> Unit,
     onSetMicGainDb: (Float) -> Unit,
+    onToggleAutoGain: (Boolean) -> Unit,
     onToggleNoiseSuppression: (Boolean) -> Unit,
     onToggleEchoCancellation: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
@@ -165,11 +166,16 @@ fun SettingsScreen(
                     )
                 }
                 Divider()
-                SliderRow(
-                    "Microphone gain", "${if (settings.micGainDb >= 0) "+" else ""}${settings.micGainDb.roundToInt()} dB",
-                    value = (settings.micGainDb + 20f) / 40f, range = 0f..1f,
-                    onChange = { onSetMicGainDb(it * 40f - 20f) }, icon = Icons.Filled.GraphicEq,
-                )
+                ToggleRow(Icons.Filled.GraphicEq, "Automatic gain control",
+                    "Auto-level your mic", settings.autoGain, onToggleAutoGain)
+                if (!settings.autoGain) {
+                    Divider()
+                    SliderRow(
+                        "Microphone gain", "${if (settings.micGainDb >= 0) "+" else ""}${settings.micGainDb.roundToInt()} dB",
+                        value = (settings.micGainDb + 20f) / 40f, range = 0f..1f,
+                        onChange = { onSetMicGainDb(it * 40f - 20f) }, icon = Icons.Filled.GraphicEq,
+                    )
+                }
                 Divider()
                 ToggleRow(Icons.Filled.GraphicEq, "Noise suppression", null,
                     settings.noiseSuppression, onToggleNoiseSuppression)

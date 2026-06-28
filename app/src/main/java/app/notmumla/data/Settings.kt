@@ -25,6 +25,7 @@ data class AppSettings(
     val channelLayout: ChannelLayout = ChannelLayout.TREE,
     val transmissionMode: TransmissionMode = TransmissionMode.PTT,
     val micGainDb: Float = 0f,
+    val autoGain: Boolean = true,
     val vadSensitivity: Float = 0.008f, // normalized RMS threshold
     val noiseSuppression: Boolean = true,
     val echoCancellation: Boolean = true,
@@ -47,6 +48,7 @@ class SettingsRepository @Inject constructor(
         val LAYOUT = stringPreferencesKey("channel_layout")
         val TX_MODE = stringPreferencesKey("transmission_mode")
         val MIC_GAIN = floatPreferencesKey("mic_gain_db")
+        val AUTO_GAIN = booleanPreferencesKey("auto_gain")
         val VAD = floatPreferencesKey("vad_sensitivity")
         val NS = booleanPreferencesKey("noise_suppression")
         val AEC = booleanPreferencesKey("echo_cancellation")
@@ -64,6 +66,7 @@ class SettingsRepository @Inject constructor(
             channelLayout = p[Keys.LAYOUT]?.let { runCatching { ChannelLayout.valueOf(it) }.getOrNull() } ?: ChannelLayout.TREE,
             transmissionMode = p[Keys.TX_MODE]?.let { runCatching { TransmissionMode.valueOf(it) }.getOrNull() } ?: TransmissionMode.PTT,
             micGainDb = p[Keys.MIC_GAIN] ?: 0f,
+            autoGain = p[Keys.AUTO_GAIN] ?: true,
             vadSensitivity = p[Keys.VAD] ?: 0.008f,
             noiseSuppression = p[Keys.NS] ?: true,
             echoCancellation = p[Keys.AEC] ?: true,
@@ -80,6 +83,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setChannelLayout(v: ChannelLayout) = edit { it[Keys.LAYOUT] = v.name }
     suspend fun setTransmissionMode(v: TransmissionMode) = edit { it[Keys.TX_MODE] = v.name }
     suspend fun setMicGainDb(v: Float) = edit { it[Keys.MIC_GAIN] = v }
+    suspend fun setAutoGain(v: Boolean) = edit { it[Keys.AUTO_GAIN] = v }
     suspend fun setVadSensitivity(v: Float) = edit { it[Keys.VAD] = v }
     suspend fun setNoiseSuppression(v: Boolean) = edit { it[Keys.NS] = v }
     suspend fun setEchoCancellation(v: Boolean) = edit { it[Keys.AEC] = v }

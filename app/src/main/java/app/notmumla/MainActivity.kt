@@ -270,6 +270,7 @@ private fun AppNav() {
                 onSetTransmission = settingsVm::setTransmissionMode,
                 onSetVad = settingsVm::setVadSensitivity,
                 onSetMicGainDb = settingsVm::setMicGainDb,
+                onToggleAutoGain = settingsVm::setAutoGain,
                 onToggleNoiseSuppression = settingsVm::setNoiseSuppression,
                 onToggleEchoCancellation = settingsVm::setEchoCancellation,
                 onSetBitrate = settingsVm::setAudioBitrate,
