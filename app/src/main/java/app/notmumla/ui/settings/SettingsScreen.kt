@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
@@ -110,8 +109,6 @@ fun SettingsScreen(
 
             SectionLabel("CONNECTION")
             SettingsGroup {
-                ValueRow(Icons.Filled.Storage, "Server", "example.com:64738")
-                Divider()
                 ToggleRow(Icons.Filled.Autorenew, "Auto-reconnect", "Rejoin last channel automatically",
                     settings.autoReconnect, onToggleAutoReconnect)
                 Divider()
