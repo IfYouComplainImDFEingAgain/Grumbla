@@ -123,9 +123,15 @@ class MumbleClient(
                 startPing()
                 readLoop(control)
             } catch (t: Throwable) {
+                val mismatch = generateSequence(t) { it.cause }
+                    .any { it.message?.contains("fingerprint mismatch", ignoreCase = true) == true }
                 if (isActive) {
                     _state.update {
-                        it.copy(connection = ConnectionState.FAILED, error = t.message)
+                        it.copy(
+                            connection = ConnectionState.FAILED,
+                            error = if (mismatch) "Server certificate changed" else t.message,
+                            certMismatchFingerprint = if (mismatch) trust.observedSha256 else null,
+                        )
                     }
                     events.tryEmit(Event.Disconnected(t.message))
                 }

@@ -150,7 +150,9 @@ class SessionManager @Inject constructor(
         mirrorJob = scope.launch {
             mc.state.collect { s ->
                 s.self?.channelId?.let { lastKnownChannelId = it }
-                if (s.connection == ConnectionState.FAILED && shouldReconnect()) {
+                if (s.connection == ConnectionState.FAILED &&
+                    s.certMismatchFingerprint == null && shouldReconnect()
+                ) {
                     // Suppress the failure from the UI and retry instead of dropping to Connect.
                     _state.value = s.copy(connection = ConnectionState.CONNECTING, error = null)
                     scheduleReconnect(server)
@@ -229,6 +231,15 @@ class SessionManager @Inject constructor(
     fun setMicMuted(muted: Boolean) { engine?.muted = muted }
 
     val autoReconnectEnabled: Boolean get() = settings.autoReconnect
+
+    /** Accept the server's changed certificate: update the pin and reconnect. */
+    fun trustNewCertificate() {
+        val server = lastServer ?: return
+        val newFp = _state.value.certMismatchFingerprint ?: return
+        reconnectAttempts = 0
+        activeServerId?.let { id -> scope.launch { serverDao.setPin(id, newFp) } }
+        doConnect(server.copy(pinnedSha256 = newFp))
+    }
 
     /** Switch the audio output route (phone / wired / Bluetooth HQ / Bluetooth headset). */
     fun selectRoute(route: OutputRoute) {
