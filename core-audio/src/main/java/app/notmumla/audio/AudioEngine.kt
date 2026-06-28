@@ -40,7 +40,7 @@ class AudioEngine(
     @Volatile var vadThreshold: Float = 0.02f
     @Volatile var noiseSuppression: Boolean = true
     @Volatile var echoCancellation: Boolean = true
-    @Volatile var bitrate: Int = 40_000
+    @Volatile var bitrate: Int = 72_000
     @Volatile private var pttHeld: Boolean = false
     @Volatile private var encoderRef: OpusEncoder? = null
 

@@ -28,7 +28,7 @@ data class AppSettings(
     val vadSensitivity: Float = 0.02f, // normalized RMS threshold
     val noiseSuppression: Boolean = true,
     val echoCancellation: Boolean = true,
-    val audioBitrate: Int = 40_000,
+    val audioBitrate: Int = 72_000,
     val showAvatars: Boolean = true,
     val keepScreenAwake: Boolean = false,
     val autoReconnect: Boolean = true,
@@ -67,7 +67,7 @@ class SettingsRepository @Inject constructor(
             vadSensitivity = p[Keys.VAD] ?: 0.02f,
             noiseSuppression = p[Keys.NS] ?: true,
             echoCancellation = p[Keys.AEC] ?: true,
-            audioBitrate = p[Keys.BITRATE] ?: 40_000,
+            audioBitrate = p[Keys.BITRATE] ?: 72_000,
             showAvatars = p[Keys.AVATARS] ?: true,
             keepScreenAwake = p[Keys.AWAKE] ?: false,
             autoReconnect = p[Keys.RECONNECT] ?: true,

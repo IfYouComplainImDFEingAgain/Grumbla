@@ -17,12 +17,16 @@ JNIEXPORT jlong JNICALL
 Java_app_notmumla_audio_codec_OpusNative_encoderCreate(
         JNIEnv *env, jclass, jint sampleRate, jint channels, jint bitrate) {
     int err = 0;
+    // VOIP application + voice signal so inband FEC (a SILK/hybrid feature) stays active.
     OpusEncoder *enc = opus_encoder_create(sampleRate, channels, OPUS_APPLICATION_VOIP, &err);
     if (err != OPUS_OK || enc == nullptr) return 0;
     opus_encoder_ctl(enc, OPUS_SET_BITRATE(bitrate));
     opus_encoder_ctl(enc, OPUS_SET_VBR(1));
+    opus_encoder_ctl(enc, OPUS_SET_VBR_CONSTRAINT(0));        // unconstrained VBR -> best quality
     opus_encoder_ctl(enc, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
-    opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY(10));
+    opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY(10));           // max quality
+    opus_encoder_ctl(enc, OPUS_SET_INBAND_FEC(1));            // embed forward error correction
+    opus_encoder_ctl(enc, OPUS_SET_PACKET_LOSS_PERC(10));     // expected loss -> tune FEC strength
     return reinterpret_cast<jlong>(enc);
 }
 
