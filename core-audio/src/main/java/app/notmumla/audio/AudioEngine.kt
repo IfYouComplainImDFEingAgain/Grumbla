@@ -8,6 +8,7 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.audiofx.AcousticEchoCanceler
+import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import app.notmumla.audio.codec.OpusEncoder
 import app.notmumla.audio.playback.SpeakerMixer
@@ -20,14 +21,6 @@ import kotlin.math.sqrt
 
 /** How the mic decides when to transmit. */
 enum class TransmissionMode { PTT, VAD }
-
-// Software AGC tuning (normalized RMS, 0..1).
-private const val AGC_TARGET = 0.12f       // desired post-gain level
-private const val AGC_SPEECH_FLOOR = 0.004f // only adapt when raw level is above this (= not silence)
-private const val AGC_MIN = 0.5f
-private const val AGC_MAX = 12.0f
-private const val AGC_ATTACK = 0.25f       // fast gain reduction when too loud (anti-clip)
-private const val AGC_RELEASE = 0.03f      // slow gain increase when too quiet
 
 /**
  * Real-time voice engine: captures mic audio, Opus-encodes and ships it via [sendFrame], and mixes
@@ -44,9 +37,8 @@ class AudioEngine(
     @Volatile var mode: TransmissionMode = TransmissionMode.PTT
     @Volatile var muted: Boolean = false
     @Volatile var micGain: Float = 1.0f
-    /** When true, gain is adapted automatically (software AGC) and [micGain] is ignored. */
+    /** When true, the platform AutomaticGainControl effect is attached to the mic (auto-leveling). */
     @Volatile var autoGain: Boolean = true
-    private var agcGain = 4.0f
     /** Normalized VAD threshold (RMS over full-scale). */
     @Volatile var vadThreshold: Float = 0.008f
     @Volatile var noiseSuppression: Boolean = true
@@ -65,11 +57,13 @@ class AudioEngine(
     ) {
         this.micGain = micGain
         this.vadThreshold = vadThreshold
-        this.autoGain = autoGain
+        // NS/AEC/AGC are platform effects attached when the AudioRecord is created — toggling any
+        // requires recreating the capture.
         val effectsChanged = this.noiseSuppression != noiseSuppression ||
-            this.echoCancellation != echoCancellation
+            this.echoCancellation != echoCancellation || this.autoGain != autoGain
         this.noiseSuppression = noiseSuppression
         this.echoCancellation = echoCancellation
+        this.autoGain = autoGain
         if (this.bitrate != bitrate) {
             this.bitrate = bitrate
             encoderRef?.setBitrate(bitrate)
@@ -164,12 +158,13 @@ class AudioEngine(
             runCatching { NoiseSuppressor.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
         val aecEffect = if (echoCancellation && AcousticEchoCanceler.isAvailable())
             runCatching { AcousticEchoCanceler.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
+        val agcEffect = if (autoGain && AutomaticGainControl.isAvailable())
+            runCatching { AutomaticGainControl.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
 
         val encoder = OpusEncoder(bitrate = bitrate)
         encoderRef = encoder
         val pcm = ShortArray(frame)
         var wasTransmitting = false
-        agcGain = 4.0f
 
         try {
             record.startRecording()
@@ -182,9 +177,7 @@ class AudioEngine(
                 }
                 if (read < frame) continue
 
-                val rawLevel = rms(pcm)
-                val gain = if (autoGain) updateAgc(rawLevel) else micGain
-                applyGain(pcm, read, gain)
+                applyGain(pcm, read, micGain)
                 val level = rms(pcm)
                 _inputLevel.value = level
                 val active = !muted && shouldTransmit(level)
@@ -206,6 +199,7 @@ class AudioEngine(
         } finally {
             runCatching { nsEffect?.release() }
             runCatching { aecEffect?.release() }
+            runCatching { agcEffect?.release() }
             runCatching { record.stop() }
             runCatching { record.release() }
             encoderRef = null
@@ -275,21 +269,6 @@ class AudioEngine(
             pcm[i] = (pcm[i] * gain).toInt()
                 .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
         }
-    }
-
-    /**
-     * Software automatic gain control. Drives the raw mic level toward a target, adapting fast when
-     * too loud (avoid clipping) and slowly when too quiet, and holding gain during silence so the
-     * noise floor is never amplified. Returns the gain to apply this frame.
-     */
-    private fun updateAgc(rawLevel: Float): Float {
-        if (rawLevel > AGC_SPEECH_FLOOR) {
-            val desired = (AGC_TARGET / rawLevel).coerceIn(AGC_MIN, AGC_MAX)
-            val rate = if (desired < agcGain) AGC_ATTACK else AGC_RELEASE
-            agcGain += (desired - agcGain) * rate
-        }
-        agcGain = agcGain.coerceIn(AGC_MIN, AGC_MAX)
-        return agcGain
     }
 
     private fun rms(pcm: ShortArray): Float {
