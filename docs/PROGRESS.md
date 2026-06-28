@@ -49,6 +49,13 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - [x] Mention notifications (sound/vibrate gated by setting) + TTS read-aloud; licenses screen.
 
 ### Added since M5
+- **Audio quality**: default Opus bitrate 40→72 kbit/s, inband FEC (encoder) + FEC-aware jitter
+  buffer (lost frames recovered from the next packet), unconstrained VBR, and a mixer that buffers
+  decoded PCM so any incoming frame size plays back without truncation.
+- **Server-cert-changed dialog**: TOFU now surfaces a "trust new certificate?" prompt when a
+  server's cert changes (instead of failing silently); auto-reconnect skips cert mismatches.
+- **Background**: requests battery-optimization exemption on connect so the foreground voice
+  service survives backgrounding (esp. on aggressive OEMs like Unihertz).
 - **Inline image messages**: chat `+` button → photo picker → downscaled/compressed JPEG sent as a
   base64 `<img>` data URI (sized to `ServerConfig.image_message_length`); inbound images are parsed
   and rendered in the bubble. Verified by `ImageMessageTest`. (Doesn't yet act on `allow_html=false`.)
@@ -78,8 +85,8 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - **UDP + OCB2** voice path — currently audio uses only the TCP tunnel (works everywhere). Add a UDP
   socket with OCB2-AES128 (`CryptSetup` already arrives) + UDP-ping-based switch for lower latency.
   (`:core-protocol/udp/` is the home for this; port `~/git/mumble/src/crypto/CryptStateOCB2.cpp`.)
-- **Server-cert TOFU prompt UI** — pinning works in code; no user-facing "trust this fingerprint?"
-  dialog yet (first connect auto-accepts and pins).
+- **Server-cert TOFU on first connect** still auto-accepts/pins silently; only a *changed* cert now
+  prompts. A first-connect "trust this fingerprint?" prompt is still not shown.
 - **Profile editing** (display name/avatar/comment), blocked users, local mute list (designed, stubbed).
 - **DNS SRV resolution** (`_mumble._tcp`) — connect is host:port only so far.
 - **PermissionDenied / CodecVersion / ServerConfig** handling in `MumbleClient` (currently ignored).
