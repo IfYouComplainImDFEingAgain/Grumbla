@@ -82,6 +82,10 @@ class AudioEngine(
     /** Remote sessions currently producing audio (drives speaking indicators). */
     val speakingSessions: StateFlow<Set<Int>> = _speaking
 
+    private val _inputLevel = MutableStateFlow(0f)
+    /** Live mic input level (normalized RMS, 0..1) — drives the VAD calibration meter. */
+    val inputLevel: StateFlow<Float> = _inputLevel
+
     private val mixer = SpeakerMixer()
     private var captureThread: Thread? = null
     private var playbackThread: Thread? = null
@@ -103,6 +107,7 @@ class AudioEngine(
         mixer.release()
         _speaking.value = emptySet()
         _transmitting.value = false
+        _inputLevel.value = 0f
     }
 
     /** PTT button down/up. */
@@ -165,7 +170,9 @@ class AudioEngine(
                 if (read < frame) continue
 
                 applyGain(pcm, read)
-                val active = !muted && shouldTransmit(pcm)
+                val level = rms(pcm)
+                _inputLevel.value = level
+                val active = !muted && shouldTransmit(level)
                 _transmitting.value = active
 
                 if (active) {
@@ -242,9 +249,9 @@ class AudioEngine(
         }
     }
 
-    private fun shouldTransmit(pcm: ShortArray): Boolean = when (mode) {
+    private fun shouldTransmit(level: Float): Boolean = when (mode) {
         TransmissionMode.PTT -> pttHeld
-        TransmissionMode.VAD -> rms(pcm) >= vadThreshold
+        TransmissionMode.VAD -> level >= vadThreshold
     }
 
     private fun applyGain(pcm: ShortArray, len: Int) {
