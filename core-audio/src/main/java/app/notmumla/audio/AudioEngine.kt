@@ -10,6 +10,7 @@ import android.media.AudioTrack
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
+import app.notmumla.audio.codec.Denoiser
 import app.notmumla.audio.codec.OpusEncoder
 import app.notmumla.audio.playback.SpeakerMixer
 import app.notmumla.audio.routing.RouteConfig
@@ -42,6 +43,8 @@ class AudioEngine(
     /** Normalized VAD threshold (RMS over full-scale). */
     @Volatile var vadThreshold: Float = 0.008f
     @Volatile var noiseSuppression: Boolean = true
+    /** RNNoise (ML) suppression — when on, hardware [noiseSuppression] should be off (no double-NS). */
+    @Volatile var aiNoiseSuppression: Boolean = false
     @Volatile var echoCancellation: Boolean = true
     @Volatile var bitrate: Int = 72_000
     @Volatile private var pttHeld: Boolean = false
@@ -53,15 +56,18 @@ class AudioEngine(
      */
     fun applyAudioSettings(
         micGain: Float, vadThreshold: Float, bitrate: Int,
-        noiseSuppression: Boolean, echoCancellation: Boolean, autoGain: Boolean,
+        noiseSuppression: Boolean, aiNoiseSuppression: Boolean,
+        echoCancellation: Boolean, autoGain: Boolean,
     ) {
         this.micGain = micGain
         this.vadThreshold = vadThreshold
-        // NS/AEC/AGC are platform effects attached when the AudioRecord is created — toggling any
+        // NS/AEC/AGC/RNNoise are bound when the AudioRecord/denoiser is created — toggling any
         // requires recreating the capture.
         val effectsChanged = this.noiseSuppression != noiseSuppression ||
+            this.aiNoiseSuppression != aiNoiseSuppression ||
             this.echoCancellation != echoCancellation || this.autoGain != autoGain
         this.noiseSuppression = noiseSuppression
+        this.aiNoiseSuppression = aiNoiseSuppression
         this.echoCancellation = echoCancellation
         this.autoGain = autoGain
         if (this.bitrate != bitrate) {
@@ -163,6 +169,9 @@ class AudioEngine(
 
         val encoder = OpusEncoder(bitrate = bitrate)
         encoderRef = encoder
+        // RNNoise needs its native 480-sample frame; our frame matches, so enable when requested.
+        val denoiser = if (aiNoiseSuppression)
+            runCatching { Denoiser().takeIf { it.frameSize == frame } }.getOrNull() else null
         val pcm = ShortArray(frame)
         var wasTransmitting = false
 
@@ -177,6 +186,7 @@ class AudioEngine(
                 }
                 if (read < frame) continue
 
+                denoiser?.process(pcm)
                 applyGain(pcm, read, micGain)
                 val level = rms(pcm)
                 _inputLevel.value = level
@@ -200,6 +210,7 @@ class AudioEngine(
             runCatching { nsEffect?.release() }
             runCatching { aecEffect?.release() }
             runCatching { agcEffect?.release() }
+            runCatching { denoiser?.release() }
             runCatching { record.stop() }
             runCatching { record.release() }
             encoderRef = null

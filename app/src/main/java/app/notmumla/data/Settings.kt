@@ -18,6 +18,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+enum class NoiseSuppression { OFF, STANDARD, AI }
 
 /** All persisted user settings, with sensible defaults. */
 data class AppSettings(
@@ -27,7 +28,7 @@ data class AppSettings(
     val micGainDb: Float = 0f,
     val autoGain: Boolean = true,
     val vadSensitivity: Float = 0.008f, // normalized RMS threshold
-    val noiseSuppression: Boolean = true,
+    val noiseSuppression: NoiseSuppression = NoiseSuppression.STANDARD,
     val echoCancellation: Boolean = true,
     val audioBitrate: Int = 72_000,
     val showAvatars: Boolean = true,
@@ -50,7 +51,8 @@ class SettingsRepository @Inject constructor(
         val MIC_GAIN = floatPreferencesKey("mic_gain_db")
         val AUTO_GAIN = booleanPreferencesKey("auto_gain")
         val VAD = floatPreferencesKey("vad_sensitivity")
-        val NS = booleanPreferencesKey("noise_suppression")
+        val NS_MODE = stringPreferencesKey("ns_mode")
+        val NS = booleanPreferencesKey("noise_suppression") // legacy (boolean) — for migration only
         val AEC = booleanPreferencesKey("echo_cancellation")
         val BITRATE = intPreferencesKey("audio_bitrate")
         val AVATARS = booleanPreferencesKey("show_avatars")
@@ -68,7 +70,9 @@ class SettingsRepository @Inject constructor(
             micGainDb = p[Keys.MIC_GAIN] ?: 0f,
             autoGain = p[Keys.AUTO_GAIN] ?: true,
             vadSensitivity = p[Keys.VAD] ?: 0.008f,
-            noiseSuppression = p[Keys.NS] ?: true,
+            noiseSuppression = p[Keys.NS_MODE]?.let { runCatching { NoiseSuppression.valueOf(it) }.getOrNull() }
+                ?: p[Keys.NS]?.let { if (it) NoiseSuppression.STANDARD else NoiseSuppression.OFF }
+                ?: NoiseSuppression.STANDARD,
             echoCancellation = p[Keys.AEC] ?: true,
             audioBitrate = p[Keys.BITRATE] ?: 72_000,
             showAvatars = p[Keys.AVATARS] ?: true,
@@ -85,7 +89,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setMicGainDb(v: Float) = edit { it[Keys.MIC_GAIN] = v }
     suspend fun setAutoGain(v: Boolean) = edit { it[Keys.AUTO_GAIN] = v }
     suspend fun setVadSensitivity(v: Float) = edit { it[Keys.VAD] = v }
-    suspend fun setNoiseSuppression(v: Boolean) = edit { it[Keys.NS] = v }
+    suspend fun setNoiseSuppression(v: NoiseSuppression) = edit { it[Keys.NS_MODE] = v.name }
     suspend fun setEchoCancellation(v: Boolean) = edit { it[Keys.AEC] = v }
     suspend fun setAudioBitrate(v: Int) = edit { it[Keys.BITRATE] = v }
     suspend fun setShowAvatars(v: Boolean) = edit { it[Keys.AVATARS] = v }

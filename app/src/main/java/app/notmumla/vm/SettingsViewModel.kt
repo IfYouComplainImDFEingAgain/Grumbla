@@ -27,7 +27,7 @@ class SettingsViewModel @Inject constructor(
     fun setMicGainDb(v: Float) = update { repo.setMicGainDb(v) }
     fun setAutoGain(v: Boolean) = update { repo.setAutoGain(v) }
     fun setVadSensitivity(v: Float) = update { repo.setVadSensitivity(v) }
-    fun setNoiseSuppression(v: Boolean) = update { repo.setNoiseSuppression(v) }
+    fun setNoiseSuppression(v: app.notmumla.data.NoiseSuppression) = update { repo.setNoiseSuppression(v) }
     fun setEchoCancellation(v: Boolean) = update { repo.setEchoCancellation(v) }
     fun setAudioBitrate(v: Int) = update { repo.setAudioBitrate(v) }
     fun setShowAvatars(v: Boolean) = update { repo.setShowAvatars(v) }

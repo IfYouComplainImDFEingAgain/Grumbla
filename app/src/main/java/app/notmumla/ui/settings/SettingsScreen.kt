@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import app.notmumla.audio.TransmissionMode
 import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.data.AppSettings
+import app.notmumla.data.NoiseSuppression
 import app.notmumla.data.ThemeMode
 import app.notmumla.ui.SegmentedToggle
 import app.notmumla.ui.theme.MumbleTheme
@@ -74,7 +75,7 @@ fun SettingsScreen(
     onSetVad: (Float) -> Unit,
     onSetMicGainDb: (Float) -> Unit,
     onToggleAutoGain: (Boolean) -> Unit,
-    onToggleNoiseSuppression: (Boolean) -> Unit,
+    onSetNoiseSuppression: (NoiseSuppression) -> Unit,
     onToggleEchoCancellation: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
     onToggleAvatars: (Boolean) -> Unit,
@@ -177,8 +178,23 @@ fun SettingsScreen(
                     )
                 }
                 Divider()
-                ToggleRow(Icons.Filled.GraphicEq, "Noise suppression", null,
-                    settings.noiseSuppression, onToggleNoiseSuppression)
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Icon(Icons.Filled.GraphicEq, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Noise suppression", fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                                color = c.onSurface)
+                            Text("AI uses RNNoise for cleaner voice", fontSize = 13.sp, color = c.onSurfaceVar)
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    SegmentedToggle(
+                        options = listOf("Off", "Standard", "AI"),
+                        selectedIndex = settings.noiseSuppression.ordinal,
+                        onSelect = { onSetNoiseSuppression(NoiseSuppression.entries[it]) },
+                    )
+                }
                 Divider()
                 ToggleRow(Icons.Filled.GraphicEq, "Echo cancellation", null,
                     settings.echoCancellation, onToggleEchoCancellation)

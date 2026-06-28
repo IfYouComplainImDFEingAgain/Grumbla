@@ -271,7 +271,7 @@ private fun AppNav() {
                 onSetVad = settingsVm::setVadSensitivity,
                 onSetMicGainDb = settingsVm::setMicGainDb,
                 onToggleAutoGain = settingsVm::setAutoGain,
-                onToggleNoiseSuppression = settingsVm::setNoiseSuppression,
+                onSetNoiseSuppression = settingsVm::setNoiseSuppression,
                 onToggleEchoCancellation = settingsVm::setEchoCancellation,
                 onSetBitrate = settingsVm::setAudioBitrate,
                 onToggleAvatars = settingsVm::setShowAvatars,

@@ -58,7 +58,8 @@ class SessionManager @Inject constructor(
                 micGain = Math.pow(10.0, s.micGainDb / 20.0).toFloat(),
                 vadThreshold = s.vadSensitivity,
                 bitrate = s.audioBitrate,
-                noiseSuppression = s.noiseSuppression,
+                noiseSuppression = s.noiseSuppression == NoiseSuppression.STANDARD,
+                aiNoiseSuppression = s.noiseSuppression == NoiseSuppression.AI,
                 echoCancellation = s.echoCancellation,
                 autoGain = s.autoGain,
             )
