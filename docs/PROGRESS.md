@@ -49,6 +49,10 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - [x] Mention notifications (sound/vibrate gated by setting) + TTS read-aloud; licenses screen.
 
 ### Added since M5
+- **AI noise suppression (RNNoise)**: Settings → Noise suppression is now Off / Standard (hardware) /
+  AI. AI runs the vendored RNNoise model (`librnnoisejni.so`, ~165KB) on each 480-sample mic frame
+  before Opus encode; disables hardware NS when on. Also: automatic gain control via the platform
+  AGC effect (the earlier software AGC was removed — it fought the VAD); a live VAD calibration meter.
 - **Audio quality**: default Opus bitrate 40→72 kbit/s, inband FEC (encoder) + FEC-aware jitter
   buffer (lost frames recovered from the next packet), unconstrained VBR, and a mixer that buffers
   decoded PCM so any incoming frame size plays back without truncation.
