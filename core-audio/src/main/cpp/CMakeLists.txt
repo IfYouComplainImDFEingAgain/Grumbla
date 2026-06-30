@@ -9,6 +9,10 @@ set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
 set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
 add_subdirectory(opus)
 
+# Align LOAD segments to 16 KB so the libs load on 16 KB-page devices (Android 15+, e.g. Pixel 10).
+# NDK r28 does this by default; r27 needs the explicit flag. Must precede the add_library targets.
+add_link_options("-Wl,-z,max-page-size=16384")
+
 add_library(opusjni SHARED opus_jni.cpp)
 target_link_libraries(opusjni opus)
 target_include_directories(opusjni PRIVATE opus/include)
