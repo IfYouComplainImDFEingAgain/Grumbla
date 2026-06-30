@@ -166,6 +166,7 @@ private fun AppNav() {
                     nav.navigate(Routes.CHANNELS)
                 },
                 onDelete = vm::delete,
+                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
             )
         }
         composable(Routes.CHANNELS) {

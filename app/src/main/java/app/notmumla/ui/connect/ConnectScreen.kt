@@ -22,6 +22,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
@@ -51,6 +53,7 @@ fun ConnectScreen(
     onConnectNew: (host: String, port: Int, username: String, password: String?) -> Unit,
     onConnectSaved: (ServerEntity) -> Unit,
     onDelete: (ServerEntity) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val c = MumbleTheme.colors
     var host by remember { mutableStateOf("") }
@@ -61,8 +64,14 @@ fun ConnectScreen(
         Modifier.fillMaxSize().background(c.surface).verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 18.dp),
     ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = c.onSurfaceVar)
+            }
+        }
+
         Column(
-            Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 30.dp),
+            Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 30.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(
