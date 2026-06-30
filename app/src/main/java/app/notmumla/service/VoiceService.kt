@@ -35,12 +35,41 @@ class VoiceService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob())
     private var observeJob: Job? = null
+    private var wakeLock: android.os.PowerManager.WakeLock? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
+    }
+
+    /**
+     * A foreground service keeps the process alive but does not stop the CPU from suspending in Doze
+     * when the screen is off — which would stall the audio threads and drop the TCP tunnel. Hold a
+     * partial wake lock (CPU) + a low-latency Wi-Fi lock (radio) for the duration of the call.
+     */
+    @android.annotation.SuppressLint("WakelockTimeout") // released on disconnect/onDestroy, not timed
+    private fun acquireLocks() {
+        if (wakeLock == null) {
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "notmumla:voice")
+                .also { it.setReferenceCounted(false); runCatching { it.acquire() } }
+        }
+        if (wifiLock == null) {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+            wifiLock = wm.createWifiLock(
+                android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "notmumla:voice",
+            ).also { it.setReferenceCounted(false); runCatching { it.acquire() } }
+        }
+    }
+
+    private fun releaseLocks() {
+        runCatching { wakeLock?.let { if (it.isHeld) it.release() } }
+        runCatching { wifiLock?.let { if (it.isHeld) it.release() } }
+        wakeLock = null
+        wifiLock = null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -59,6 +88,7 @@ class VoiceService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        acquireLocks()
 
         when (intent.action) {
             ACTION_TOGGLE_MUTE -> {
@@ -89,6 +119,7 @@ class VoiceService : Service() {
 
     override fun onDestroy() {
         observeJob?.cancel()
+        releaseLocks()
         super.onDestroy()
     }
 
