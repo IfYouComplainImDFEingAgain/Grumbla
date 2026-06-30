@@ -41,6 +41,11 @@ android {
     }
 
     packaging {
+        // Store native libs uncompressed + page-aligned (incl. debug) so they load on 16 KB-page
+        // devices via mmap. Otherwise debug builds compress them and 16 KB loading fails.
+        jniLibs {
+            useLegacyPackaging = false
+        }
         resources {
             // BouncyCastle ships duplicate multi-release metadata across its jars.
             excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
