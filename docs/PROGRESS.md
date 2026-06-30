@@ -71,6 +71,16 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   path is unchanged.
 
 ### Fixes since M5 (user-reported)
+- **Dropped from busy servers after a few seconds** (silent EOF, no reason). The keep-alive idle
+  timer (`ControlChannel.idleMs()`) was reset by **receives as well as sends**, so on a populated
+  server the constant inbound traffic kept the link "non-idle" and the client **never sent a ping** →
+  the server timed it out and closed the socket. (An empty backup of the same server stayed up
+  because it had no inbound traffic.) Fixed: `idleMs()` now tracks time since our last *outgoing*
+  message only (`readFrame()` no longer touches it), so pings go out every ~6 s of send-idle.
+- **Kicks/bans were swallowed → invisible reconnect loop.** `onUserRemove` ignored removal of our own
+  session, and auto-reconnect retried every failure — so a kick/ban/reject looked like a generic drop
+  and silently relooped with the reason hidden. Now: self-removal surfaces "Kicked/Banned: <reason>",
+  `Reject` and self-kick/ban set `ServerState.fatal`, and auto-reconnect skips fatal failures.
 - **Stale auto-reconnect** → a pending reconnect to a former server could fire after switching
   servers. `connect()` now cancels any pending reconnect; the delayed retry verifies it still
   targets the current `lastServer`.

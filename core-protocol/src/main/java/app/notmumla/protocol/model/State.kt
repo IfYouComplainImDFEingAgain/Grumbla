@@ -38,10 +38,14 @@ data class ServerState(
     val users: Map<Int, User> = emptyMap(),
     val welcomeText: String? = null,
     val serverFingerprintSha256: String? = null,
+    /** Set when the connection failed because the server's cert no longer matches the pinned one. */
+    val certMismatchFingerprint: String? = null,
     /** Max length of an image (HTML) message the server accepts; 0 = unknown (use a safe default). */
     val imageMessageLength: Int = 0,
     val allowHtml: Boolean = true,
     val error: String? = null,
+    /** Set when the failure is fatal (kick, ban, reject) and auto-reconnect should NOT retry. */
+    val fatal: Boolean = false,
 ) {
     val self: User? get() = sessionId?.let { users[it] }
 

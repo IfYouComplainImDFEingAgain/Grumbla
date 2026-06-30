@@ -158,7 +158,7 @@ class SessionManager @Inject constructor(
             mc.state.collect { s ->
                 s.self?.channelId?.let { lastKnownChannelId = it }
                 if (s.connection == ConnectionState.FAILED &&
-                    s.certMismatchFingerprint == null && shouldReconnect()
+                    s.certMismatchFingerprint == null && !s.fatal && shouldReconnect()
                 ) {
                     // Suppress the failure from the UI and retry instead of dropping to Connect.
                     _state.value = s.copy(connection = ConnectionState.CONNECTING, error = null)

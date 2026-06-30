@@ -24,7 +24,8 @@ class ControlChannel(
     private var output: DataOutputStream? = null
 
     @Volatile private var lastActivity = System.currentTimeMillis()
-    /** Milliseconds since the last send or receive — used to skip redundant keep-alive pings. */
+    /** Milliseconds since our last *outgoing* message — drives the keep-alive ping. Receives do not
+     *  reset it: inbound traffic doesn't prove to the server we're alive, so it mustn't suppress pings. */
     fun idleMs(): Long = System.currentTimeMillis() - lastActivity
     private fun touch() { lastActivity = System.currentTimeMillis() }
 
@@ -46,9 +47,13 @@ class ControlChannel(
 
         val s = ctx.socketFactory.createSocket() as SSLSocket
         s.connect(java.net.InetSocketAddress(host, port), connectTimeoutMs)
-        s.startHandshake()
         s.tcpNoDelay = true   // disable Nagle so small messages go out immediately
         s.keepAlive = true    // keep the connection (and Wi-Fi radio) responsive when idle
+        // Bound the TLS handshake so a stalled/banned server fails fast instead of hanging on
+        // "Connecting…". Reset to blocking reads afterwards for the (idle-tolerant) message loop.
+        s.soTimeout = connectTimeoutMs
+        s.startHandshake()
+        s.soTimeout = 0
 
         socket = s
         input = DataInputStream(s.inputStream.buffered())
@@ -88,7 +93,9 @@ class ControlChannel(
         require(length in 0..0x7FFFFF) { "Frame length out of range: $length" }
         val payload = ByteArray(length)
         inp.readFully(payload)
-        touch()
+        // NOTE: deliberately does NOT touch() — idleMs() tracks time since our last *send* so the
+        // keep-alive pings on schedule even on a busy server. Inbound traffic doesn't prove to the
+        // server that we're still alive, so it must not suppress our pings (or the server times us out).
         return Frame(type, payload)
     }
 
