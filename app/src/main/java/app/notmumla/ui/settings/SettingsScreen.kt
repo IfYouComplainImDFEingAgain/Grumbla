@@ -339,16 +339,35 @@ private fun PermissionsSection() {
                 ContextCompat.checkSelfPermission(ctx, spec.permission) ==
                     android.content.pm.PackageManager.PERMISSION_GRANTED
             }
-            PermissionRow(spec, granted) {
+            PermissionRow(spec.icon, spec.label, spec.why, granted) {
                 pending = spec.permission
                 launcher.launch(spec.permission)
+            }
+        }
+
+        // Battery-optimization exemption — a special access, not a runtime permission. Needed so the
+        // foreground voice service isn't killed in the background / under Doze.
+        Divider()
+        val pm = remember { ctx.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager }
+        val unrestricted = remember(refresh) { pm.isIgnoringBatteryOptimizations(ctx.packageName) }
+        PermissionRow(
+            Icons.Filled.Autorenew, "Run in background",
+            "Keep the call alive when the screen is off", unrestricted,
+        ) {
+            runCatching {
+                ctx.startActivity(
+                    android.content.Intent(
+                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        android.net.Uri.parse("package:${ctx.packageName}"),
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
             }
         }
     }
 }
 
 @Composable
-private fun PermissionRow(spec: PermSpec, granted: Boolean, onTap: () -> Unit) {
+private fun PermissionRow(icon: ImageVector, label: String, why: String, granted: Boolean, onTap: () -> Unit) {
     val c = MumbleTheme.colors
     Row(
         Modifier.fillMaxWidth()
@@ -357,11 +376,11 @@ private fun PermissionRow(spec: PermSpec, granted: Boolean, onTap: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(spec.icon, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
+        Icon(icon, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
         Column(Modifier.weight(1f)) {
-            Text(spec.label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
+            Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
             Text(
-                if (granted) "Granted" else "${spec.why} · tap to grant",
+                if (granted) "Granted" else "$why · tap to grant",
                 fontSize = 12.sp, color = c.onSurfaceVar,
             )
         }
