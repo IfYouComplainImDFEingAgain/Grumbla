@@ -48,7 +48,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.core.app.ActivityCompat
@@ -106,6 +109,9 @@ fun SettingsScreen(
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleTts: (Boolean) -> Unit,
     onToggleMentionSound: (Boolean) -> Unit,
+    onRegenerateIdentity: () -> Unit,
+    onExportIdentity: suspend (password: String) -> ByteArray?,
+    onImportIdentity: suspend (bytes: ByteArray, password: String) -> Boolean,
     onOpenLicenses: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -139,7 +145,15 @@ fun SettingsScreen(
                     },
                     onClick = { showIdentity = true },
                 )
-                if (showIdentity) IdentityDialog(identity) { showIdentity = false }
+                if (showIdentity) {
+                    IdentityDialog(
+                        info = identity,
+                        onRegenerate = onRegenerateIdentity,
+                        onExport = onExportIdentity,
+                        onImport = onImportIdentity,
+                        onDismiss = { showIdentity = false },
+                    )
+                }
             }
 
             SectionLabel("CONNECTION")
@@ -292,8 +306,40 @@ fun SettingsScreen(
 /* ---------------- identity ---------------- */
 
 @Composable
-private fun IdentityDialog(info: IdentityInfo?, onDismiss: () -> Unit) {
+private fun IdentityDialog(
+    info: IdentityInfo?,
+    onRegenerate: () -> Unit,
+    onExport: suspend (password: String) -> ByteArray?,
+    onImport: suspend (bytes: ByteArray, password: String) -> Boolean,
+    onDismiss: () -> Unit,
+) {
     val c = MumbleTheme.colors
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    fun toast(msg: String) = android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_SHORT).show()
+
+    var confirmRegen by remember { mutableStateOf(false) }
+    var pendingExportPw by remember { mutableStateOf<String?>(null) }
+    var pwMode by remember { mutableStateOf<String?>(null) } // "export" | "import"
+    var importUri by remember { mutableStateOf<android.net.Uri?>(null) }
+
+    val exportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-pkcs12"),
+    ) { uri ->
+        val pw = pendingExportPw
+        pendingExportPw = null
+        if (uri != null && pw != null) scope.launch {
+            val bytes = onExport(pw)
+            val ok = bytes != null && withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { ctx.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } }.isSuccess
+            }
+            toast(if (ok) "Identity exported" else "Export failed")
+        }
+    }
+    val importPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) { importUri = uri; pwMode = "import" } }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = c.surfContainer,
@@ -313,6 +359,81 @@ private fun IdentityDialog(info: IdentityInfo?, onDismiss: () -> Unit) {
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                TextButton(onClick = { importPicker.launch(arrayOf("*/*")) }) { Text("Import") }
+                TextButton(onClick = { pwMode = "export" }) { Text("Export") }
+                TextButton(onClick = { confirmRegen = true }) { Text("Regenerate") }
+            }
+        },
+    )
+
+    if (confirmRegen) {
+        AlertDialog(
+            onDismissRequest = { confirmRegen = false },
+            containerColor = c.surfContainer,
+            title = { Text("Regenerate identity?", fontWeight = FontWeight.Bold, color = c.onSurface) },
+            text = {
+                Text(
+                    "This creates a brand-new certificate. Servers that recognised your old identity " +
+                        "(registrations, permissions) will see you as a new user.",
+                    color = c.onSurfaceVar,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmRegen = false; onRegenerate(); toast("New identity generated") }) {
+                    Text("Regenerate", color = c.afk)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmRegen = false }) { Text("Cancel") } },
+        )
+    }
+
+    pwMode?.let { mode ->
+        PasswordDialog(
+            title = if (mode == "export") "Set a password for the file" else "Enter the file's password",
+            onConfirm = { pw ->
+                pwMode = null
+                if (mode == "export") {
+                    pendingExportPw = pw
+                    exportPicker.launch("identity.p12")
+                } else {
+                    val uri = importUri
+                    importUri = null
+                    if (uri != null) scope.launch {
+                        val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            runCatching { ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+                        }
+                        val ok = bytes != null && onImport(bytes, pw)
+                        toast(if (ok) "Identity imported" else "Import failed — wrong password or file")
+                    }
+                }
+            },
+            onDismiss = { pwMode = null; importUri = null },
+        )
+    }
+}
+
+@Composable
+private fun PasswordDialog(title: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    val c = MumbleTheme.colors
+    var pw by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.surfContainer,
+        title = { Text(title, fontWeight = FontWeight.Bold, color = c.onSurface) },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = pw, onValueChange = { pw = it }, singleLine = true,
+                label = { Text("Password") },
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    keyboardType = androidx.compose.ui.text.input.KeyboardType.Password,
+                ),
+            )
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(pw) }, enabled = pw.isNotEmpty()) { Text("OK") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
 
