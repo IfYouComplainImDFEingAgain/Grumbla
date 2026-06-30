@@ -83,7 +83,10 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
     private fun decodeNext(speaker: Speaker): Boolean {
         val pull = speaker.jitter.pull()
         val n = when {
-            pull.opus != null && pull.fec -> speaker.decoder.decodeFec(pull.opus, speaker.decodeBuf, speaker.decodeBuf.size)
+            // FEC and PLC need frame_size == the *exact* missing-frame duration (one frame), not the
+            // buffer capacity — otherwise Opus reconstructs a 60 ms frame for a 10 ms gap and the
+            // decoder desyncs. Normal decode uses the full capacity (frame_size = output space).
+            pull.opus != null && pull.fec -> speaker.decoder.decodeFec(pull.opus, speaker.decodeBuf, frameSamples)
             pull.opus != null -> speaker.decoder.decode(pull.opus, speaker.decodeBuf, speaker.decodeBuf.size)
             pull.lost -> speaker.decoder.concealLoss(speaker.decodeBuf, frameSamples)
             else -> 0
