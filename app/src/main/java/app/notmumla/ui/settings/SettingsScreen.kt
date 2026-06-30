@@ -32,10 +32,14 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.font.FontFamily
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -66,6 +70,7 @@ import app.notmumla.data.NoiseSuppression
 import app.notmumla.data.ThemeMode
 import app.notmumla.ui.SegmentedToggle
 import app.notmumla.ui.theme.MumbleTheme
+import app.notmumla.vm.IdentityInfo
 import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -84,6 +89,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     settings: AppSettings,
     inputLevel: Float,
+    identity: IdentityInfo?,
     availableRoutes: List<OutputRoute>,
     currentRoute: OutputRoute,
     onSelectRoute: (OutputRoute) -> Unit,
@@ -125,9 +131,15 @@ fun SettingsScreen(
             SettingsGroup {
                 NavRow(Icons.Filled.Person, "Profile & status", "Display name, avatar, comment")
                 Divider()
-                NavRow(Icons.Filled.VerifiedUser, "Identity certificate", null, trailing = {
-                    Text("Verified", color = c.speaking, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                })
+                var showIdentity by remember { mutableStateOf(false) }
+                NavRow(
+                    Icons.Filled.VerifiedUser, "Identity certificate", null,
+                    trailing = {
+                        Text("Verified", color = c.speaking, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    },
+                    onClick = { showIdentity = true },
+                )
+                if (showIdentity) IdentityDialog(identity) { showIdentity = false }
             }
 
             SectionLabel("CONNECTION")
@@ -274,6 +286,45 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(20.dp))
         }
+    }
+}
+
+/* ---------------- identity ---------------- */
+
+@Composable
+private fun IdentityDialog(info: IdentityInfo?, onDismiss: () -> Unit) {
+    val c = MumbleTheme.colors
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.surfContainer,
+        title = { Text("Identity certificate", fontWeight = FontWeight.Bold, color = c.onSurface) },
+        text = {
+            if (info == null) {
+                Text("Generating…", color = c.onSurfaceVar)
+            } else {
+                SelectionContainer {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        IdentityField("Name", info.commonName, mono = false)
+                        IdentityField("Valid", "${info.issued} – ${info.expires}", mono = false)
+                        IdentityField("SHA-256 fingerprint", info.sha256, mono = true)
+                        IdentityField("SHA-1 (server identifies you by this)", info.sha1, mono = true)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun IdentityField(label: String, value: String, mono: Boolean) {
+    val c = MumbleTheme.colors
+    Column {
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = c.onSurfaceVar)
+        Text(
+            value, fontSize = 13.sp, color = c.onSurface,
+            fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
+        )
     }
 }
 
