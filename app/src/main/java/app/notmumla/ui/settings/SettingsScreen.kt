@@ -24,16 +24,33 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -247,6 +264,8 @@ fun SettingsScreen(
                 ToggleRow(null, "Mention sound", null, settings.mentionSound, onToggleMentionSound)
             }
 
+            PermissionsSection()
+
             SectionLabel("ABOUT")
             SettingsGroup {
                 ValueRow(Icons.Filled.VerifiedUser, "Version", "0.1.0 (1)", showChevron = false)
@@ -255,6 +274,103 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(20.dp))
         }
+    }
+}
+
+/* ---------------- permissions ---------------- */
+
+private data class PermSpec(val label: String, val why: String, val icon: ImageVector, val permission: String)
+
+/**
+ * Shows the status of each runtime permission the app needs and lets the user (re)grant ones they
+ * missed or denied. Tapping a missing permission re-requests it; if it was permanently denied (the
+ * system won't show the dialog), it sends the user to the app's settings page instead.
+ */
+@Composable
+private fun PermissionsSection() {
+    val ctx = LocalContext.current
+    val activity = ctx as? android.app.Activity
+    var refresh by remember { mutableIntStateOf(0) }
+
+    // Re-check whenever the screen resumes (e.g. coming back from system app settings).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) refresh++ }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+
+    var pending by remember { mutableStateOf<String?>(null) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        refresh++
+        val p = pending
+        pending = null
+        // Permanently denied → no system dialog was shown; route the user to app settings.
+        if (!granted && p != null && activity != null &&
+            !ActivityCompat.shouldShowRequestPermissionRationale(activity, p)
+        ) {
+            runCatching {
+                ctx.startActivity(
+                    android.content.Intent(
+                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.parse("package:${ctx.packageName}"),
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+        }
+    }
+
+    val specs = buildList {
+        add(PermSpec("Microphone", "Required to transmit your voice", Icons.Filled.Mic,
+            android.Manifest.permission.RECORD_AUDIO))
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            add(PermSpec("Notifications", "Show the ongoing call controls", Icons.Filled.Notifications,
+                android.Manifest.permission.POST_NOTIFICATIONS))
+        }
+        add(PermSpec("Bluetooth", "Use Bluetooth headsets for audio", Icons.Filled.Bluetooth,
+            android.Manifest.permission.BLUETOOTH_CONNECT))
+    }
+
+    SectionLabel("PERMISSIONS")
+    SettingsGroup {
+        specs.forEachIndexed { i, spec ->
+            if (i > 0) Divider()
+            val granted = remember(refresh, spec.permission) {
+                ContextCompat.checkSelfPermission(ctx, spec.permission) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+            PermissionRow(spec, granted) {
+                pending = spec.permission
+                launcher.launch(spec.permission)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionRow(spec: PermSpec, granted: Boolean, onTap: () -> Unit) {
+    val c = MumbleTheme.colors
+    Row(
+        Modifier.fillMaxWidth()
+            .let { if (granted) it else it.clickable(onClick = onTap) }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Icon(spec.icon, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
+        Column(Modifier.weight(1f)) {
+            Text(spec.label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
+            Text(
+                if (granted) "Granted" else "${spec.why} · tap to grant",
+                fontSize = 12.sp, color = c.onSurfaceVar,
+            )
+        }
+        Icon(
+            if (granted) Icons.Filled.CheckCircle else Icons.Filled.Error,
+            contentDescription = if (granted) "Granted" else "Not granted",
+            tint = if (granted) c.speaking else c.afk,
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
 
