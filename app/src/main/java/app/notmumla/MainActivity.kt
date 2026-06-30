@@ -183,10 +183,20 @@ private fun AppNav() {
             val micPermission = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestPermission(),
             ) { granted -> if (granted) vm.onAudioPermissionGranted() }
+            // Android 13+ requires runtime POST_NOTIFICATIONS, or the foreground-service
+            // notification (with mute/deafen/disconnect) is silently hidden from the shade.
+            val notifPermission = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission(),
+            ) { }
             LaunchedEffect(Unit) {
                 if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO)
                     == PackageManager.PERMISSION_GRANTED
                 ) vm.onAudioPermissionGranted() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+
+                if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                    ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED
+                ) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
 
             // Leave the session screen if the connection is rejected/fails — unless it's a cert
