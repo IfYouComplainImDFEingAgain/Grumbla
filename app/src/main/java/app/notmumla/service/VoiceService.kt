@@ -92,10 +92,14 @@ class VoiceService : Service() {
 
         when (intent.action) {
             ACTION_TOGGLE_MUTE -> {
-                val muted = sessionManager.state.value.self?.selfMute ?: false
-                sessionManager.setMicMuted(!muted)
-                sessionManager.setSelfMuteDeaf(!muted, sessionManager.state.value.self?.selfDeaf ?: false)
-                notificationManager.notify(NOTIFICATION_ID, buildNotification())
+                val self = sessionManager.state.value.self
+                applyMuteDeaf(mute = !(self?.selfMute ?: false), deaf = self?.selfDeaf ?: false)
+            }
+            ACTION_TOGGLE_DEAFEN -> {
+                val self = sessionManager.state.value.self
+                val newDeaf = !(self?.selfDeaf ?: false)
+                // Deafening implies muting; undeafening leaves the prior mute state.
+                applyMuteDeaf(mute = newDeaf || (self?.selfMute ?: false), deaf = newDeaf)
             }
             ACTION_DISCONNECT -> { sessionManager.disconnect(); stopSelf(); return START_NOT_STICKY }
         }
@@ -123,6 +127,12 @@ class VoiceService : Service() {
         super.onDestroy()
     }
 
+    private fun applyMuteDeaf(mute: Boolean, deaf: Boolean) {
+        sessionManager.setMicMuted(mute)
+        sessionManager.setSelfMuteDeaf(mute, deaf)
+        notificationManager.notify(NOTIFICATION_ID, buildNotification())
+    }
+
     private val notificationManager get() =
         getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -137,8 +147,13 @@ class VoiceService : Service() {
         val state = sessionManager.state.value
         val label = sessionManager.serverLabel.value.ifBlank { "Mumble" }
         val muted = state.self?.selfMute ?: false
+        val deafened = state.self?.selfDeaf ?: false
         val statusText = when (state.connection) {
-            ConnectionState.CONNECTED -> if (muted) "Connected · muted" else "Connected"
+            ConnectionState.CONNECTED -> when {
+                deafened -> "Connected · deafened"
+                muted -> "Connected · muted"
+                else -> "Connected"
+            }
             ConnectionState.CONNECTING -> "Connecting…"
             ConnectionState.HANDSHAKING -> "Authenticating…"
             else -> "Disconnected"
@@ -157,6 +172,7 @@ class VoiceService : Service() {
             .setContentIntent(contentIntent)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .addAction(0, if (muted) "Unmute" else "Mute", action(ACTION_TOGGLE_MUTE))
+            .addAction(0, if (deafened) "Undeafen" else "Deafen", action(ACTION_TOGGLE_DEAFEN))
             .addAction(0, "Disconnect", action(ACTION_DISCONNECT))
             .build()
     }
@@ -173,6 +189,7 @@ class VoiceService : Service() {
         private const val CHANNEL_ID = "voice_session"
         private const val NOTIFICATION_ID = 1001
         const val ACTION_TOGGLE_MUTE = "app.notmumla.action.TOGGLE_MUTE"
+        const val ACTION_TOGGLE_DEAFEN = "app.notmumla.action.TOGGLE_DEAFEN"
         const val ACTION_DISCONNECT = "app.notmumla.action.DISCONNECT"
 
         fun start(context: Context) {
