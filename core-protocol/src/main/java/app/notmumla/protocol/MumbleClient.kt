@@ -246,6 +246,21 @@ class MumbleClient(
     }
 
     private fun onUserRemove(msg: UserRemove) {
+        // If the removed session is *us*, the server kicked or banned us — surface why instead of
+        // letting the socket close into a generic "connection lost" a moment later.
+        if (msg.session == _state.value.sessionId) {
+            val banned = msg.ban == true
+            val reason = msg.reason?.takeIf { it.isNotBlank() }
+            val text = when {
+                banned && reason != null -> "Banned: $reason"
+                banned -> "Banned from the server"
+                reason != null -> "Kicked: $reason"
+                else -> "Removed from the server"
+            }
+            _state.update { it.copy(connection = ConnectionState.FAILED, error = text, fatal = true) }
+            events.tryEmit(Event.Disconnected(text))
+            return
+        }
         _state.update { it.copy(users = it.users - msg.session) }
     }
 
@@ -331,7 +346,7 @@ class MumbleClient(
 
     private fun onReject(msg: Reject) {
         val reason = msg.reason ?: msg.type?.name ?: "Connection rejected"
-        _state.update { it.copy(connection = ConnectionState.FAILED, error = reason) }
+        _state.update { it.copy(connection = ConnectionState.FAILED, error = reason, fatal = true) }
         events.tryEmit(Event.Rejected(reason))
     }
 
