@@ -3,60 +3,47 @@ package app.notmumla.audio.playback
 import java.util.TreeMap
 
 /**
- * Minimal per-speaker jitter buffer: holds a few frames ordered by sequence number to absorb
- * network reordering/jitter before playback, and reports gaps so the decoder can conceal losses.
+ * Minimal per-speaker jitter buffer: holds a few frames ordered by Mumble frame number to absorb
+ * network reordering/jitter, then plays them back in order.
+ *
+ * Audio currently rides the **reliable, in-order TCP tunnel**, so frames are never lost — only
+ * delayed/reordered. We therefore play strictly in arrival order and do **not** infer "gaps" from
+ * non-contiguous frame numbers. That matters because Mumble's `frame_number` is a timestamp in
+ * 10 ms units, so a peer using 20/40/60 ms Opus frames advances it by 2/4/6 per packet; treating
+ * those jumps as losses (and concealing) would stretch and chop the audio. (A loss-concealment /
+ * FEC path belongs with the future UDP transport, where packets really can go missing.)
  *
  * Not thread-safe on its own; callers synchronize via [SpeakerMixer].
  */
 class JitterBuffer(private val targetDepth: Int = 3, private val maxDepth: Int = 12) {
-    private val frames = TreeMap<Long, ByteArray?>()
-    private var nextSequence = -1L
+    private val frames = TreeMap<Long, ByteArray>()
     private var primed = false
 
     /** Add a received frame. */
     fun put(sequence: Long, opus: ByteArray) {
-        if (sequence < nextSequence) return // too late, already played past it
         frames[sequence] = opus
-        if (frames.size > maxDepth) {
-            // Drop the oldest to bound latency.
-            val first = frames.firstKey()
-            frames.remove(first)
-            if (first <= nextSequence) nextSequence = first + 1
-        }
+        // Bound latency: if we're backing up, drop the oldest frames.
+        while (frames.size > maxDepth) frames.remove(frames.firstKey())
     }
 
-    /**
-     * Pull the next frame to play. Returns:
-     *  - the opus bytes when the in-order frame is available,
-     *  - null with [Pull.lost] = true when a frame is missing (caller should run PLC),
-     *  - [Pull.empty] when the buffer hasn't primed / is idle.
-     */
+    /** Pull the next frame to play (lowest frame number), or [Pull.EMPTY] while unprimed/idle. */
     fun pull(): Pull {
         if (!primed) {
             if (frames.size < targetDepth) return Pull.EMPTY
             primed = true
-            nextSequence = frames.firstKey()
         }
-        if (frames.isEmpty()) {
+        val entry = frames.pollFirstEntry()
+        if (entry == null) {
             primed = false
             return Pull.EMPTY
         }
-        val opus = frames.remove(nextSequence)
-        if (opus != null) {
-            nextSequence += 1
-            return Pull(opus = opus)
-        }
-        // Gap. If the *immediately next* frame is already buffered, recover this one from its
-        // forward-error-correction data (Opus FEC); otherwise fall back to concealment.
-        val next = frames[nextSequence + 1]
-        nextSequence += 1
-        return if (next != null) Pull(opus = next, fec = true) else Pull(lost = true)
+        return Pull(opus = entry.value)
     }
 
     val isIdle: Boolean get() = frames.isEmpty()
 
-    data class Pull(val opus: ByteArray? = null, val fec: Boolean = false, val lost: Boolean = false) {
-        val isEmpty: Boolean get() = opus == null && !lost
+    data class Pull(val opus: ByteArray? = null) {
+        val isEmpty: Boolean get() = opus == null
         companion object { val EMPTY = Pull() }
     }
 }
