@@ -7,6 +7,7 @@ import app.notmumla.data.AppSettings
 import app.notmumla.data.IdentityStore
 import app.notmumla.data.SettingsRepository
 import app.notmumla.data.ThemeMode
+import app.notmumla.protocol.identity.IdentityCertificate
 import app.notmumla.protocol.net.CertFingerprint
 import app.notmumla.ui.ChannelLayout
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /** Human-readable details of the local identity certificate, for the Settings dialog. */
@@ -41,21 +43,46 @@ class SettingsViewModel @Inject constructor(
     val identity: StateFlow<IdentityInfo?> = _identity
 
     init {
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                val cert = identityStore.getOrCreate().certificate
-                val cn = Regex("CN=([^,]+)").find(cert.subjectX500Principal.name)
-                    ?.groupValues?.get(1)?.trim() ?: "Mumble User"
-                val df = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.US)
-                IdentityInfo(
-                    commonName = cn,
-                    sha256 = CertFingerprint.sha256(cert),
-                    sha1 = CertFingerprint.sha1(cert),
-                    issued = df.format(cert.notBefore),
-                    expires = df.format(cert.notAfter),
-                )
-            }.getOrNull()?.let { _identity.value = it }
+        viewModelScope.launch { loadIdentity() }
+    }
+
+    private suspend fun loadIdentity() = withContext(Dispatchers.IO) {
+        runCatching {
+            val cert = identityStore.getOrCreate().certificate
+            val cn = Regex("CN=([^,]+)").find(cert.subjectX500Principal.name)
+                ?.groupValues?.get(1)?.trim() ?: "Mumble User"
+            val df = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.US)
+            IdentityInfo(
+                commonName = cn,
+                sha256 = CertFingerprint.sha256(cert),
+                sha1 = CertFingerprint.sha1(cert),
+                issued = df.format(cert.notBefore),
+                expires = df.format(cert.notAfter),
+            )
+        }.getOrNull()?.let { _identity.value = it }
+    }
+
+    /** Generate a brand-new identity (servers that knew the old cert won't recognise it). */
+    fun regenerateIdentity() = viewModelScope.launch {
+        withContext(Dispatchers.IO) {
+            val cn = _identity.value?.commonName ?: "Mumble User"
+            runCatching { identityStore.replace(IdentityCertificate.generate(cn)) }
         }
+        loadIdentity()
+    }
+
+    /** Export the current identity as a password-protected PKCS#12 blob (null on failure). */
+    suspend fun exportIdentity(password: String): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching { identityStore.exportPkcs12(password.toCharArray()) }.getOrNull()
+    }
+
+    /** Import an identity from a PKCS#12 blob; returns true on success. */
+    suspend fun importIdentity(bytes: ByteArray, password: String): Boolean {
+        val ok = withContext(Dispatchers.IO) {
+            runCatching { identityStore.importPkcs12(bytes, password.toCharArray()) }.isSuccess
+        }
+        if (ok) loadIdentity()
+        return ok
     }
 
     fun setTheme(v: ThemeMode) = update { repo.setTheme(v) }

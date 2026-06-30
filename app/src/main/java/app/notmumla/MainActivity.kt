@@ -292,6 +292,9 @@ private fun AppNav() {
                 onToggleAutoReconnect = settingsVm::setAutoReconnect,
                 onToggleTts = settingsVm::setTtsReadAloud,
                 onToggleMentionSound = settingsVm::setMentionSound,
+                onRegenerateIdentity = { settingsVm.regenerateIdentity() },
+                onExportIdentity = settingsVm::exportIdentity,
+                onImportIdentity = settingsVm::importIdentity,
                 onOpenLicenses = { nav.navigate(Routes.LICENSES) },
             )
         }
