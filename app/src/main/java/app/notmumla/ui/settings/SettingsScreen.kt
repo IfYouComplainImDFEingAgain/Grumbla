@@ -216,8 +216,9 @@ fun SettingsScreen(
                     Divider()
                     SliderRow(
                         "Microphone gain", "${if (settings.micGainDb >= 0) "+" else ""}${settings.micGainDb.roundToInt()} dB",
-                        value = (settings.micGainDb + 20f) / 40f, range = 0f..1f,
-                        onChange = { onSetMicGainDb(it * 40f - 20f) }, icon = Icons.Filled.GraphicEq,
+                        // -20..+30 dB: extra headroom to boost a quiet mic.
+                        value = (settings.micGainDb + 20f) / 50f, range = 0f..1f,
+                        onChange = { onSetMicGainDb(it * 50f - 20f) }, icon = Icons.Filled.GraphicEq,
                     )
                 }
                 Divider()
