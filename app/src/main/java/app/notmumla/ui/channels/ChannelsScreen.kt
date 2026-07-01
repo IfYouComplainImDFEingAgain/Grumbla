@@ -60,9 +60,9 @@ fun ChannelsScreen(
     transmitting: Boolean,
     unreadCount: Int,
     currentChannelName: String,
+    transmissionMode: TransmissionMode,
     onJoinChannel: (Int) -> Unit,
     onPttHeld: (Boolean) -> Unit,
-    onModeChange: (TransmissionMode) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
     onSendText: (String) -> Unit,
@@ -75,7 +75,6 @@ fun ChannelsScreen(
     var tab by remember { mutableStateOf(0) } // 0 = channels, 1 = chat
     androidx.compose.runtime.LaunchedEffect(tab) { if (tab == 1) onChatRead() }
     var layout by remember { mutableStateOf(ChannelLayout.TREE) }
-    var mode by remember { mutableStateOf(TransmissionMode.PTT) }
     var quickSettings by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(c.surface)) {
@@ -101,11 +100,10 @@ fun ChannelsScreen(
             }
 
             VoiceBar(
-                mode = mode,
+                mode = transmissionMode,
                 muted = selfMuted,
                 deafened = selfDeafened,
                 transmitting = transmitting,
-                onMode = { mode = it; onModeChange(it) },
                 onPttHeld = onPttHeld,
                 onToggleMute = onToggleMute,
                 onToggleDeafen = onToggleDeafen,
@@ -115,9 +113,7 @@ fun ChannelsScreen(
         if (quickSettings) {
             QuickSettingsSheet(
                 layout = layout,
-                mode = mode,
                 onLayout = { layout = it },
-                onMode = { mode = it; onModeChange(it) },
                 onOpenAllSettings = { quickSettings = false; onOpenSettings() },
                 onDisconnect = onDisconnect,
                 onClose = { quickSettings = false },

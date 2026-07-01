@@ -30,15 +30,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.notmumla.ui.ChannelLayout
 import app.notmumla.ui.SegmentedToggle
-import app.notmumla.ui.TransmissionMode
 import app.notmumla.ui.theme.MumbleTheme
 
 @Composable
 fun QuickSettingsSheet(
     layout: ChannelLayout,
-    mode: TransmissionMode,
     onLayout: (ChannelLayout) -> Unit,
-    onMode: (TransmissionMode) -> Unit,
     onOpenAllSettings: () -> Unit,
     onDisconnect: () -> Unit,
     onClose: () -> Unit,
@@ -77,16 +74,6 @@ fun QuickSettingsSheet(
                     options = listOf("Tree", "Speakers", "Compact"),
                     selectedIndex = layout.ordinal,
                     onSelect = { onLayout(ChannelLayout.entries[it]) },
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            SheetCard {
-                Text("Transmission", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                    color = c.onSurfaceVar, modifier = Modifier.padding(bottom = 10.dp))
-                SegmentedToggle(
-                    options = listOf("Push-to-Talk", "Voice Activated"),
-                    selectedIndex = if (mode == TransmissionMode.PTT) 0 else 1,
-                    onSelect = { onMode(if (it == 0) TransmissionMode.PTT else TransmissionMode.VAD) },
                 )
             }
             Spacer(Modifier.height(10.dp))
