@@ -109,6 +109,7 @@ fun SettingsScreen(
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleTts: (Boolean) -> Unit,
     onToggleMentionSound: (Boolean) -> Unit,
+    onToggleDebugOverlay: (Boolean) -> Unit,
     onRegenerateIdentity: () -> Unit,
     onExportIdentity: suspend (password: String) -> ByteArray?,
     onImportIdentity: suspend (bytes: ByteArray, password: String) -> Boolean,
@@ -290,6 +291,13 @@ fun SettingsScreen(
             }
 
             PermissionsSection()
+
+            SectionLabel("DEVELOPER")
+            SettingsGroup {
+                ToggleRow(Icons.Filled.BarChart, "Debug overlay",
+                    "Live packet counts + loss on the voice screen",
+                    settings.debugOverlay, onToggleDebugOverlay)
+            }
 
             SectionLabel("ABOUT")
             SettingsGroup {

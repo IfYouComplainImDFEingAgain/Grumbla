@@ -2,6 +2,7 @@ package app.notmumla.protocol
 
 import app.notmumla.protocol.identity.Identity
 import app.notmumla.protocol.identity.IdentityCertificate
+import app.notmumla.protocol.model.AudioDebugStats
 import app.notmumla.protocol.model.Channel
 import app.notmumla.protocol.model.ConnectionState
 import app.notmumla.protocol.model.ServerState
@@ -85,6 +86,15 @@ class MumbleClient(
     private var channel: ControlChannel? = null
     private var readJob: Job? = null
     private var pingJob: Job? = null
+    private var statsJob: Job? = null
+
+    // Live audio packet stats (debug overlay).
+    private val _stats = MutableStateFlow(AudioDebugStats())
+    val stats: StateFlow<AudioDebugStats> = _stats.asStateFlow()
+    @Volatile private var txCount = 0L
+    @Volatile private var rxCount = 0L
+    @Volatile private var rxLost = 0L
+    private val lastSeqBySession = HashMap<Int, Long>()
 
     /** Set by the audio engine to receive inbound voice frames. */
     @Volatile var voiceSink: VoiceSink? = null
@@ -121,6 +131,7 @@ class MumbleClient(
                 }
                 sendHandshake(control, config)
                 startPing()
+                startStats()
                 readLoop(control)
             } catch (t: Throwable) {
                 val mismatch = generateSequence(t) { it.cause }
@@ -137,8 +148,41 @@ class MumbleClient(
                 }
             } finally {
                 pingJob?.cancel()
+                statsJob?.cancel()
             }
         }
+    }
+
+    /** Emit a packet-stats snapshot ~twice a second, computing per-second rates from the deltas. */
+    private fun startStats() {
+        txCount = 0; rxCount = 0; rxLost = 0
+        lastSeqBySession.clear()
+        _stats.value = AudioDebugStats()
+        statsJob = scope.launch(Dispatchers.IO) {
+            var lastTx = 0L
+            var lastRx = 0L
+            while (isActive) {
+                delay(500)
+                val tx = txCount
+                val rx = rxCount
+                _stats.value = AudioDebugStats(
+                    sent = tx, received = rx, lost = rxLost,
+                    sentPerSec = ((tx - lastTx) * 2).toInt(),
+                    recvPerSec = ((rx - lastRx) * 2).toInt(),
+                )
+                lastTx = tx
+                lastRx = rx
+            }
+        }
+    }
+
+    /** Track an inbound audio frame for the stats: count it and estimate loss from sequence gaps. */
+    private fun recordRx(session: Int, sequence: Long) {
+        rxCount++
+        val last = lastSeqBySession[session]
+        // A jump of >1 with a sane gap = missing frames. Large jumps / resets (new talk-spurt) ignored.
+        if (last != null && sequence > last + 1 && sequence - last < 100) rxLost += sequence - last - 1
+        lastSeqBySession[session] = sequence
     }
 
     private fun sendHandshake(control: ControlChannel, config: ConnectConfig) {
@@ -302,6 +346,7 @@ class MumbleClient(
             packet[0].toInt() == UDP_TYPE_AUDIO -> { // protobuf
                 val audio = runCatching { UdpAudio.ADAPTER.decode(packet.copyOfRange(1, packet.size)) }
                     .getOrNull() ?: return
+                recordRx(audio.sender_session, audio.frame_number)
                 voiceSink?.onIncomingAudio(
                     session = audio.sender_session,
                     sequence = audio.frame_number,
@@ -311,6 +356,7 @@ class MumbleClient(
             }
             LegacyAudio.isLegacyOpus(packet) -> {
                 val a = LegacyAudio.decodeIncoming(packet) ?: return
+                recordRx(a.session, a.sequence)
                 voiceSink?.onIncomingAudio(a.session, a.sequence, a.opus, a.terminator)
             }
             // else: ping packets (protobuf type 1, legacy 0x20) — ignored
@@ -341,6 +387,7 @@ class MumbleClient(
         }
         audioSequence += 1
         if (terminator) audioSequence = 0
+        txCount++
         runCatching { channel?.sendRaw(MessageType.UDP_TUNNEL.id, packet) }
     }
 

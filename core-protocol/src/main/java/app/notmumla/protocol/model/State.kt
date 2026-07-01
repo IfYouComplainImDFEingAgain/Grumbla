@@ -31,6 +31,15 @@ data class Channel(
 )
 
 /** Immutable snapshot of the whole server session, surfaced as a StateFlow by MumbleClient. */
+/** Live audio packet stats for the debug overlay. Rates are per-second (updated ~2×/s). */
+data class AudioDebugStats(
+    val sent: Long = 0,
+    val received: Long = 0,
+    val lost: Long = 0,
+    val sentPerSec: Int = 0,
+    val recvPerSec: Int = 0,
+)
+
 data class ServerState(
     val connection: ConnectionState = ConnectionState.DISCONNECTED,
     val sessionId: Int? = null,

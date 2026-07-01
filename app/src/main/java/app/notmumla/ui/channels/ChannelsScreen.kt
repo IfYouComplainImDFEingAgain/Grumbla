@@ -61,6 +61,7 @@ fun ChannelsScreen(
     unreadCount: Int,
     currentChannelName: String,
     transmissionMode: TransmissionMode,
+    debugStats: app.notmumla.protocol.model.AudioDebugStats?,
     onJoinChannel: (Int) -> Unit,
     onPttHeld: (Boolean) -> Unit,
     onToggleMute: () -> Unit,
@@ -82,6 +83,7 @@ fun ChannelsScreen(
             // The header overflow button opens quick settings (per the design mockup).
             ServerHeader(serverName, serverInitial, connectionLabel, onOpenQuickSettings = { quickSettings = true })
             TabStrip(tab, unread = unreadCount, onSelect = { tab = it })
+            debugStats?.let { DebugOverlay(it) }
 
             Box(Modifier.weight(1f)) {
                 when (tab) {
@@ -119,6 +121,22 @@ fun ChannelsScreen(
                 onClose = { quickSettings = false },
             )
         }
+    }
+}
+
+@Composable
+private fun DebugOverlay(stats: app.notmumla.protocol.model.AudioDebugStats) {
+    val c = MumbleTheme.colors
+    val mono = androidx.compose.ui.text.font.FontFamily.Monospace
+    Row(
+        Modifier.fillMaxWidth().background(c.surfContainer).padding(horizontal = 14.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("TX ${stats.sentPerSec}/s·${stats.sent}", fontSize = 12.sp, fontFamily = mono, color = c.speaking)
+        Text("RX ${stats.recvPerSec}/s·${stats.received}", fontSize = 12.sp, fontFamily = mono, color = c.primary)
+        Text("LOST ${stats.lost}", fontSize = 12.sp, fontFamily = mono,
+            color = if (stats.lost > 0) c.muted else c.onSurfaceVar)
     }
 }
 
