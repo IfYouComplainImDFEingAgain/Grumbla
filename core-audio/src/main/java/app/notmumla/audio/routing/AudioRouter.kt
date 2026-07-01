@@ -81,7 +81,8 @@ class AudioRouter(context: Context) {
         OutputRoute.WIRED -> RouteConfig(
             route = route,
             audioMode = AudioManager.MODE_IN_COMMUNICATION,
-            recordSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            // VOICE_RECOGNITION for a hotter mic (VOICE_COMMUNICATION's AGC leaves it too quiet).
+            recordSource = MediaRecorder.AudioSource.VOICE_RECOGNITION,
             recordDeviceId = null,
             trackUsage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
             trackDeviceId = outputDevice(

@@ -44,7 +44,9 @@ data class RouteConfig(
         val PHONE = RouteConfig(
             route = OutputRoute.PHONE_SPEAKER,
             audioMode = AudioManager.MODE_NORMAL,
-            recordSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            // VOICE_RECOGNITION captures speech at a healthy level with minimal AGC/attenuation;
+            // VOICE_COMMUNICATION applies telephony-grade gain control that leaves the mic too quiet.
+            recordSource = MediaRecorder.AudioSource.VOICE_RECOGNITION,
             recordDeviceId = null,
             trackUsage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
             trackDeviceId = null,
