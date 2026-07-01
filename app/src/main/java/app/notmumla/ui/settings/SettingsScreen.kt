@@ -210,6 +210,8 @@ fun SettingsScreen(
                     )
                 }
                 Divider()
+                InputLevelRow(inputLevel)
+                Divider()
                 ToggleRow(Icons.Filled.GraphicEq, "Automatic gain control",
                     "Auto-level your mic", settings.autoGain, onToggleAutoGain)
                 if (!settings.autoGain) {
@@ -300,6 +302,38 @@ fun SettingsScreen(
                 NavRow(Icons.Filled.BarChart, "Open-source licenses", null, onClick = onOpenLicenses)
             }
             Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+/**
+ * Live meter of the mic level *after* processing (source AGC/effects + gain), so the effect of the
+ * auto-gain toggle and the gain slider is visible. Green while healthy, amber loud, red = clipping
+ * risk. Moves only while connected (the capture engine is running).
+ */
+@Composable
+private fun InputLevelRow(level: Float) {
+    val c = MumbleTheme.colors
+    val meterMax = 0.35f // RMS scale; peaks near the top risk clipping
+    val frac = (level / meterMax).coerceIn(0f, 1f)
+    val barColor = when {
+        frac > 0.85f -> c.muted
+        frac > 0.6f -> c.afk
+        else -> c.speaking
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Icon(Icons.Filled.GraphicEq, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Input level", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
+                Text("Live, after processing — keep peaks out of the red", fontSize = 12.sp, color = c.onSurfaceVar)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(c.surfHighest)) {
+            Box(
+                Modifier.fillMaxWidth(frac).height(14.dp).clip(RoundedCornerShape(7.dp)).background(barColor),
+            )
         }
     }
 }
