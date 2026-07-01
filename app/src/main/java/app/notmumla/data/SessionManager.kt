@@ -262,7 +262,6 @@ class SessionManager @Inject constructor(
 
     // Engine controls surfaced to the UI.
     fun setPttHeld(held: Boolean) { engine?.setPttHeld(held) }
-    fun setTransmissionMode(mode: TransmissionMode) { engine?.mode = mode }
     fun setMicMuted(muted: Boolean) { engine?.muted = muted }
 
     val autoReconnectEnabled: Boolean get() = settings.autoReconnect

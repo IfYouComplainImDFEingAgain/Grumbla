@@ -35,14 +35,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.notmumla.ui.SegmentedToggle
 import app.notmumla.ui.SpeakingBars
 import app.notmumla.ui.TransmissionMode
 import app.notmumla.ui.theme.MumbleTheme
 
 /**
- * Bottom voice control bar: transmission-mode toggle, mute, the big push-to-talk button
- * (or VAD level meter), and deafen. Long-pressing the PTT button opens quick settings.
+ * Bottom voice control bar: mute, the big push-to-talk button (or VAD indicator), and deafen.
+ * Transmission mode is chosen in Settings; this bar only reflects it.
  */
 @Composable
 fun VoiceBar(
@@ -50,24 +49,18 @@ fun VoiceBar(
     muted: Boolean,
     deafened: Boolean,
     transmitting: Boolean,
-    onMode: (TransmissionMode) -> Unit,
     onPttHeld: (Boolean) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
 ) {
     val c = MumbleTheme.colors
 
+    // Transmission mode (PTT vs Voice-Activated) is chosen in Settings — the bar just reflects it.
     Column(
         Modifier.fillMaxWidth().background(c.surfContainer)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        SegmentedToggle(
-            options = listOf("Push-to-Talk", "Voice Activated"),
-            selectedIndex = if (mode == TransmissionMode.PTT) 0 else 1,
-            onSelect = { onMode(if (it == 0) TransmissionMode.PTT else TransmissionMode.VAD) },
-        )
-
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,

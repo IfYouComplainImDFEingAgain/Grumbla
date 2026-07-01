@@ -42,9 +42,9 @@ import app.notmumla.ui.TransmissionMode as UiTransmissionMode
 import app.notmumla.audio.TransmissionMode as AudioTransmissionMode
 import dagger.hilt.android.AndroidEntryPoint
 
-private fun UiTransmissionMode.toAudioMode(): AudioTransmissionMode = when (this) {
-    UiTransmissionMode.PTT -> AudioTransmissionMode.PTT
-    UiTransmissionMode.VAD -> AudioTransmissionMode.VAD
+private fun AudioTransmissionMode.toUiMode(): UiTransmissionMode = when (this) {
+    AudioTransmissionMode.PTT -> UiTransmissionMode.PTT
+    AudioTransmissionMode.VAD -> UiTransmissionMode.VAD
 }
 
 /**
@@ -178,6 +178,8 @@ private fun AppNav() {
             val transmitting by vm.localTransmitting.collectAsState()
             val chat by vm.chat.collectAsState()
             val unread by vm.unreadChat.collectAsState()
+            val settingsVm: SettingsViewModel = hiltViewModel()
+            val appSettings by settingsVm.settings.collectAsState()
 
             // Request microphone access; start the audio engine once granted.
             val ctx = LocalContext.current
@@ -241,9 +243,9 @@ private fun AppNav() {
                 transmitting = transmitting,
                 unreadCount = unread,
                 currentChannelName = currentChannelName,
+                transmissionMode = appSettings.transmissionMode.toUiMode(),
                 onJoinChannel = vm::joinChannel,
                 onPttHeld = vm::setPttHeld,
-                onModeChange = { vm.setTransmissionMode(it.toAudioMode()) },
                 onToggleMute = {
                     val s = state.self
                     vm.setMuted(muted = !(s?.selfMute ?: false), deaf = s?.selfDeaf ?: false)

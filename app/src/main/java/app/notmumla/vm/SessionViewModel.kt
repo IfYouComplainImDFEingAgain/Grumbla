@@ -1,7 +1,6 @@
 package app.notmumla.vm
 
 import androidx.lifecycle.ViewModel
-import app.notmumla.audio.TransmissionMode
 import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.data.SessionManager
 import app.notmumla.protocol.model.ServerState
@@ -41,7 +40,6 @@ class SessionViewModel @Inject constructor(
 
     // Voice controls.
     fun setPttHeld(held: Boolean) = sessionManager.setPttHeld(held)
-    fun setTransmissionMode(mode: TransmissionMode) = sessionManager.setTransmissionMode(mode)
 
     /** Mute both the local mic and our server-side self-mute flag. */
     fun setMuted(muted: Boolean, deaf: Boolean) {
