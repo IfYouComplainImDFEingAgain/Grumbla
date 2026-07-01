@@ -38,15 +38,14 @@ data class RouteConfig(
 ) {
     companion object {
         /**
-         * Default phone loudspeaker/mic route. We use MODE_NORMAL (not MODE_IN_COMMUNICATION) so
-         * voice plays out the **loudspeaker** rather than being routed to the earpiece receiver.
+         * Default phone loudspeaker/mic route placeholder. The real config (with the loudspeaker as
+         * the communication device) is built by [routing.AudioRouter.configFor] at connect time, so
+         * MODE_IN_COMMUNICATION here routes to the loudspeaker rather than the earpiece.
          */
         val PHONE = RouteConfig(
             route = OutputRoute.PHONE_SPEAKER,
-            audioMode = AudioManager.MODE_NORMAL,
-            // VOICE_RECOGNITION captures speech at a healthy level with minimal AGC/attenuation;
-            // VOICE_COMMUNICATION applies telephony-grade gain control that leaves the mic too quiet.
-            recordSource = MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            audioMode = AudioManager.MODE_IN_COMMUNICATION,
+            recordSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             recordDeviceId = null,
             trackUsage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
             trackDeviceId = null,

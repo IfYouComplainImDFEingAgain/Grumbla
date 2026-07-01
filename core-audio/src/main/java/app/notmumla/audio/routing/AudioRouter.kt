@@ -76,13 +76,24 @@ class AudioRouter(context: Context) {
 
     /** Build the engine config for [route] using currently-connected devices. */
     fun configFor(route: OutputRoute): RouteConfig = when (route) {
-        OutputRoute.PHONE_SPEAKER -> RouteConfig.PHONE
+        // MODE_IN_COMMUNICATION + VOICE_COMMUNICATION is the clean, hardware-leveled capture path that
+        // Mumble/Mumla use. We explicitly route output to the built-in loudspeaker so voice doesn't
+        // land on the earpiece (the reason we'd previously fallen back to the distortion-prone
+        // MODE_NORMAL + VOICE_RECOGNITION combo).
+        OutputRoute.PHONE_SPEAKER -> RouteConfig(
+            route = route,
+            audioMode = AudioManager.MODE_IN_COMMUNICATION,
+            recordSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            recordDeviceId = null,
+            trackUsage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
+            trackDeviceId = null,
+            communicationDeviceId = commDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)?.id,
+        )
 
         OutputRoute.WIRED -> RouteConfig(
             route = route,
             audioMode = AudioManager.MODE_IN_COMMUNICATION,
-            // VOICE_RECOGNITION for a hotter mic (VOICE_COMMUNICATION's AGC leaves it too quiet).
-            recordSource = MediaRecorder.AudioSource.VOICE_RECOGNITION,
+            recordSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             recordDeviceId = null,
             trackUsage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
             trackDeviceId = outputDevice(
