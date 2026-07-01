@@ -23,8 +23,11 @@ import kotlin.math.sqrt
 /** How the mic decides when to transmit. */
 enum class TransmissionMode { PTT, VAD }
 
-/** VAD hold time after the level dips below threshold: ~400 ms (40 × 10 ms frames). */
-private const val VAD_HANGOVER_FRAMES = 40
+// VAD hysteresis (Mumble-style): start transmitting at the user threshold, keep transmitting while
+// the level stays above a fraction of it, then a short hold. Bridges syllable gaps without dragging
+// a long noisy tail after you actually stop.
+private const val VAD_CONTINUE_RATIO = 0.5f
+private const val VAD_HOLD_FRAMES = 25 // ~250 ms (25 × 10 ms) after dropping below the low threshold
 
 /**
  * Real-time voice engine: captures mic audio, Opus-encodes and ships it via [sendFrame], and mixes
@@ -51,7 +54,8 @@ class AudioEngine(
     @Volatile var echoCancellation: Boolean = true
     @Volatile var bitrate: Int = 72_000
     @Volatile private var pttHeld: Boolean = false
-    private var vadHangoverFrames = 0
+    private var vadOpen = false
+    private var vadHoldFrames = 0
     @Volatile private var encoderRef: OpusEncoder? = null
 
     /**
@@ -275,16 +279,19 @@ class AudioEngine(
     private fun shouldTransmit(level: Float): Boolean = when (mode) {
         TransmissionMode.PTT -> pttHeld
         TransmissionMode.VAD -> {
-            // Hangover: once over the threshold, keep transmitting for ~400 ms after the level dips,
-            // so natural gaps between words/syllables (which fall below the threshold) don't chop
-            // the audio. Without this, VAD cuts out constantly no matter how low the threshold is.
-            if (level >= vadThreshold) {
-                vadHangoverFrames = VAD_HANGOVER_FRAMES
+            // Hysteresis + short hold. Start at the user threshold; once open, stay open while the
+            // level holds above VAD_CONTINUE_RATIO × threshold (bridges syllable gaps); when it drops
+            // below that, hold briefly then cut — so the fading tail isn't dragged out.
+            val over = if (vadOpen) level >= vadThreshold * VAD_CONTINUE_RATIO else level >= vadThreshold
+            if (over) {
+                vadOpen = true
+                vadHoldFrames = VAD_HOLD_FRAMES
                 true
-            } else if (vadHangoverFrames > 0) {
-                vadHangoverFrames -= 1
+            } else if (vadHoldFrames > 0) {
+                vadHoldFrames -= 1
                 true
             } else {
+                vadOpen = false
                 false
             }
         }
