@@ -180,6 +180,7 @@ private fun AppNav() {
             val unread by vm.unreadChat.collectAsState()
             val settingsVm: SettingsViewModel = hiltViewModel()
             val appSettings by settingsVm.settings.collectAsState()
+            val debugStats by vm.debugStats.collectAsState()
 
             // Request microphone access; start the audio engine once granted.
             val ctx = LocalContext.current
@@ -244,6 +245,7 @@ private fun AppNav() {
                 unreadCount = unread,
                 currentChannelName = currentChannelName,
                 transmissionMode = appSettings.transmissionMode.toUiMode(),
+                debugStats = if (appSettings.debugOverlay) debugStats else null,
                 onJoinChannel = vm::joinChannel,
                 onPttHeld = vm::setPttHeld,
                 onToggleMute = {
@@ -300,6 +302,7 @@ private fun AppNav() {
                 onToggleAutoReconnect = settingsVm::setAutoReconnect,
                 onToggleTts = settingsVm::setTtsReadAloud,
                 onToggleMentionSound = settingsVm::setMentionSound,
+                onToggleDebugOverlay = settingsVm::setDebugOverlay,
                 onRegenerateIdentity = { settingsVm.regenerateIdentity() },
                 onExportIdentity = settingsVm::exportIdentity,
                 onImportIdentity = settingsVm::importIdentity,

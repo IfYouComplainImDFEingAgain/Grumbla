@@ -99,6 +99,7 @@ class SettingsViewModel @Inject constructor(
     fun setAutoReconnect(v: Boolean) = update { repo.setAutoReconnect(v) }
     fun setTtsReadAloud(v: Boolean) = update { repo.setTtsReadAloud(v) }
     fun setMentionSound(v: Boolean) = update { repo.setMentionSound(v) }
+    fun setDebugOverlay(v: Boolean) = update { repo.setDebugOverlay(v) }
 
     private inline fun update(crossinline block: suspend () -> Unit) {
         viewModelScope.launch { block() }

@@ -36,6 +36,7 @@ data class AppSettings(
     val autoReconnect: Boolean = true,
     val ttsReadAloud: Boolean = false,
     val mentionSound: Boolean = true,
+    val debugOverlay: Boolean = false,
 )
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("settings")
@@ -60,6 +61,7 @@ class SettingsRepository @Inject constructor(
         val RECONNECT = booleanPreferencesKey("auto_reconnect")
         val TTS = booleanPreferencesKey("tts_read_aloud")
         val MENTION = booleanPreferencesKey("mention_sound")
+        val DEBUG = booleanPreferencesKey("debug_overlay")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -80,6 +82,7 @@ class SettingsRepository @Inject constructor(
             autoReconnect = p[Keys.RECONNECT] ?: true,
             ttsReadAloud = p[Keys.TTS] ?: false,
             mentionSound = p[Keys.MENTION] ?: true,
+            debugOverlay = p[Keys.DEBUG] ?: false,
         )
     }
 
@@ -97,6 +100,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setAutoReconnect(v: Boolean) = edit { it[Keys.RECONNECT] = v }
     suspend fun setTtsReadAloud(v: Boolean) = edit { it[Keys.TTS] = v }
     suspend fun setMentionSound(v: Boolean) = edit { it[Keys.MENTION] = v }
+    suspend fun setDebugOverlay(v: Boolean) = edit { it[Keys.DEBUG] = v }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.dataStore.edit(block)

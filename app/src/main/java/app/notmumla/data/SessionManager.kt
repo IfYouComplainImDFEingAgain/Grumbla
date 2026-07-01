@@ -136,6 +136,10 @@ class SessionManager @Inject constructor(
     /** Live mic input level (0..1) for VAD calibration in Settings. */
     val inputLevel: StateFlow<Float> = _inputLevel.asStateFlow()
 
+    private val _debugStats = MutableStateFlow(app.notmumla.protocol.model.AudioDebugStats())
+    /** Live audio packet stats for the debug overlay. */
+    val debugStats: StateFlow<app.notmumla.protocol.model.AudioDebugStats> = _debugStats.asStateFlow()
+
     /** True once RECORD_AUDIO is granted and the engine has been started. */
     var audioPermissionGranted = false
         private set
@@ -181,6 +185,7 @@ class SessionManager @Inject constructor(
         scope.launch { eng.speakingSessions.collect { _speaking.value = it } }
         scope.launch { eng.transmitting.collect { _localTransmitting.value = it } }
         scope.launch { eng.inputLevel.collect { _inputLevel.value = it } }
+        scope.launch { mc.stats.collect { _debugStats.value = it } }
 
         mirrorJob = scope.launch {
             mc.state.collect { s ->
@@ -370,6 +375,7 @@ class SessionManager @Inject constructor(
         _speaking.value = emptySet()
         _localTransmitting.value = false
         _inputLevel.value = 0f
+        _debugStats.value = app.notmumla.protocol.model.AudioDebugStats()
         _state.value = ServerState(connection = toState)
         app.notmumla.service.VoiceService.stop(context)
     }
