@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -271,6 +272,11 @@ private fun AppNav() {
             val settings by settingsVm.settings.collectAsState()
             val inputLevel by session.inputLevel.collectAsState()
             val identity by settingsVm.identity.collectAsState()
+            // Run a live mic-level preview while Settings is open (no-op if already in a call).
+            DisposableEffect(Unit) {
+                session.startMicPreview()
+                onDispose { session.stopMicPreview() }
+            }
             SettingsScreen(
                 onBack = { nav.popBackStack() },
                 settings = settings,

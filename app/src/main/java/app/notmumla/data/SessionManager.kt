@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioManager
 import android.os.Build
 import app.notmumla.audio.AudioEngine
+import app.notmumla.audio.MicLevelMonitor
 import app.notmumla.audio.TransmissionMode
 import app.notmumla.audio.routing.AudioRouter
 import app.notmumla.audio.routing.OutputRoute
@@ -42,13 +43,39 @@ class SessionManager @Inject constructor(
 
     @Volatile private var settings: AppSettings = AppSettings()
 
+    private val micMonitor = MicLevelMonitor()
+    private var previewJob: Job? = null
+
     init {
         scope.launch {
             settingsRepo.settings.collect { s ->
                 settings = s
                 applyAudioSettings(s)
+                // Keep an active mic preview in sync with live setting changes (gain especially).
+                micMonitor.micGain = Math.pow(10.0, s.micGainDb / 20.0).toFloat()
             }
         }
+    }
+
+    /**
+     * Start a live mic-level preview for the Settings meter while NOT in a call. No-op if a session
+     * is active (the engine already publishes the level) or the preview is already running.
+     */
+    fun startMicPreview() {
+        if (engine != null || previewJob != null) return
+        micMonitor.micGain = Math.pow(10.0, settings.micGainDb / 20.0).toFloat()
+        micMonitor.noiseSuppression = settings.noiseSuppression == NoiseSuppression.STANDARD
+        micMonitor.aiNoiseSuppression = settings.noiseSuppression == NoiseSuppression.AI
+        micMonitor.autoGain = settings.autoGain
+        micMonitor.start()
+        previewJob = scope.launch { micMonitor.level.collect { _inputLevel.value = it } }
+    }
+
+    fun stopMicPreview() {
+        previewJob?.cancel()
+        previewJob = null
+        micMonitor.stop()
+        if (engine == null) _inputLevel.value = 0f
     }
 
     private fun applyAudioSettings(s: AppSettings) {
@@ -130,6 +157,7 @@ class SessionManager @Inject constructor(
     }
 
     private fun doConnect(server: ServerEntity) {
+        stopMicPreview() // release the mic so the capture engine can take it
         teardown(toState = ConnectionState.CONNECTING)
         userInitiatedDisconnect = false
         lastServer = server
