@@ -201,16 +201,12 @@ fun SettingsScreen(
                         onSelect = { onSetTransmission(if (it == 0) TransmissionMode.PTT else TransmissionMode.VAD) },
                     )
                 }
-                if (settings.transmissionMode == TransmissionMode.VAD) {
-                    Divider()
-                    VadSensitivityRow(
-                        level = inputLevel,
-                        threshold = settings.vadSensitivity,
-                        onChange = onSetVad,
-                    )
-                }
                 Divider()
-                InputLevelRow(inputLevel)
+                InputLevelRow(
+                    level = inputLevel,
+                    threshold = if (settings.transmissionMode == TransmissionMode.VAD) settings.vadSensitivity else null,
+                    onThresholdChange = onSetVad,
+                )
                 Divider()
                 ToggleRow(Icons.Filled.GraphicEq, "Automatic gain control",
                     "Auto-level your mic", settings.autoGain, onToggleAutoGain)
@@ -307,12 +303,15 @@ fun SettingsScreen(
 }
 
 /**
- * Live meter of the mic level *after* processing (source AGC/effects + gain), so the effect of the
- * auto-gain toggle and the gain slider is visible. Green while healthy, amber loud, red = clipping
- * risk. Moves only while connected (the capture engine is running).
+ * Live meter of the mic level, always visible in Settings. It reads the level computed in the
+ * capture loop *after* noise filtering (hardware NS + RNNoise) and gain, so it reflects exactly what
+ * goes out. Green while healthy, amber loud, red = clipping risk. Moves only while connected.
+ *
+ * When [threshold] is non-null (Voice-Activated mode) it also overlays the VAD threshold marker and
+ * a sensitivity slider, so the same bar doubles as VAD calibration — no second meter needed.
  */
 @Composable
-private fun InputLevelRow(level: Float) {
+private fun InputLevelRow(level: Float, threshold: Float?, onThresholdChange: (Float) -> Unit) {
     val c = MumbleTheme.colors
     val meterMax = 0.35f // RMS scale; peaks near the top risk clipping
     val frac = (level / meterMax).coerceIn(0f, 1f)
@@ -326,13 +325,36 @@ private fun InputLevelRow(level: Float) {
             Icon(Icons.Filled.GraphicEq, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
             Column(Modifier.weight(1f)) {
                 Text("Input level", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
-                Text("Live, after processing — keep peaks out of the red", fontSize = 12.sp, color = c.onSurfaceVar)
+                Text(
+                    if (threshold == null) "Live, after noise filtering & gain — keep peaks out of the red"
+                    else "Live, after filtering — set the line just above the bar's resting level",
+                    fontSize = 12.sp, color = c.onSurfaceVar,
+                )
             }
         }
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(c.surfHighest)) {
-            Box(
-                Modifier.fillMaxWidth(frac).height(14.dp).clip(RoundedCornerShape(7.dp)).background(barColor),
+            Box(Modifier.fillMaxWidth(frac).height(14.dp).clip(RoundedCornerShape(7.dp)).background(barColor))
+            if (threshold != null) {
+                val threshFrac = (threshold / meterMax).coerceIn(0f, 1f)
+                Box(Modifier.fillMaxWidth(threshFrac).height(14.dp), contentAlignment = Alignment.CenterEnd) {
+                    Box(Modifier.width(3.dp).height(20.dp).background(c.primary))
+                }
+            }
+        }
+        if (threshold != null) {
+            // Logarithmic: most slider travel covers the sensitive low end (0.0004–0.15) where VAD lives.
+            val minT = 0.0004f
+            val maxT = 0.15f
+            val pos = (ln((threshold / minT).coerceAtLeast(1f)) / ln(maxT / minT)).coerceIn(0f, 1f)
+            Slider(
+                value = pos,
+                onValueChange = { p -> onThresholdChange(minT * (maxT / minT).pow(p)) },
+                valueRange = 0f..1f,
+                colors = SliderDefaults.colors(
+                    thumbColor = c.primary, activeTrackColor = c.primary.copy(alpha = 0.4f),
+                    inactiveTrackColor = c.surfHighest,
+                ),
             )
         }
     }
@@ -741,53 +763,6 @@ private fun SliderRow(
  * just above the bar's resting (background-noise) level; the bar turns green when you're above it
  * and transmitting. Far clearer than a blind percentage.
  */
-@Composable
-private fun VadSensitivityRow(level: Float, threshold: Float, onChange: (Float) -> Unit) {
-    val c = MumbleTheme.colors
-    val meterMax = 0.3f // RMS scale: typical speech sits well within this
-    val levelFrac = (level / meterMax).coerceIn(0f, 1f)
-    val threshFrac = (threshold / meterMax).coerceIn(0f, 1f)
-    val transmitting = level >= threshold && level > 0.001f
-
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Mic, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.size(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Input sensitivity", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
-                Text("Speak, then set the line just above the bar's resting level",
-                    fontSize = 12.sp, color = c.onSurfaceVar)
-            }
-        }
-        Spacer(Modifier.size(10.dp))
-        // Live level meter with the threshold marker.
-        Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(c.surfHighest)) {
-            Box(
-                Modifier.fillMaxWidth(levelFrac).height(14.dp).clip(RoundedCornerShape(7.dp))
-                    .background(if (transmitting) c.speaking else c.outline),
-            )
-            Box(
-                Modifier.fillMaxWidth(threshFrac).height(14.dp),
-                contentAlignment = Alignment.CenterEnd,
-            ) { Box(Modifier.width(3.dp).height(20.dp).background(c.primary)) }
-        }
-        // Logarithmic mapping: most of the slider travel covers the sensitive low end (0.0004–0.15),
-        // which is where VAD actually operates, so fine adjustments are possible.
-        val minT = 0.0004f
-        val maxT = 0.15f
-        val pos = (ln((threshold / minT).coerceAtLeast(1f)) / ln(maxT / minT)).coerceIn(0f, 1f)
-        Slider(
-            value = pos,
-            onValueChange = { p -> onChange(minT * (maxT / minT).pow(p)) },
-            valueRange = 0f..1f,
-            colors = SliderDefaults.colors(
-                thumbColor = c.primary, activeTrackColor = c.primary.copy(alpha = 0.4f),
-                inactiveTrackColor = c.surfHighest,
-            ),
-        )
-    }
-}
-
 @Composable
 private fun RadioDot(selected: Boolean) {
     val c = MumbleTheme.colors
