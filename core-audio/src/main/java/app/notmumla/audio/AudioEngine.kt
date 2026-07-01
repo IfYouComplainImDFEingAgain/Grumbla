@@ -23,6 +23,9 @@ import kotlin.math.sqrt
 /** How the mic decides when to transmit. */
 enum class TransmissionMode { PTT, VAD }
 
+/** VAD hold time after the level dips below threshold: ~400 ms (40 × 10 ms frames). */
+private const val VAD_HANGOVER_FRAMES = 40
+
 /**
  * Real-time voice engine: captures mic audio, Opus-encodes and ships it via [sendFrame], and mixes
  * inbound speakers to the speaker/headset. Implements [VoiceSink] for inbound frames.
@@ -48,6 +51,7 @@ class AudioEngine(
     @Volatile var echoCancellation: Boolean = true
     @Volatile var bitrate: Int = 72_000
     @Volatile private var pttHeld: Boolean = false
+    private var vadHangoverFrames = 0
     @Volatile private var encoderRef: OpusEncoder? = null
 
     /**
@@ -270,7 +274,20 @@ class AudioEngine(
 
     private fun shouldTransmit(level: Float): Boolean = when (mode) {
         TransmissionMode.PTT -> pttHeld
-        TransmissionMode.VAD -> level >= vadThreshold
+        TransmissionMode.VAD -> {
+            // Hangover: once over the threshold, keep transmitting for ~400 ms after the level dips,
+            // so natural gaps between words/syllables (which fall below the threshold) don't chop
+            // the audio. Without this, VAD cuts out constantly no matter how low the threshold is.
+            if (level >= vadThreshold) {
+                vadHangoverFrames = VAD_HANGOVER_FRAMES
+                true
+            } else if (vadHangoverFrames > 0) {
+                vadHangoverFrames -= 1
+                true
+            } else {
+                false
+            }
+        }
     }
 
     /** Create an initialized AudioRecord, falling back through alternate sources if one won't init. */
