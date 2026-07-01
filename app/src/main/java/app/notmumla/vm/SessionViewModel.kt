@@ -20,6 +20,10 @@ class SessionViewModel @Inject constructor(
     val localTransmitting: StateFlow<Boolean> = sessionManager.localTransmitting
     val inputLevel: StateFlow<Float> = sessionManager.inputLevel
     val availableRoutes: StateFlow<List<OutputRoute>> = sessionManager.availableRoutes
+
+    /** Live mic-level preview for the Settings meter while not connected. */
+    fun startMicPreview() = sessionManager.startMicPreview()
+    fun stopMicPreview() = sessionManager.stopMicPreview()
     val currentRoute: StateFlow<OutputRoute> = sessionManager.currentRoute
     val chat: StateFlow<List<app.notmumla.data.ChatLine>> = sessionManager.chat
     val unreadChat: StateFlow<Int> = sessionManager.unreadChat

@@ -148,13 +148,12 @@ class AudioEngine(
             AudioFormat.ENCODING_PCM_16BIT,
         ).coerceAtLeast(frame * 2 * 4)
 
-        val record = AudioRecord(
-            config.recordSource,
-            AudioConstants.SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            minBuf,
-        )
+        val record = openRecord(config.recordSource, minBuf)
+        if (record == null) {
+            android.util.Log.e("notmumla-audio", "AudioRecord failed to initialize for any source")
+            _transmitting.value = false
+            return
+        }
         // Pin the input to the built-in mic for the A2DP-HQ route (A2DP carries no microphone).
         deviceById(config.recordDeviceId)?.let { record.setPreferredDevice(it) }
 
@@ -272,6 +271,34 @@ class AudioEngine(
     private fun shouldTransmit(level: Float): Boolean = when (mode) {
         TransmissionMode.PTT -> pttHeld
         TransmissionMode.VAD -> level >= vadThreshold
+    }
+
+    /** Create an initialized AudioRecord, falling back through alternate sources if one won't init. */
+    @SuppressLint("MissingPermission") // caller ensures RECORD_AUDIO before start()
+    private fun openRecord(preferredSource: Int, minBuf: Int): AudioRecord? {
+        val sources = buildList {
+            add(preferredSource)
+            add(android.media.MediaRecorder.AudioSource.MIC)
+            add(android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+        }.distinct()
+        for (src in sources) {
+            val r = runCatching {
+                AudioRecord(
+                    src, AudioConstants.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT, minBuf,
+                )
+            }.getOrNull()
+            if (r != null && r.state == AudioRecord.STATE_INITIALIZED) {
+                if (src != preferredSource) {
+                    android.util.Log.w("notmumla-audio", "record source $preferredSource unavailable; using $src")
+                } else {
+                    android.util.Log.i("notmumla-audio", "record source $src initialized")
+                }
+                return r
+            }
+            runCatching { r?.release() }
+        }
+        return null
     }
 
     private fun applyGain(pcm: ShortArray, len: Int, gain: Float) {
