@@ -74,7 +74,7 @@ import app.notmumla.data.ThemeMode
 import app.notmumla.ui.SegmentedToggle
 import app.notmumla.ui.theme.MumbleTheme
 import app.notmumla.vm.IdentityInfo
-import kotlin.math.ln
+import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -318,14 +318,23 @@ fun SettingsScreen(
  * When [threshold] is non-null (Voice-Activated mode) it also overlays the VAD threshold marker and
  * a sensitivity slider, so the same bar doubles as VAD calibration — no second meter needed.
  */
+// Meter/threshold operate on a dB scale so quiet levels are visible and the threshold sits mid-range.
+private const val METER_MIN_DB = -60f
+private const val METER_MAX_DB = 0f
+
+/** RMS (0..1) → meter fraction (0..1) on a dB scale. */
+private fun rmsToMeterFrac(rms: Float): Float {
+    val db = if (rms > 1e-5f) 20f * log10(rms) else METER_MIN_DB
+    return ((db - METER_MIN_DB) / (METER_MAX_DB - METER_MIN_DB)).coerceIn(0f, 1f)
+}
+
 @Composable
 private fun InputLevelRow(level: Float, threshold: Float?, onThresholdChange: (Float) -> Unit) {
     val c = MumbleTheme.colors
-    val meterMax = 0.35f // RMS scale; peaks near the top risk clipping
-    val frac = (level / meterMax).coerceIn(0f, 1f)
+    val frac = rmsToMeterFrac(level)
     val barColor = when {
-        frac > 0.85f -> c.muted
-        frac > 0.6f -> c.afk
+        frac > 0.9f -> c.muted
+        frac > 0.75f -> c.afk
         else -> c.speaking
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
@@ -344,20 +353,20 @@ private fun InputLevelRow(level: Float, threshold: Float?, onThresholdChange: (F
         Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(c.surfHighest)) {
             Box(Modifier.fillMaxWidth(frac).height(14.dp).clip(RoundedCornerShape(7.dp)).background(barColor))
             if (threshold != null) {
-                val threshFrac = (threshold / meterMax).coerceIn(0f, 1f)
-                Box(Modifier.fillMaxWidth(threshFrac).height(14.dp), contentAlignment = Alignment.CenterEnd) {
+                Box(Modifier.fillMaxWidth(rmsToMeterFrac(threshold)).height(14.dp),
+                    contentAlignment = Alignment.CenterEnd) {
                     Box(Modifier.width(3.dp).height(20.dp).background(c.primary))
                 }
             }
         }
         if (threshold != null) {
-            // Logarithmic: most slider travel covers the sensitive low end (0.0004–0.15) where VAD lives.
-            val minT = 0.0004f
-            val maxT = 0.15f
-            val pos = (ln((threshold / minT).coerceAtLeast(1f)) / ln(maxT / minT)).coerceIn(0f, 1f)
+            // Slider is on the same dB scale as the meter, so the line lands where you see it.
             Slider(
-                value = pos,
-                onValueChange = { p -> onThresholdChange(minT * (maxT / minT).pow(p)) },
+                value = rmsToMeterFrac(threshold),
+                onValueChange = { p ->
+                    val db = METER_MIN_DB + p * (METER_MAX_DB - METER_MIN_DB)
+                    onThresholdChange(10f.pow(db / 20f))
+                },
                 valueRange = 0f..1f,
                 colors = SliderDefaults.colors(
                     thumbColor = c.primary, activeTrackColor = c.primary.copy(alpha = 0.4f),
