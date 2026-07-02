@@ -175,7 +175,7 @@ class AudioEngine(
         val agcEffect = if (autoGain && AutomaticGainControl.isAvailable())
             runCatching { AutomaticGainControl.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
 
-        val encoder = OpusEncoder(bitrate = bitrate)
+        var encoder = OpusEncoder(bitrate = bitrate)
         encoderRef = encoder
         // RNNoise needs its native 480-sample frame; our frame matches, so enable when requested.
         val denoiser = if (aiNoiseSuppression)
@@ -206,11 +206,21 @@ class AudioEngine(
                 _transmitting.value = active
 
                 if (active) {
-                    // On VAD open, flush the pre-roll first so the onset isn't clipped.
-                    if (!wasTransmitting && mode == TransmissionMode.VAD) {
-                        while (preroll.isNotEmpty()) {
-                            val o = encoder.encode(preroll.removeFirst(), frame)
-                            if (o != null) sendFrame(o, false)
+                    if (!wasTransmitting) {
+                        // Start each talk-spurt with a fresh encoder so its first frame is
+                        // self-contained and decodes cleanly regardless of the receiver's state —
+                        // gating a single shared encoder distorts the onset. (Create new, then
+                        // release old, so encoderRef always points at a live encoder.)
+                        val stale = encoder
+                        encoder = OpusEncoder(bitrate = bitrate)
+                        encoderRef = encoder
+                        runCatching { stale.release() }
+                        // Flush the pre-roll (the onset captured just before VAD opened).
+                        if (mode == TransmissionMode.VAD) {
+                            while (preroll.isNotEmpty()) {
+                                val o = encoder.encode(preroll.removeFirst(), frame)
+                                if (o != null) sendFrame(o, false)
+                            }
                         }
                     }
                     val opus = encoder.encode(pcm, frame)
@@ -218,9 +228,8 @@ class AudioEngine(
                     wasTransmitting = true
                 } else {
                     if (wasTransmitting) {
-                        // Send a terminator frame so listeners stop concealing.
-                        val opus = encoder.encode(ShortArray(frame), frame)
-                        if (opus != null) sendFrame(opus, true)
+                        // Empty terminator: just the flag, no decoded silence frame to click on.
+                        sendFrame(ByteArray(0), true)
                         wasTransmitting = false
                     }
                     preroll.addLast(pcm.copyOf(read))
