@@ -71,11 +71,13 @@ class AudioEngine(
         micGain: Float, vadThreshold: Float, bitrate: Int,
         noiseSuppression: Boolean, aiNoiseSuppression: Boolean, noiseReductionMix: Float,
         echoCancellation: Boolean, autoGain: Boolean, autoSensitivity: Boolean, rawMic: Boolean,
+        audioLeveling: Boolean,
     ) {
         this.micGain = micGain
         this.vadThreshold = vadThreshold
         this.autoSensitivity = autoSensitivity
         this.noiseReductionMix = noiseReductionMix
+        mixer.leveling = audioLeveling
         // NS/AEC/AGC/RNNoise and the capture source are bound when the AudioRecord/denoiser is
         // created — toggling any requires recreating the capture.
         val effectsChanged = this.noiseSuppression != noiseSuppression ||

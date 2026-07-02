@@ -171,6 +171,7 @@ class SessionManager @Inject constructor(
                 autoGain = s.autoGain,
                 autoSensitivity = s.autoSensitivity,
                 rawMic = s.rawMic,
+                audioLeveling = s.audioLeveling,
             )
         }
     }

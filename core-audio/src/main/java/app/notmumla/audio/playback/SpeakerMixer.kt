@@ -3,28 +3,38 @@ package app.notmumla.audio.playback
 import app.notmumla.audio.AudioConstants
 import app.notmumla.audio.codec.OpusDecoder
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
  * Decodes and mixes all active remote speakers into a single PCM stream. Each speaker gets its own
  * Opus decoder + jitter buffer. The playback loop calls [mixNextFrame] at the output frame cadence.
  *
- * Decoded frames are buffered per speaker so any incoming Opus frame size (10–60 ms, possibly
- * different from our 10 ms output chunk) plays back correctly without truncation.
+ * Mixing goes through a float accumulator so we can (a) apply per-speaker **leveling** — makeup gain
+ * toward a target loudness when [leveling] is on, so quiet and loud talkers come through evenly — and
+ * (b) run a soft **output limiter** so the summed mix never hard-clips when people overlap.
  */
 class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES) {
+
+    /** Normalize each incoming speaker toward a consistent loudness. */
+    @Volatile var leveling: Boolean = false
 
     private class Speaker {
         val decoder = OpusDecoder()
         val jitter = JitterBuffer()
         val decodeBuf = ShortArray(AudioConstants.MAX_FRAME_SAMPLES)
-        var pendingLen = 0   // valid samples in decodeBuf
-        var pendingPos = 0   // next unread sample in decodeBuf
+        var pendingLen = 0
+        var pendingPos = 0
         var silentFrames = 0
+        var levelGain = 1f    // current leveling makeup gain
+        var speechEnv = 0.05f // smoothed speech loudness for leveling
     }
 
     private val speakers = ConcurrentHashMap<Int, Speaker>()
+    private val mixBuf = FloatArray(frameSamples)
+    private var limiterGain = 1f
 
-    /** Currently audible speaker sessions (had audio within the last few frames). */
     val activeSessions: Set<Int> get() = speakers.keys.toSet()
 
     fun enqueue(session: Int, sequence: Long, opus: ByteArray, terminator: Boolean) {
@@ -35,42 +45,47 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
     }
 
     /**
-     * Mix one [out]-sized frame from every active speaker (16-bit PCM, summed and clipped).
-     * Returns the set of sessions that produced audio this frame (for speaking indicators).
+     * Mix one [out]-sized frame from every active speaker. Returns the set of sessions that produced
+     * audio this frame (for speaking indicators).
      */
     fun mixNextFrame(out: ShortArray): Set<Int> {
-        java.util.Arrays.fill(out, 0.toShort())
-        if (speakers.isEmpty()) return emptySet()
+        java.util.Arrays.fill(mixBuf, 0f)
+        if (speakers.isEmpty()) {
+            java.util.Arrays.fill(out, 0.toShort())
+            return emptySet()
+        }
 
         val speaking = HashSet<Int>()
         val iterator = speakers.entries.iterator()
         while (iterator.hasNext()) {
             val (session, speaker) = iterator.next()
             var produced = false
-            synchronized(speaker) { produced = mixSpeaker(speaker, out) }
+            synchronized(speaker) { produced = mixSpeaker(speaker) }
             if (produced) speaking += session
-            // Evict speakers idle for ~1.5 s to free decoders.
             if (speaker.jitter.isIdle && speaker.pendingPos >= speaker.pendingLen && speaker.silentFrames > 75) {
                 speaker.decoder.release()
                 iterator.remove()
             }
         }
+
+        applyLimiter()
+        for (i in mixBuf.indices) {
+            out[i] = mixBuf[i].roundToInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+        }
         return speaking
     }
 
-    /** Fill [out] (mixing) with this speaker's next [frameSamples], decoding as needed. */
-    private fun mixSpeaker(speaker: Speaker, out: ShortArray): Boolean {
+    /** Accumulate this speaker's next [frameSamples] into the float mix buffer (× its leveling gain). */
+    private fun mixSpeaker(speaker: Speaker): Boolean {
         var written = 0
         var produced = false
-        while (written < out.size) {
+        while (written < mixBuf.size) {
             if (speaker.pendingPos >= speaker.pendingLen && !decodeNext(speaker)) break
             val avail = speaker.pendingLen - speaker.pendingPos
             if (avail <= 0) break
-            val take = minOf(out.size - written, avail)
-            for (i in 0 until take) {
-                val sum = out[written + i] + speaker.decodeBuf[speaker.pendingPos + i]
-                out[written + i] = sum.coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-            }
+            val take = minOf(mixBuf.size - written, avail)
+            val g = speaker.levelGain
+            for (i in 0 until take) mixBuf[written + i] += speaker.decodeBuf[speaker.pendingPos + i] * g
             speaker.pendingPos += take
             written += take
             produced = true
@@ -79,21 +94,50 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
         return produced
     }
 
-    /** Decode the next frame into the speaker's buffer; returns false when nothing was produced. */
     private fun decodeNext(speaker: Speaker): Boolean {
         val opus = speaker.jitter.pull().opus ?: return false
-        // frame_size = full buffer capacity; Opus returns the actual decoded sample count, so any
-        // incoming frame size (10–60 ms) decodes fully and is played out via the pending buffer.
         val n = speaker.decoder.decode(opus, speaker.decodeBuf, speaker.decodeBuf.size)
-        return if (n > 0) {
-            speaker.pendingLen = n
-            speaker.pendingPos = 0
-            true
-        } else false
+        if (n <= 0) return false
+        speaker.pendingLen = n
+        speaker.pendingPos = 0
+        updateLeveling(speaker, n)
+        return true
+    }
+
+    /** Track the speaker's loudness and steer its makeup gain toward the target (when leveling is on). */
+    private fun updateLeveling(speaker: Speaker, n: Int) {
+        if (!leveling) { speaker.levelGain = 1f; return }
+        var sum = 0.0
+        for (i in 0 until n) { val v = speaker.decodeBuf[i] / 32768.0; sum += v * v }
+        val level = sqrt(sum / n).toFloat()
+        if (level > LEVEL_SPEECH_FLOOR) speaker.speechEnv = maxOf(level, speaker.speechEnv * LEVEL_ENV_DECAY)
+        val desired = (LEVEL_TARGET / maxOf(speaker.speechEnv, 1e-4f)).coerceIn(LEVEL_MIN_GAIN, LEVEL_MAX_GAIN)
+        speaker.levelGain += (desired - speaker.levelGain) * LEVEL_RATE
+    }
+
+    /** Soft peak limiter: immediate attack (no clipping), slow release. */
+    private fun applyLimiter() {
+        var peak = 0f
+        for (v in mixBuf) { val a = abs(v); if (a > peak) peak = a }
+        val target = if (peak > LIMIT_CEIL) LIMIT_CEIL / peak else 1f
+        limiterGain = if (target < limiterGain) target else limiterGain + (target - limiterGain) * LIMIT_RELEASE
+        if (limiterGain < 0.999f) for (i in mixBuf.indices) mixBuf[i] *= limiterGain
     }
 
     fun release() {
         speakers.values.forEach { it.decoder.release() }
         speakers.clear()
+        limiterGain = 1f
+    }
+
+    private companion object {
+        const val LEVEL_TARGET = 0.14f        // desired per-speaker RMS (0..1)
+        const val LEVEL_SPEECH_FLOOR = 0.01f  // only adapt above this (= actual speech)
+        const val LEVEL_ENV_DECAY = 0.995f
+        const val LEVEL_MIN_GAIN = 0.4f
+        const val LEVEL_MAX_GAIN = 4f         // cap boost (+12 dB) so quiet+noisy isn't amplified to hiss
+        const val LEVEL_RATE = 0.05f          // gain adaptation speed
+        const val LIMIT_CEIL = 30000f         // ~0.92 full-scale headroom
+        const val LIMIT_RELEASE = 0.05f
     }
 }

@@ -111,6 +111,7 @@ fun SettingsScreen(
     onSetNoiseReduction: (Float) -> Unit,
     onToggleEchoCancellation: (Boolean) -> Unit,
     onToggleRawMic: (Boolean) -> Unit,
+    onToggleAudioLeveling: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
     onToggleAvatars: (Boolean) -> Unit,
     onToggleKeepAwake: (Boolean) -> Unit,
@@ -312,6 +313,10 @@ fun SettingsScreen(
                         )
                     }
                 }
+                Divider()
+                ToggleRow(Icons.AutoMirrored.Filled.VolumeUp, "Audio leveling",
+                    "Even out quiet and loud talkers to a consistent volume",
+                    settings.audioLeveling, onToggleAudioLeveling)
             }
 
             SectionLabel("NOTIFICATIONS")
