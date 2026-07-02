@@ -23,11 +23,10 @@ import kotlin.math.sqrt
 /** How the mic decides when to transmit. */
 enum class TransmissionMode { PTT, VAD }
 
-// VAD hysteresis (Mumble-style): start transmitting at the user threshold, keep transmitting while
-// the level stays above a fraction of it, then a short hold. Bridges syllable gaps without dragging
-// a long noisy tail after you actually stop.
-private const val VAD_CONTINUE_RATIO = 0.5f
-private const val VAD_HOLD_FRAMES = 25 // ~250 ms (25 × 10 ms) after dropping below the low threshold
+// VAD envelope decay per 10 ms frame. The level "envelope" jumps instantly to each frame's level
+// and decays by this factor, so it smooths per-frame chatter and rides through the gaps between
+// words (natural hangover). Louder speech holds longer, quiet tails fall away quickly.
+private const val VAD_ENV_DECAY = 0.96f
 
 /**
  * Real-time voice engine: captures mic audio, Opus-encodes and ships it via [sendFrame], and mixes
@@ -54,8 +53,7 @@ class AudioEngine(
     @Volatile var echoCancellation: Boolean = true
     @Volatile var bitrate: Int = 72_000
     @Volatile private var pttHeld: Boolean = false
-    private var vadOpen = false
-    private var vadHoldFrames = 0
+    private var vadEnvelope = 0f
     @Volatile private var encoderRef: OpusEncoder? = null
 
     /**
@@ -181,6 +179,7 @@ class AudioEngine(
             runCatching { Denoiser().takeIf { it.frameSize == frame } }.getOrNull() else null
         val pcm = ShortArray(frame)
         var wasTransmitting = false
+        vadEnvelope = 0f
 
         try {
             record.startRecording()
@@ -279,21 +278,10 @@ class AudioEngine(
     private fun shouldTransmit(level: Float): Boolean = when (mode) {
         TransmissionMode.PTT -> pttHeld
         TransmissionMode.VAD -> {
-            // Hysteresis + short hold. Start at the user threshold; once open, stay open while the
-            // level holds above VAD_CONTINUE_RATIO × threshold (bridges syllable gaps); when it drops
-            // below that, hold briefly then cut — so the fading tail isn't dragged out.
-            val over = if (vadOpen) level >= vadThreshold * VAD_CONTINUE_RATIO else level >= vadThreshold
-            if (over) {
-                vadOpen = true
-                vadHoldFrames = VAD_HOLD_FRAMES
-                true
-            } else if (vadHoldFrames > 0) {
-                vadHoldFrames -= 1
-                true
-            } else {
-                vadOpen = false
-                false
-            }
+            // Peak-follow envelope: instant rise to the level, slow decay. Smooths per-frame chatter
+            // and rides through the gaps between words so speech isn't chopped.
+            vadEnvelope = maxOf(level, vadEnvelope * VAD_ENV_DECAY)
+            vadEnvelope >= vadThreshold
         }
     }
 
