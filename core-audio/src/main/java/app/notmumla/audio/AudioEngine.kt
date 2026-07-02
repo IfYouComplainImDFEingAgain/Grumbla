@@ -169,13 +169,16 @@ class AudioEngine(
         // Pin the input to the built-in mic for the A2DP-HQ route (A2DP carries no microphone).
         deviceById(config.recordDeviceId)?.let { record.setPreferredDevice(it) }
 
-        // Attach hardware noise suppression / echo cancellation when enabled and available.
+        // VOICE_COMMUNICATION already runs native NS/AEC/AGC; stacking our own effects on top just
+        // double-processes and worsens the close-mic over-suppression. Only attach effects for raw
+        // sources (e.g. the A2DP-HQ MIC route) that have no native processing.
         val sessionId = record.audioSessionId
-        val nsEffect = if (noiseSuppression && NoiseSuppressor.isAvailable())
+        val rawSource = config.recordSource != android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        val nsEffect = if (rawSource && noiseSuppression && NoiseSuppressor.isAvailable())
             runCatching { NoiseSuppressor.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
-        val aecEffect = if (echoCancellation && AcousticEchoCanceler.isAvailable())
+        val aecEffect = if (rawSource && echoCancellation && AcousticEchoCanceler.isAvailable())
             runCatching { AcousticEchoCanceler.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
-        val agcEffect = if (autoGain && AutomaticGainControl.isAvailable())
+        val agcEffect = if (rawSource && autoGain && AutomaticGainControl.isAvailable())
             runCatching { AutomaticGainControl.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
 
         var encoder = OpusEncoder(bitrate = bitrate)
