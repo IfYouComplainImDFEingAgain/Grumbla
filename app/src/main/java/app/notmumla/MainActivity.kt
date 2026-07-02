@@ -178,6 +178,7 @@ private fun AppNav() {
             val transmitting by vm.localTransmitting.collectAsState()
             val chat by vm.chat.collectAsState()
             val unread by vm.unreadChat.collectAsState()
+            val userVolumes by vm.userVolumes.collectAsState()
             val settingsVm: SettingsViewModel = hiltViewModel()
             val appSettings by settingsVm.settings.collectAsState()
             val debugStats by vm.debugStats.collectAsState()
@@ -237,7 +238,7 @@ private fun AppNav() {
                 serverName = serverName,
                 serverInitial = initialsFor(serverName).take(1),
                 connectionLabel = connectionLabel,
-                channels = state.toUiChannels(speaking),
+                channels = state.toUiChannels(speaking, userVolumes),
                 chatMessages = chat.map { it.toUiMessage() },
                 selfMuted = self?.selfMute ?: false,
                 selfDeafened = self?.selfDeaf ?: false,
@@ -262,6 +263,7 @@ private fun AppNav() {
                 onSendImage = { uri -> self?.channelId?.let { vm.sendImage(it, uri) } },
                 onChatRead = vm::markChatRead,
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                onSetUserVolume = vm::setUserVolume,
                 onDisconnect = {
                     vm.disconnect()
                     nav.popBackStack(Routes.CONNECT, inclusive = false)

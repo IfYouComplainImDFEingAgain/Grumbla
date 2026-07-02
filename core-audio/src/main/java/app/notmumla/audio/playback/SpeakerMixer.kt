@@ -32,10 +32,17 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
     }
 
     private val speakers = ConcurrentHashMap<Int, Speaker>()
+    /** Local per-user volume multipliers keyed by session (1.0 = default). */
+    private val userGains = ConcurrentHashMap<Int, Float>()
     private val mixBuf = FloatArray(frameSamples)
     private var limiterGain = 1f
 
     val activeSessions: Set<Int> get() = speakers.keys.toSet()
+
+    /** Set the local playback gain (multiplier) for a session; 1.0 clears it. */
+    fun setUserGain(session: Int, gain: Float) {
+        if (gain == 1.0f) userGains.remove(session) else userGains[session] = gain
+    }
 
     fun enqueue(session: Int, sequence: Long, opus: ByteArray, terminator: Boolean) {
         val speaker = speakers.getOrPut(session) { Speaker() }
@@ -60,7 +67,7 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
         while (iterator.hasNext()) {
             val (session, speaker) = iterator.next()
             var produced = false
-            synchronized(speaker) { produced = mixSpeaker(speaker) }
+            synchronized(speaker) { produced = mixSpeaker(speaker, userGains[session] ?: 1f) }
             if (produced) speaking += session
             if (speaker.jitter.isIdle && speaker.pendingPos >= speaker.pendingLen && speaker.silentFrames > 75) {
                 speaker.decoder.release()
@@ -75,8 +82,8 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
         return speaking
     }
 
-    /** Accumulate this speaker's next [frameSamples] into the float mix buffer (× its leveling gain). */
-    private fun mixSpeaker(speaker: Speaker): Boolean {
+    /** Accumulate this speaker's next [frameSamples] into the float mix buffer (× leveling × user gain). */
+    private fun mixSpeaker(speaker: Speaker, userGain: Float): Boolean {
         var written = 0
         var produced = false
         while (written < mixBuf.size) {
@@ -84,7 +91,7 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
             val avail = speaker.pendingLen - speaker.pendingPos
             if (avail <= 0) break
             val take = minOf(mixBuf.size - written, avail)
-            val g = speaker.levelGain
+            val g = speaker.levelGain * userGain
             for (i in 0 until take) mixBuf[written + i] += speaker.decodeBuf[speaker.pendingPos + i] * g
             speaker.pendingPos += take
             written += take

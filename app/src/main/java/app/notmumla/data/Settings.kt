@@ -70,6 +70,30 @@ class SettingsRepository @Inject constructor(
         val TTS = booleanPreferencesKey("tts_read_aloud")
         val MENTION = booleanPreferencesKey("mention_sound")
         val DEBUG = booleanPreferencesKey("debug_overlay")
+        val USER_VOLUMES = stringPreferencesKey("user_volumes") // JSON: {name: gainDb}
+    }
+
+    /** Persisted local per-user volume adjustments (username -> gain in dB). */
+    val userVolumes: Flow<Map<String, Float>> = context.dataStore.data.map { decodeVolumes(it[Keys.USER_VOLUMES]) }
+
+    suspend fun setUserVolume(name: String, db: Float) = edit { p ->
+        val map = decodeVolumes(p[Keys.USER_VOLUMES]).toMutableMap()
+        if (db == 0f) map.remove(name) else map[name] = db
+        p[Keys.USER_VOLUMES] = encodeVolumes(map)
+    }
+
+    private fun decodeVolumes(s: String?): Map<String, Float> {
+        if (s.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val o = org.json.JSONObject(s)
+            buildMap { o.keys().forEach { k -> put(k, o.getDouble(k).toFloat()) } }
+        }.getOrDefault(emptyMap())
+    }
+
+    private fun encodeVolumes(map: Map<String, Float>): String {
+        val o = org.json.JSONObject()
+        map.forEach { (k, v) -> o.put(k, v.toDouble()) }
+        return o.toString()
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->

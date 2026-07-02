@@ -17,6 +17,8 @@ data class UiUser(
     val status: UserStatus = UserStatus.ACTIVE,
     val isYou: Boolean = false,
     val isPrioritySpeaker: Boolean = false,
+    /** Local per-user volume adjustment in dB (0 = default); shown inline next to the name. */
+    val gainDb: Int = 0,
 )
 
 data class UiChannel(

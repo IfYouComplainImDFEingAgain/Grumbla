@@ -1,7 +1,11 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package app.notmumla.ui.channels
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +74,7 @@ fun ChannelsScreen(
     onSendImage: (android.net.Uri) -> Unit,
     onChatRead: () -> Unit,
     onOpenSettings: () -> Unit,
+    onSetUserVolume: (name: String, db: Float) -> Unit,
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -77,6 +82,7 @@ fun ChannelsScreen(
     androidx.compose.runtime.LaunchedEffect(tab) { if (tab == 1) onChatRead() }
     var layout by remember { mutableStateOf(ChannelLayout.TREE) }
     var quickSettings by remember { mutableStateOf(false) }
+    var volumeUser by remember { mutableStateOf<UiUser?>(null) }
 
     Box(Modifier.fillMaxSize().background(c.surface)) {
         Column(Modifier.fillMaxSize()) {
@@ -87,10 +93,13 @@ fun ChannelsScreen(
 
             Box(Modifier.weight(1f)) {
                 when (tab) {
-                    0 -> when (layout) {
-                        ChannelLayout.TREE -> TreeLayout(channels, onJoinChannel)
-                        ChannelLayout.SPEAKERS -> SpeakersLayout(channels, onJoinChannel)
-                        ChannelLayout.COMPACT -> CompactLayout(channels, onJoinChannel)
+                    0 -> {
+                        val onUserLongPress: (UiUser) -> Unit = { if (!it.isYou) volumeUser = it }
+                        when (layout) {
+                            ChannelLayout.TREE -> TreeLayout(channels, onJoinChannel, onUserLongPress)
+                            ChannelLayout.SPEAKERS -> SpeakersLayout(channels, onJoinChannel, onUserLongPress)
+                            ChannelLayout.COMPACT -> CompactLayout(channels, onJoinChannel, onUserLongPress)
+                        }
                     }
                     else -> ChatPanel(
                         onSend = onSendText,
@@ -121,7 +130,47 @@ fun ChannelsScreen(
                 onClose = { quickSettings = false },
             )
         }
+        volumeUser?.let { u ->
+            UserVolumeSheet(u, onSetUserVolume, onDismiss = { volumeUser = null })
+        }
     }
+}
+
+@Composable
+private fun UserVolumeSheet(user: UiUser, onSet: (String, Float) -> Unit, onDismiss: () -> Unit) {
+    val c = MumbleTheme.colors
+    var db by remember(user.id) { mutableStateOf(user.gainDb.toFloat()) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.surfContainer,
+        title = { Text("${user.name} · volume", fontWeight = FontWeight.Bold, color = c.onSurface) },
+        text = {
+            Column {
+                Text(
+                    if (db.toInt() == 0) "Default" else "${if (db > 0) "+" else ""}${db.roundToInt()} dB",
+                    fontFamily = MonoFamily, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                    color = c.primary,
+                )
+                androidx.compose.material3.Slider(
+                    value = db,
+                    onValueChange = { db = it },
+                    onValueChangeFinished = { onSet(user.name, db) },
+                    valueRange = -30f..15f,
+                    colors = androidx.compose.material3.SliderDefaults.colors(
+                        thumbColor = c.primary, activeTrackColor = c.primary,
+                        inactiveTrackColor = c.surfHigh,
+                    ),
+                )
+                Text("Only affects how you hear them.", fontSize = 12.sp, color = c.onSurfaceVar)
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Done") }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = { db = 0f; onSet(user.name, 0f) }) { Text("Reset") }
+        },
+    )
 }
 
 @Composable
@@ -220,7 +269,7 @@ private fun EmptyChannels() {
 /* ---------------- Tree layout ---------------- */
 
 @Composable
-private fun TreeLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
+private fun TreeLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onUserLongPress: (UiUser) -> Unit) {
     val c = MumbleTheme.colors
     if (channels.isEmpty()) { EmptyChannels(); return }
     LazyColumn(Modifier.fillMaxSize().padding(10.dp)) {
@@ -231,9 +280,20 @@ private fun TreeLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
         }
         items(channels) { channel ->
             ChannelHeaderRow(channel, onJoin)
-            channel.users.forEach { user -> UserRow(user) }
+            channel.users.forEach { user -> UserRow(user) { onUserLongPress(user) } }
         }
     }
+}
+
+/** Small inline badge showing a user's local volume adjustment, e.g. "+10" / "-3". */
+@Composable
+private fun GainBadge(gainDb: Int) {
+    val c = MumbleTheme.colors
+    Text(
+        "${if (gainDb > 0) "+" else ""}$gainDb",
+        fontFamily = MonoFamily, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+        color = if (gainDb > 0) c.speaking else c.muted,
+    )
 }
 
 @Composable
@@ -270,16 +330,19 @@ private fun ChannelHeaderRow(channel: UiChannel, onJoin: (Int) -> Unit) {
 }
 
 @Composable
-private fun UserRow(user: UiUser) {
+private fun UserRow(user: UiUser, onLongPress: () -> Unit) {
     val c = MumbleTheme.colors
     Row(
-        Modifier.fillMaxWidth().padding(start = 38.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
+        Modifier.fillMaxWidth()
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
+            .padding(start = 38.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
         Avatar(user.initials, user.avatar, size = 28.dp, dimmed = user.status == UserStatus.AFK)
         Text(user.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.onSurface,
             modifier = Modifier.weight(1f))
+        if (user.gainDb != 0) GainBadge(user.gainDb)
         when (user.status) {
             UserStatus.SPEAKING -> SpeakingBars()
             UserStatus.MUTED -> Icon(Icons.Filled.MicOff, "muted", tint = c.muted,
@@ -298,7 +361,7 @@ private fun UserRow(user: UiUser) {
 /* ---------------- Speakers layout ---------------- */
 
 @Composable
-private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
+private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onUserLongPress: (UiUser) -> Unit) {
     val c = MumbleTheme.colors
     val current = channels.firstOrNull { it.isCurrent } ?: channels.firstOrNull()
     if (current == null) { EmptyChannels(); return }
@@ -321,7 +384,7 @@ private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-                    ) { speakers.forEach { SpeakerBubble(it) } }
+                    ) { speakers.forEach { s -> SpeakerBubble(s) { onUserLongPress(s) } } }
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -333,6 +396,7 @@ private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 8.dp)
                     .clip(RoundedCornerShape(14.dp)).background(c.surfContainer)
+                    .combinedClickable(onClick = {}, onLongClick = { onUserLongPress(user) })
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -340,6 +404,7 @@ private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
                 Avatar(user.initials, user.avatar, size = 32.dp)
                 Text(user.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     color = c.onSurface, modifier = Modifier.weight(1f))
+                if (user.gainDb != 0) GainBadge(user.gainDb)
                 if (user.status == UserStatus.MUTED)
                     Icon(Icons.Filled.MicOff, "muted", tint = c.muted, modifier = Modifier.size(16.dp))
                 if (user.isYou) Text("YOU", color = c.primary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
@@ -349,20 +414,24 @@ private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
 }
 
 @Composable
-private fun SpeakerBubble(user: UiUser) {
+private fun SpeakerBubble(user: UiUser, onLongPress: () -> Unit) {
     val c = MumbleTheme.colors
-    Column(horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        Modifier.combinedClickable(onClick = {}, onLongClick = onLongPress),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Avatar(user.initials, user.avatar, size = 56.dp)
         Text(user.name.substringBefore(" "), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
             color = c.onSurface)
+        if (user.gainDb != 0) GainBadge(user.gainDb)
     }
 }
 
 /* ---------------- Compact layout ---------------- */
 
 @Composable
-private fun CompactLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
+private fun CompactLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onUserLongPress: (UiUser) -> Unit) {
     val c = MumbleTheme.colors
     if (channels.isEmpty()) { EmptyChannels(); return }
     LazyColumn(Modifier.fillMaxSize().padding(vertical = 6.dp)) {
@@ -389,7 +458,9 @@ private fun CompactLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
             }
             channel.users.forEach { user ->
                 Row(
-                    Modifier.fillMaxWidth().padding(start = 40.dp, end = 14.dp, top = 5.dp, bottom = 5.dp),
+                    Modifier.fillMaxWidth()
+                        .combinedClickable(onClick = {}, onLongClick = { onUserLongPress(user) })
+                        .padding(start = 40.dp, end = 14.dp, top = 5.dp, bottom = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -402,6 +473,7 @@ private fun CompactLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit) {
                     }
                     Text(user.name, fontSize = 13.sp, color = c.onSurface,
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (user.gainDb != 0) GainBadge(user.gainDb)
                     if (user.isYou) Text("YOU", color = c.primary, fontWeight = FontWeight.Bold,
                         fontFamily = MonoFamily, fontSize = 10.sp)
                 }
