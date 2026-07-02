@@ -13,6 +13,7 @@ import android.media.audiofx.NoiseSuppressor
 import app.notmumla.audio.codec.Denoiser
 import app.notmumla.audio.codec.OpusEncoder
 import app.notmumla.audio.playback.SpeakerMixer
+import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.audio.routing.RouteConfig
 import app.notmumla.protocol.VoiceSink
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +48,8 @@ class AudioEngine(
     @Volatile var autoGain: Boolean = true
     /** Normalized VAD threshold (RMS over full-scale). */
     @Volatile var vadThreshold: Float = 0.008f
+    /** Raw mic: capture from an unprocessed source (no native NS/AGC/echo-cancel) on phone/wired. */
+    @Volatile var rawMic: Boolean = false
     @Volatile var noiseSuppression: Boolean = true
     /** RNNoise (ML) suppression — when on, hardware [noiseSuppression] should be off (no double-NS). */
     @Volatile var aiNoiseSuppression: Boolean = false
@@ -67,21 +70,23 @@ class AudioEngine(
     fun applyAudioSettings(
         micGain: Float, vadThreshold: Float, bitrate: Int,
         noiseSuppression: Boolean, aiNoiseSuppression: Boolean, noiseReductionMix: Float,
-        echoCancellation: Boolean, autoGain: Boolean, autoSensitivity: Boolean,
+        echoCancellation: Boolean, autoGain: Boolean, autoSensitivity: Boolean, rawMic: Boolean,
     ) {
         this.micGain = micGain
         this.vadThreshold = vadThreshold
         this.autoSensitivity = autoSensitivity
         this.noiseReductionMix = noiseReductionMix
-        // NS/AEC/AGC/RNNoise are bound when the AudioRecord/denoiser is created — toggling any
-        // requires recreating the capture.
+        // NS/AEC/AGC/RNNoise and the capture source are bound when the AudioRecord/denoiser is
+        // created — toggling any requires recreating the capture.
         val effectsChanged = this.noiseSuppression != noiseSuppression ||
             this.aiNoiseSuppression != aiNoiseSuppression ||
-            this.echoCancellation != echoCancellation || this.autoGain != autoGain
+            this.echoCancellation != echoCancellation || this.autoGain != autoGain ||
+            this.rawMic != rawMic
         this.noiseSuppression = noiseSuppression
         this.aiNoiseSuppression = aiNoiseSuppression
         this.echoCancellation = echoCancellation
         this.autoGain = autoGain
+        this.rawMic = rawMic
         if (this.bitrate != bitrate) {
             this.bitrate = bitrate
             encoderRef?.setBitrate(bitrate)
@@ -160,7 +165,12 @@ class AudioEngine(
             AudioFormat.ENCODING_PCM_16BIT,
         ).coerceAtLeast(frame * 2 * 4)
 
-        val record = openRecord(config.recordSource, minBuf)
+        // Raw mic: use the unprocessed VOICE_RECOGNITION source on phone/wired (SCO must keep the
+        // comms source to capture the headset mic; A2DP-HQ already uses raw MIC).
+        val source = if (rawMic && config.route != OutputRoute.BT_HEADSET_SCO &&
+            config.recordSource == android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        ) android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION else config.recordSource
+        val record = openRecord(source, minBuf)
         if (record == null) {
             android.util.Log.e("notmumla-audio", "AudioRecord failed to initialize for any source")
             _transmitting.value = false
@@ -173,7 +183,7 @@ class AudioEngine(
         // double-processes and worsens the close-mic over-suppression. Only attach effects for raw
         // sources (e.g. the A2DP-HQ MIC route) that have no native processing.
         val sessionId = record.audioSessionId
-        val rawSource = config.recordSource != android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        val rawSource = source != android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION
         val nsEffect = if (rawSource && noiseSuppression && NoiseSuppressor.isAvailable())
             runCatching { NoiseSuppressor.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
         val aecEffect = if (rawSource && echoCancellation && AcousticEchoCanceler.isAvailable())

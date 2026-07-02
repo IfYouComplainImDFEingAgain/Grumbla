@@ -309,6 +309,7 @@ private fun AppNav() {
                 onSetNoiseSuppression = settingsVm::setNoiseSuppression,
                 onSetNoiseReduction = settingsVm::setNoiseReduction,
                 onToggleEchoCancellation = settingsVm::setEchoCancellation,
+                onToggleRawMic = settingsVm::setRawMic,
                 onSetBitrate = settingsVm::setAudioBitrate,
                 onToggleAvatars = settingsVm::setShowAvatars,
                 onToggleKeepAwake = settingsVm::setKeepScreenAwake,
