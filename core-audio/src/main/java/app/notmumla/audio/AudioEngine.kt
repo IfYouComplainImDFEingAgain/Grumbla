@@ -45,6 +45,8 @@ class AudioEngine(
 
     @Volatile var mode: TransmissionMode = TransmissionMode.PTT
     @Volatile var muted: Boolean = false
+    /** When true, capture continues (for the meter) but nothing is sent — used while Settings is open. */
+    @Volatile var suppressTransmit: Boolean = false
     @Volatile var micGain: Float = 1.0f
     /** When true, the platform AutomaticGainControl effect is attached to the mic (auto-leveling). */
     @Volatile var autoGain: Boolean = true
@@ -202,7 +204,7 @@ class AudioEngine(
                 applyGain(pcm, read, micGain)
                 val level = rms(pcm)
                 _inputLevel.value = level
-                val active = !muted && shouldTransmit(level)
+                val active = !muted && !suppressTransmit && shouldTransmit(level)
                 _transmitting.value = active
 
                 if (active) {

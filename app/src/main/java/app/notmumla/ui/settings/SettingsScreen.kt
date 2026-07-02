@@ -94,6 +94,9 @@ fun SettingsScreen(
     inputLevel: Float,
     vadCalibrating: Boolean,
     onCalibrateVad: () -> Unit,
+    micTestLabel: String,
+    micTestEnabled: Boolean,
+    onTestMic: () -> Unit,
     identity: IdentityInfo?,
     availableRoutes: List<OutputRoute>,
     currentRoute: OutputRoute,
@@ -211,6 +214,9 @@ fun SettingsScreen(
                     onThresholdChange = onSetVad,
                     calibrating = vadCalibrating,
                     onCalibrate = onCalibrateVad,
+                    testLabel = micTestLabel,
+                    testEnabled = micTestEnabled,
+                    onTest = onTestMic,
                 )
                 Divider()
                 ToggleRow(Icons.Filled.GraphicEq, "Automatic gain control",
@@ -339,6 +345,9 @@ private fun InputLevelRow(
     onThresholdChange: (Float) -> Unit,
     calibrating: Boolean = false,
     onCalibrate: () -> Unit = {},
+    testLabel: String = "Test",
+    testEnabled: Boolean = false,
+    onTest: () -> Unit = {},
 ) {
     val c = MumbleTheme.colors
     val frac = rmsToMeterFrac(level)
@@ -365,6 +374,7 @@ private fun InputLevelRow(
                 TextButton(onClick = onCalibrate, enabled = !calibrating) {
                     Text(if (calibrating) "…" else "Auto-set")
                 }
+                TextButton(onClick = onTest, enabled = testEnabled) { Text(testLabel) }
             }
         }
         Spacer(Modifier.height(10.dp))

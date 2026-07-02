@@ -5,6 +5,8 @@ import android.media.AudioManager
 import android.os.Build
 import app.notmumla.audio.AudioEngine
 import app.notmumla.audio.MicLevelMonitor
+import app.notmumla.audio.MicTestState
+import app.notmumla.audio.MicTester
 import app.notmumla.audio.TransmissionMode
 import app.notmumla.audio.routing.AudioRouter
 import app.notmumla.audio.routing.OutputRoute
@@ -45,6 +47,16 @@ class SessionManager @Inject constructor(
 
     private val micMonitor = MicLevelMonitor()
     private var previewJob: Job? = null
+    private var inSettingsAudio = false
+
+    private val micTester = MicTester()
+    private var testJob: Job? = null
+    private val _micTestState = MutableStateFlow(MicTestState.IDLE)
+    /** State of the mic self-test (record → gate → playback). */
+    val micTestState: StateFlow<MicTestState> = _micTestState.asStateFlow()
+
+    /** Whether the mic self-test can run now (only when not in a call — the engine holds the mic). */
+    val canTestMic: Boolean get() = engine == null
 
     init {
         scope.launch {
@@ -62,7 +74,11 @@ class SessionManager @Inject constructor(
      * is active (the engine already publishes the level) or the preview is already running.
      */
     fun startMicPreview() {
-        if (engine != null || previewJob != null) return
+        inSettingsAudio = true
+        // Connected: keep the engine capturing (for the meter) but stop sending to the server while
+        // Settings is open.
+        engine?.let { it.suppressTransmit = true; return }
+        if (previewJob != null) return
         micMonitor.micGain = Math.pow(10.0, settings.micGainDb / 20.0).toFloat()
         micMonitor.noiseSuppression = settings.noiseSuppression == NoiseSuppression.STANDARD
         micMonitor.aiNoiseSuppression = settings.noiseSuppression == NoiseSuppression.AI
@@ -72,6 +88,8 @@ class SessionManager @Inject constructor(
     }
 
     fun stopMicPreview() {
+        inSettingsAudio = false
+        engine?.suppressTransmit = false
         previewJob?.cancel()
         previewJob = null
         micMonitor.stop()
@@ -100,6 +118,24 @@ class SessionManager @Inject constructor(
             }
             computeVadThreshold(samples)?.let { settingsRepo.setVadSensitivity(it) }
             _vadCalibrating.value = false
+        }
+    }
+
+    /**
+     * Record a few seconds of mic audio, gate it through the current VAD settings, and play back only
+     * what would transmit — so the user can hear whether beginnings/ends of sentences get clipped.
+     * Only runs when not in a call (the engine otherwise holds the mic).
+     */
+    fun testMic() {
+        if (engine != null || testJob != null) return
+        testJob = scope.launch {
+            // Free the mic from the level preview for the duration of the test.
+            previewJob?.cancel(); previewJob = null; micMonitor.stop()
+            micTester.micGain = Math.pow(10.0, settings.micGainDb / 20.0).toFloat()
+            micTester.vadThreshold = settings.vadSensitivity
+            micTester.run { _micTestState.value = it }
+            testJob = null
+            if (inSettingsAudio && engine == null) startMicPreview() // resume the meter
         }
     }
 
