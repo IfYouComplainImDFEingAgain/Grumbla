@@ -23,7 +23,7 @@ Java_app_notmumla_audio_codec_RnnoiseNative_frameSize(JNIEnv *, jclass) {
  * on float samples in the int16 magnitude range. Returns the voice-activity probability (0..1).
  */
 JNIEXPORT jfloat JNICALL
-Java_app_notmumla_audio_codec_RnnoiseNative_process(JNIEnv *env, jclass, jlong handle, jshortArray frame) {
+Java_app_notmumla_audio_codec_RnnoiseNative_process(JNIEnv *env, jclass, jlong handle, jshortArray frame, jfloat mix) {
     auto *st = reinterpret_cast<DenoiseState *>(handle);
     if (!st) return 0.f;
     const jsize n = env->GetArrayLength(frame);
@@ -34,8 +34,10 @@ Java_app_notmumla_audio_codec_RnnoiseNative_process(JNIEnv *env, jclass, jlong h
 
     const float vad = rnnoise_process_frame(st, buf.data(), buf.data());
 
+    // Blend denoised (buf) with the original (still in s) by [mix]: 1.0 = full RNNoise, lower = gentler.
+    const float dry = 1.0f - mix;
     for (jsize i = 0; i < n; i++) {
-        long v = lrintf(buf[i]);
+        long v = lrintf(static_cast<float>(s[i]) * dry + buf[i] * mix);
         if (v > 32767) v = 32767; else if (v < -32768) v = -32768;
         s[i] = static_cast<jshort>(v);
     }

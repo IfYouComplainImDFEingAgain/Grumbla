@@ -65,6 +65,7 @@ class SessionManager @Inject constructor(
                 applyAudioSettings(s)
                 // Keep an active mic preview in sync with live setting changes (gain especially).
                 micMonitor.micGain = Math.pow(10.0, s.micGainDb / 20.0).toFloat()
+                micMonitor.noiseReductionMix = s.noiseReduction
             }
         }
     }
@@ -82,6 +83,7 @@ class SessionManager @Inject constructor(
         micMonitor.micGain = Math.pow(10.0, settings.micGainDb / 20.0).toFloat()
         micMonitor.noiseSuppression = settings.noiseSuppression == NoiseSuppression.STANDARD
         micMonitor.aiNoiseSuppression = settings.noiseSuppression == NoiseSuppression.AI
+        micMonitor.noiseReductionMix = settings.noiseReduction
         micMonitor.autoGain = settings.autoGain
         micMonitor.start()
         previewJob = scope.launch { micMonitor.level.collect { _inputLevel.value = it } }
@@ -164,6 +166,7 @@ class SessionManager @Inject constructor(
                 bitrate = s.audioBitrate,
                 noiseSuppression = s.noiseSuppression == NoiseSuppression.STANDARD,
                 aiNoiseSuppression = s.noiseSuppression == NoiseSuppression.AI,
+                noiseReductionMix = s.noiseReduction,
                 echoCancellation = s.echoCancellation,
                 autoGain = s.autoGain,
                 autoSensitivity = s.autoSensitivity,
