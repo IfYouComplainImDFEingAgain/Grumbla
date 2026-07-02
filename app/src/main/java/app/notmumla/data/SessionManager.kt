@@ -170,6 +170,7 @@ class SessionManager @Inject constructor(
                 echoCancellation = s.echoCancellation,
                 autoGain = s.autoGain,
                 autoSensitivity = s.autoSensitivity,
+                rawMic = s.rawMic,
             )
         }
     }

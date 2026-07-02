@@ -110,6 +110,7 @@ fun SettingsScreen(
     onSetNoiseSuppression: (NoiseSuppression) -> Unit,
     onSetNoiseReduction: (Float) -> Unit,
     onToggleEchoCancellation: (Boolean) -> Unit,
+    onToggleRawMic: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
     onToggleAvatars: (Boolean) -> Unit,
     onToggleKeepAwake: (Boolean) -> Unit,
@@ -267,6 +268,11 @@ fun SettingsScreen(
                 Divider()
                 ToggleRow(Icons.Filled.GraphicEq, "Echo cancellation", null,
                     settings.echoCancellation, onToggleEchoCancellation)
+                Divider()
+                ToggleRow(Icons.Filled.Mic, "Raw microphone",
+                    "Skip the phone's voice processing — natural, no over-cancelling. No echo " +
+                        "cancellation, so best with headphones.",
+                    settings.rawMic, onToggleRawMic)
             }
 
             SectionLabel("AUDIO · OUTPUT")
