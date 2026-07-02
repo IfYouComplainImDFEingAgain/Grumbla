@@ -108,6 +108,7 @@ fun SettingsScreen(
     onSetMicGainDb: (Float) -> Unit,
     onToggleAutoGain: (Boolean) -> Unit,
     onSetNoiseSuppression: (NoiseSuppression) -> Unit,
+    onSetNoiseReduction: (Float) -> Unit,
     onToggleEchoCancellation: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
     onToggleAvatars: (Boolean) -> Unit,
@@ -254,6 +255,13 @@ fun SettingsScreen(
                         options = listOf("Off", "Standard", "AI"),
                         selectedIndex = settings.noiseSuppression.ordinal,
                         onSelect = { onSetNoiseSuppression(NoiseSuppression.entries[it]) },
+                    )
+                }
+                if (settings.noiseSuppression == NoiseSuppression.AI) {
+                    Divider()
+                    SliderRow(
+                        "Noise reduction strength", "${(settings.noiseReduction * 100).roundToInt()}%",
+                        value = settings.noiseReduction, range = 0f..1f, onChange = onSetNoiseReduction,
                     )
                 }
                 Divider()

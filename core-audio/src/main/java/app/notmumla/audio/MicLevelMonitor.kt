@@ -23,6 +23,7 @@ class MicLevelMonitor {
     @Volatile var micGain: Float = 1.0f
     @Volatile var noiseSuppression: Boolean = true
     @Volatile var aiNoiseSuppression: Boolean = false
+    @Volatile var noiseReductionMix: Float = 1.0f
     @Volatile var autoGain: Boolean = true
 
     private val _level = MutableStateFlow(0f)
@@ -73,7 +74,7 @@ class MicLevelMonitor {
                 }
                 if (read < frame) continue
 
-                denoiser?.process(pcm)
+                denoiser?.let { it.mix = noiseReductionMix; it.process(pcm) }
                 val gain = micGain
                 if (gain != 1.0f) {
                     for (i in 0 until read) {

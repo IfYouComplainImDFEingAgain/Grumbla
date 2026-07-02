@@ -50,6 +50,8 @@ class AudioEngine(
     @Volatile var noiseSuppression: Boolean = true
     /** RNNoise (ML) suppression — when on, hardware [noiseSuppression] should be off (no double-NS). */
     @Volatile var aiNoiseSuppression: Boolean = false
+    /** RNNoise strength: 1.0 = full, lower blends in the original to soften over-suppression. */
+    @Volatile var noiseReductionMix: Float = 1.0f
     @Volatile var echoCancellation: Boolean = true
     @Volatile var bitrate: Int = 72_000
     /** When true (default), VAD sensitivity adapts continuously; [vadThreshold] is ignored. */
@@ -64,12 +66,13 @@ class AudioEngine(
      */
     fun applyAudioSettings(
         micGain: Float, vadThreshold: Float, bitrate: Int,
-        noiseSuppression: Boolean, aiNoiseSuppression: Boolean,
+        noiseSuppression: Boolean, aiNoiseSuppression: Boolean, noiseReductionMix: Float,
         echoCancellation: Boolean, autoGain: Boolean, autoSensitivity: Boolean,
     ) {
         this.micGain = micGain
         this.vadThreshold = vadThreshold
         this.autoSensitivity = autoSensitivity
+        this.noiseReductionMix = noiseReductionMix
         // NS/AEC/AGC/RNNoise are bound when the AudioRecord/denoiser is created — toggling any
         // requires recreating the capture.
         val effectsChanged = this.noiseSuppression != noiseSuppression ||
@@ -198,7 +201,7 @@ class AudioEngine(
                 }
                 if (read < frame) continue
 
-                denoiser?.process(pcm)
+                denoiser?.let { it.mix = noiseReductionMix; it.process(pcm) }
                 applyGain(pcm, read, micGain)
                 val level = rms(pcm)
                 _inputLevel.value = level

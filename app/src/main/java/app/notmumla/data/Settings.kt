@@ -30,6 +30,7 @@ data class AppSettings(
     val vadSensitivity: Float = 0.008f, // normalized RMS threshold (used when autoSensitivity=false)
     val autoSensitivity: Boolean = true, // continuously adapt the VAD threshold
     val noiseSuppression: NoiseSuppression = NoiseSuppression.OFF,
+    val noiseReduction: Float = 0.7f, // RNNoise (AI) strength 0..1; <1 softens over-suppression
     val echoCancellation: Boolean = true,
     val audioBitrate: Int = 72_000,
     val showAvatars: Boolean = true,
@@ -56,6 +57,7 @@ class SettingsRepository @Inject constructor(
         val AUTO_SENS = booleanPreferencesKey("auto_sensitivity")
         val NS_MODE = stringPreferencesKey("ns_mode")
         val NS = booleanPreferencesKey("noise_suppression") // legacy (boolean) — for migration only
+        val NS_STRENGTH = floatPreferencesKey("ns_strength")
         val AEC = booleanPreferencesKey("echo_cancellation")
         val BITRATE = intPreferencesKey("audio_bitrate")
         val AVATARS = booleanPreferencesKey("show_avatars")
@@ -78,6 +80,7 @@ class SettingsRepository @Inject constructor(
             noiseSuppression = p[Keys.NS_MODE]?.let { runCatching { NoiseSuppression.valueOf(it) }.getOrNull() }
                 ?: p[Keys.NS]?.let { if (it) NoiseSuppression.STANDARD else NoiseSuppression.OFF }
                 ?: NoiseSuppression.OFF,
+            noiseReduction = p[Keys.NS_STRENGTH] ?: 0.7f,
             echoCancellation = p[Keys.AEC] ?: true,
             audioBitrate = p[Keys.BITRATE] ?: 72_000,
             showAvatars = p[Keys.AVATARS] ?: true,
@@ -97,6 +100,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setVadSensitivity(v: Float) = edit { it[Keys.VAD] = v }
     suspend fun setAutoSensitivity(v: Boolean) = edit { it[Keys.AUTO_SENS] = v }
     suspend fun setNoiseSuppression(v: NoiseSuppression) = edit { it[Keys.NS_MODE] = v.name }
+    suspend fun setNoiseReduction(v: Float) = edit { it[Keys.NS_STRENGTH] = v }
     suspend fun setEchoCancellation(v: Boolean) = edit { it[Keys.AEC] = v }
     suspend fun setAudioBitrate(v: Int) = edit { it[Keys.BITRATE] = v }
     suspend fun setShowAvatars(v: Boolean) = edit { it[Keys.AVATARS] = v }
