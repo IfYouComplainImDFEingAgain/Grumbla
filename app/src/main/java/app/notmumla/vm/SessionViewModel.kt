@@ -24,6 +24,10 @@ class SessionViewModel @Inject constructor(
     /** Live mic-level preview for the Settings meter while not connected. */
     fun startMicPreview() = sessionManager.startMicPreview()
     fun stopMicPreview() = sessionManager.stopMicPreview()
+
+    /** Auto-calibrate the VAD threshold from a few seconds of the user talking. */
+    val vadCalibrating: StateFlow<Boolean> = sessionManager.vadCalibrating
+    fun calibrateVad() = sessionManager.calibrateVad()
     val currentRoute: StateFlow<OutputRoute> = sessionManager.currentRoute
     val chat: StateFlow<List<app.notmumla.data.ChatLine>> = sessionManager.chat
     val unreadChat: StateFlow<Int> = sessionManager.unreadChat

@@ -275,6 +275,7 @@ private fun AppNav() {
             val current by session.currentRoute.collectAsState()
             val settings by settingsVm.settings.collectAsState()
             val inputLevel by session.inputLevel.collectAsState()
+            val vadCalibrating by session.vadCalibrating.collectAsState()
             val identity by settingsVm.identity.collectAsState()
             // Run a live mic-level preview while Settings is open (no-op if already in a call).
             DisposableEffect(Unit) {
@@ -285,6 +286,8 @@ private fun AppNav() {
                 onBack = { nav.popBackStack() },
                 settings = settings,
                 inputLevel = inputLevel,
+                vadCalibrating = vadCalibrating,
+                onCalibrateVad = session::calibrateVad,
                 identity = identity,
                 availableRoutes = routes,
                 currentRoute = current,

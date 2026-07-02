@@ -78,6 +78,46 @@ class SessionManager @Inject constructor(
         if (engine == null) _inputLevel.value = 0f
     }
 
+    private val _vadCalibrating = MutableStateFlow(false)
+    /** True while auto-calibration is sampling the mic. */
+    val vadCalibrating: StateFlow<Boolean> = _vadCalibrating.asStateFlow()
+    private var calibrateJob: Job? = null
+
+    /**
+     * Auto-set the VAD threshold: sample the live input level for a few seconds while the user talks
+     * normally, then place the threshold between the noise floor (quiet pauses) and speech level.
+     */
+    fun calibrateVad() {
+        if (_vadCalibrating.value) return
+        calibrateJob = scope.launch {
+            _vadCalibrating.value = true
+            if (engine == null) startMicPreview() // ensure we're capturing
+            val samples = ArrayList<Float>(200)
+            val end = System.currentTimeMillis() + CALIBRATION_MS
+            while (System.currentTimeMillis() < end) {
+                samples.add(_inputLevel.value)
+                kotlinx.coroutines.delay(30)
+            }
+            computeVadThreshold(samples)?.let { settingsRepo.setVadSensitivity(it) }
+            _vadCalibrating.value = false
+        }
+    }
+
+    /** Returns a threshold from sampled levels, or null if no real input was captured. */
+    private fun computeVadThreshold(samples: List<Float>): Float? {
+        val valid = samples.filter { it > 0.00002f }.sorted()
+        if (valid.size < 10) return null // nothing captured (no permission / silence)
+        fun pct(p: Double) = valid[(valid.size * p).toInt().coerceIn(0, valid.size - 1)]
+        val noise = pct(0.2)   // quiet moments / pauses
+        val speech = pct(0.85) // active speech
+        val noiseDb = 20f * kotlin.math.log10(maxOf(noise, 1e-5f))
+        val speechDb = 20f * kotlin.math.log10(maxOf(speech, 1e-5f))
+        // Sit ~1/3 above the noise floor toward speech; if the user barely spoke, stay 6 dB above noise.
+        val threshDb = if (speechDb - noiseDb < 6f) noiseDb + 6f
+        else noiseDb + (speechDb - noiseDb) * 0.35f
+        return Math.pow(10.0, (threshDb / 20f).toDouble()).toFloat().coerceIn(0.0005f, 0.15f)
+    }
+
     private fun applyAudioSettings(s: AppSettings) {
         engine?.let { eng ->
             eng.mode = s.transmissionMode
@@ -382,5 +422,6 @@ class SessionManager @Inject constructor(
 
     private companion object {
         const val MAX_RECONNECT_ATTEMPTS = 8
+        const val CALIBRATION_MS = 5000L
     }
 }
