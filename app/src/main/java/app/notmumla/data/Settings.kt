@@ -28,7 +28,7 @@ data class AppSettings(
     val micGainDb: Float = 0f,
     val autoGain: Boolean = true,
     val vadSensitivity: Float = 0.008f, // normalized RMS threshold
-    val noiseSuppression: NoiseSuppression = NoiseSuppression.STANDARD,
+    val noiseSuppression: NoiseSuppression = NoiseSuppression.OFF,
     val echoCancellation: Boolean = true,
     val audioBitrate: Int = 72_000,
     val showAvatars: Boolean = true,
@@ -74,7 +74,7 @@ class SettingsRepository @Inject constructor(
             vadSensitivity = p[Keys.VAD] ?: 0.008f,
             noiseSuppression = p[Keys.NS_MODE]?.let { runCatching { NoiseSuppression.valueOf(it) }.getOrNull() }
                 ?: p[Keys.NS]?.let { if (it) NoiseSuppression.STANDARD else NoiseSuppression.OFF }
-                ?: NoiseSuppression.STANDARD,
+                ?: NoiseSuppression.OFF,
             echoCancellation = p[Keys.AEC] ?: true,
             audioBitrate = p[Keys.BITRATE] ?: 72_000,
             showAvatars = p[Keys.AVATARS] ?: true,
