@@ -33,7 +33,7 @@ data class AppSettings(
     val noiseReduction: Float = 0.7f, // RNNoise (AI) strength 0..1; <1 softens over-suppression
     val rawMic: Boolean = false, // capture from an unprocessed source (no native NS/AGC/echo-cancel)
     val echoCancellation: Boolean = true,
-    val audioBitrate: Int = 72_000,
+    val audioBitrate: Int = 128_000,
     val showAvatars: Boolean = true,
     val keepScreenAwake: Boolean = false,
     val autoReconnect: Boolean = true,
@@ -85,7 +85,7 @@ class SettingsRepository @Inject constructor(
             noiseReduction = p[Keys.NS_STRENGTH] ?: 0.7f,
             rawMic = p[Keys.RAW_MIC] ?: false,
             echoCancellation = p[Keys.AEC] ?: true,
-            audioBitrate = p[Keys.BITRATE] ?: 72_000,
+            audioBitrate = p[Keys.BITRATE] ?: 128_000,
             showAvatars = p[Keys.AVATARS] ?: true,
             keepScreenAwake = p[Keys.AWAKE] ?: false,
             autoReconnect = p[Keys.RECONNECT] ?: true,
