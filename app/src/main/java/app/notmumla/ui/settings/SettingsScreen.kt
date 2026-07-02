@@ -92,6 +92,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     settings: AppSettings,
     inputLevel: Float,
+    vadCalibrating: Boolean,
+    onCalibrateVad: () -> Unit,
     identity: IdentityInfo?,
     availableRoutes: List<OutputRoute>,
     currentRoute: OutputRoute,
@@ -207,6 +209,8 @@ fun SettingsScreen(
                     level = inputLevel,
                     threshold = if (settings.transmissionMode == TransmissionMode.VAD) settings.vadSensitivity else null,
                     onThresholdChange = onSetVad,
+                    calibrating = vadCalibrating,
+                    onCalibrate = onCalibrateVad,
                 )
                 Divider()
                 ToggleRow(Icons.Filled.GraphicEq, "Automatic gain control",
@@ -329,7 +333,13 @@ private fun rmsToMeterFrac(rms: Float): Float {
 }
 
 @Composable
-private fun InputLevelRow(level: Float, threshold: Float?, onThresholdChange: (Float) -> Unit) {
+private fun InputLevelRow(
+    level: Float,
+    threshold: Float?,
+    onThresholdChange: (Float) -> Unit,
+    calibrating: Boolean = false,
+    onCalibrate: () -> Unit = {},
+) {
     val c = MumbleTheme.colors
     val frac = rmsToMeterFrac(level)
     val barColor = when {
@@ -343,10 +353,18 @@ private fun InputLevelRow(level: Float, threshold: Float?, onThresholdChange: (F
             Column(Modifier.weight(1f)) {
                 Text("Input level", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
                 Text(
-                    if (threshold == null) "Live, after noise filtering & gain — keep peaks out of the red"
-                    else "Live, after filtering — set the line just above the bar's resting level",
-                    fontSize = 12.sp, color = c.onSurfaceVar,
+                    when {
+                        threshold == null -> "Live, after noise filtering & gain — keep peaks out of the red"
+                        calibrating -> "Listening… talk normally for a few seconds"
+                        else -> "Live, after filtering — set the line just above the bar's resting level"
+                    },
+                    fontSize = 12.sp, color = if (calibrating) c.primary else c.onSurfaceVar,
                 )
+            }
+            if (threshold != null) {
+                TextButton(onClick = onCalibrate, enabled = !calibrating) {
+                    Text(if (calibrating) "…" else "Auto-set")
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
