@@ -28,6 +28,9 @@ enum class TransmissionMode { PTT, VAD }
 // words (natural hangover). Louder speech holds longer, quiet tails fall away quickly.
 private const val VAD_ENV_DECAY = 0.96f
 
+/** Frames of audio kept before VAD opens, flushed on open so speech onsets aren't clipped (~60 ms). */
+private const val VAD_PREROLL_FRAMES = 6
+
 /**
  * Real-time voice engine: captures mic audio, Opus-encodes and ships it via [sendFrame], and mixes
  * inbound speakers to the speaker/headset. Implements [VoiceSink] for inbound frames.
@@ -180,6 +183,9 @@ class AudioEngine(
         val pcm = ShortArray(frame)
         var wasTransmitting = false
         vadEnvelope = 0f
+        // Rolling buffer of recent frames captured while not transmitting; flushed when VAD opens so
+        // the speech onset (which is below threshold) isn't clipped.
+        val preroll = ArrayDeque<ShortArray>()
 
         try {
             record.startRecording()
@@ -200,14 +206,25 @@ class AudioEngine(
                 _transmitting.value = active
 
                 if (active) {
+                    // On VAD open, flush the pre-roll first so the onset isn't clipped.
+                    if (!wasTransmitting && mode == TransmissionMode.VAD) {
+                        while (preroll.isNotEmpty()) {
+                            val o = encoder.encode(preroll.removeFirst(), frame)
+                            if (o != null) sendFrame(o, false)
+                        }
+                    }
                     val opus = encoder.encode(pcm, frame)
                     if (opus != null) sendFrame(opus, false)
                     wasTransmitting = true
-                } else if (wasTransmitting) {
-                    // Send a terminator frame so listeners stop concealing.
-                    val opus = encoder.encode(ShortArray(frame), frame)
-                    if (opus != null) sendFrame(opus, true)
-                    wasTransmitting = false
+                } else {
+                    if (wasTransmitting) {
+                        // Send a terminator frame so listeners stop concealing.
+                        val opus = encoder.encode(ShortArray(frame), frame)
+                        if (opus != null) sendFrame(opus, true)
+                        wasTransmitting = false
+                    }
+                    preroll.addLast(pcm.copyOf(read))
+                    while (preroll.size > VAD_PREROLL_FRAMES) preroll.removeFirst()
                 }
             }
         } catch (_: Throwable) {
