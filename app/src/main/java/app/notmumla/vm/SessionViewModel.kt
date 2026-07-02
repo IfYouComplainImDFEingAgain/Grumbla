@@ -28,6 +28,11 @@ class SessionViewModel @Inject constructor(
     /** Auto-calibrate the VAD threshold from a few seconds of the user talking. */
     val vadCalibrating: StateFlow<Boolean> = sessionManager.vadCalibrating
     fun calibrateVad() = sessionManager.calibrateVad()
+
+    /** Mic self-test: record → VAD-gate → play back. Only when not in a call. */
+    val micTestState: StateFlow<app.notmumla.audio.MicTestState> = sessionManager.micTestState
+    val canTestMic: Boolean get() = sessionManager.canTestMic
+    fun testMic() = sessionManager.testMic()
     val currentRoute: StateFlow<OutputRoute> = sessionManager.currentRoute
     val chat: StateFlow<List<app.notmumla.data.ChatLine>> = sessionManager.chat
     val unreadChat: StateFlow<Int> = sessionManager.unreadChat
