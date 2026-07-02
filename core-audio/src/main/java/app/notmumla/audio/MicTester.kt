@@ -22,6 +22,7 @@ class MicTester {
 
     @Volatile var micGain: Float = 1.0f
     @Volatile var vadThreshold: Float = 0.008f
+    @Volatile var autoSensitivity: Boolean = true
 
     /** Run record → gate → play, reporting state via [onState]. Suspends until playback finishes. */
     @SuppressLint("MissingPermission") // caller ensures RECORD_AUDIO
@@ -77,13 +78,13 @@ class MicTester {
         return frames
     }
 
-    /** Mark which frames a VAD would transmit (envelope + threshold + pre-roll), silencing the rest. */
+    /** Mark which frames a VAD would transmit (same AdaptiveVad + pre-roll as a call), silencing the rest. */
     private fun gate(frames: List<ShortArray>, frame: Int): List<ShortArray> {
         val tx = BooleanArray(frames.size)
-        var env = 0f
+        val vad = AdaptiveVad()
+        val manual = if (autoSensitivity) null else vadThreshold
         for (i in frames.indices) {
-            env = maxOf(rms(frames[i]), env * VAD_ENV_DECAY)
-            tx[i] = env >= vadThreshold
+            tx[i] = vad.shouldTransmit(rms(frames[i]), manual)
         }
         // Pre-roll: at each rising edge, also send the preceding frames (the onset below threshold).
         for (i in frames.indices) {
@@ -152,7 +153,6 @@ class MicTester {
 
     private companion object {
         const val TEST_FRAMES = 400   // ~4 s at 10 ms/frame
-        const val VAD_ENV_DECAY = 0.96f
         const val VAD_PREROLL_FRAMES = 6
     }
 }

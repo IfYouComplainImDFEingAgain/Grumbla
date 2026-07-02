@@ -23,11 +23,6 @@ import kotlin.math.sqrt
 /** How the mic decides when to transmit. */
 enum class TransmissionMode { PTT, VAD }
 
-// VAD envelope decay per 10 ms frame. The level "envelope" jumps instantly to each frame's level
-// and decays by this factor, so it smooths per-frame chatter and rides through the gaps between
-// words (natural hangover). Louder speech holds longer, quiet tails fall away quickly.
-private const val VAD_ENV_DECAY = 0.96f
-
 /** Frames of audio kept before VAD opens, flushed on open so speech onsets aren't clipped (~60 ms). */
 private const val VAD_PREROLL_FRAMES = 6
 
@@ -57,8 +52,10 @@ class AudioEngine(
     @Volatile var aiNoiseSuppression: Boolean = false
     @Volatile var echoCancellation: Boolean = true
     @Volatile var bitrate: Int = 72_000
+    /** When true (default), VAD sensitivity adapts continuously; [vadThreshold] is ignored. */
+    @Volatile var autoSensitivity: Boolean = true
     @Volatile private var pttHeld: Boolean = false
-    private var vadEnvelope = 0f
+    private val vad = AdaptiveVad()
     @Volatile private var encoderRef: OpusEncoder? = null
 
     /**
@@ -68,10 +65,11 @@ class AudioEngine(
     fun applyAudioSettings(
         micGain: Float, vadThreshold: Float, bitrate: Int,
         noiseSuppression: Boolean, aiNoiseSuppression: Boolean,
-        echoCancellation: Boolean, autoGain: Boolean,
+        echoCancellation: Boolean, autoGain: Boolean, autoSensitivity: Boolean,
     ) {
         this.micGain = micGain
         this.vadThreshold = vadThreshold
+        this.autoSensitivity = autoSensitivity
         // NS/AEC/AGC/RNNoise are bound when the AudioRecord/denoiser is created — toggling any
         // requires recreating the capture.
         val effectsChanged = this.noiseSuppression != noiseSuppression ||
@@ -184,7 +182,7 @@ class AudioEngine(
             runCatching { Denoiser().takeIf { it.frameSize == frame } }.getOrNull() else null
         val pcm = ShortArray(frame)
         var wasTransmitting = false
-        vadEnvelope = 0f
+        vad.reset()
         // Rolling buffer of recent frames captured while not transmitting; flushed when VAD opens so
         // the speech onset (which is below threshold) isn't clipped.
         val preroll = ArrayDeque<ShortArray>()
@@ -305,12 +303,7 @@ class AudioEngine(
 
     private fun shouldTransmit(level: Float): Boolean = when (mode) {
         TransmissionMode.PTT -> pttHeld
-        TransmissionMode.VAD -> {
-            // Peak-follow envelope: instant rise to the level, slow decay. Smooths per-frame chatter
-            // and rides through the gaps between words so speech isn't chopped.
-            vadEnvelope = maxOf(level, vadEnvelope * VAD_ENV_DECAY)
-            vadEnvelope >= vadThreshold
-        }
+        TransmissionMode.VAD -> vad.shouldTransmit(level, if (autoSensitivity) null else vadThreshold)
     }
 
     /** Create an initialized AudioRecord, falling back through alternate sources if one won't init. */

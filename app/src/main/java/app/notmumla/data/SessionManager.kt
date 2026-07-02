@@ -133,6 +133,7 @@ class SessionManager @Inject constructor(
             previewJob?.cancel(); previewJob = null; micMonitor.stop()
             micTester.micGain = Math.pow(10.0, settings.micGainDb / 20.0).toFloat()
             micTester.vadThreshold = settings.vadSensitivity
+            micTester.autoSensitivity = settings.autoSensitivity
             micTester.run { _micTestState.value = it }
             testJob = null
             if (inSettingsAudio && engine == null) startMicPreview() // resume the meter
@@ -165,6 +166,7 @@ class SessionManager @Inject constructor(
                 aiNoiseSuppression = s.noiseSuppression == NoiseSuppression.AI,
                 echoCancellation = s.echoCancellation,
                 autoGain = s.autoGain,
+                autoSensitivity = s.autoSensitivity,
             )
         }
     }
