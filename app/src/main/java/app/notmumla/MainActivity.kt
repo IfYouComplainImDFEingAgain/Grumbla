@@ -303,6 +303,7 @@ private fun AppNav() {
                 onSetTheme = settingsVm::setTheme,
                 onSetTransmission = settingsVm::setTransmissionMode,
                 onSetVad = settingsVm::setVadSensitivity,
+                onToggleAutoSensitivity = settingsVm::setAutoSensitivity,
                 onSetMicGainDb = settingsVm::setMicGainDb,
                 onToggleAutoGain = settingsVm::setAutoGain,
                 onSetNoiseSuppression = settingsVm::setNoiseSuppression,

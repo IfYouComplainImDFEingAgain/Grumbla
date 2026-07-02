@@ -104,6 +104,7 @@ fun SettingsScreen(
     onSetTheme: (ThemeMode) -> Unit,
     onSetTransmission: (TransmissionMode) -> Unit,
     onSetVad: (Float) -> Unit,
+    onToggleAutoSensitivity: (Boolean) -> Unit,
     onSetMicGainDb: (Float) -> Unit,
     onToggleAutoGain: (Boolean) -> Unit,
     onSetNoiseSuppression: (NoiseSuppression) -> Unit,
@@ -207,11 +208,18 @@ fun SettingsScreen(
                         onSelect = { onSetTransmission(if (it == 0) TransmissionMode.PTT else TransmissionMode.VAD) },
                     )
                 }
+                val vad = settings.transmissionMode == TransmissionMode.VAD
+                if (vad) {
+                    Divider()
+                    ToggleRow(Icons.Filled.GraphicEq, "Automatic sensitivity",
+                        "Adjusts to your mic & room", settings.autoSensitivity, onToggleAutoSensitivity)
+                }
                 Divider()
                 InputLevelRow(
                     level = inputLevel,
-                    threshold = if (settings.transmissionMode == TransmissionMode.VAD) settings.vadSensitivity else null,
+                    manualThreshold = if (vad && !settings.autoSensitivity) settings.vadSensitivity else null,
                     onThresholdChange = onSetVad,
+                    vadMode = vad,
                     calibrating = vadCalibrating,
                     onCalibrate = onCalibrateVad,
                     testLabel = micTestLabel,
@@ -341,8 +349,9 @@ private fun rmsToMeterFrac(rms: Float): Float {
 @Composable
 private fun InputLevelRow(
     level: Float,
-    threshold: Float?,
+    manualThreshold: Float?, // non-null → manual VAD: show threshold marker + slider + Auto-set
     onThresholdChange: (Float) -> Unit,
+    vadMode: Boolean = false, // VAD active (auto or manual): show Test + the right hint
     calibrating: Boolean = false,
     onCalibrate: () -> Unit = {},
     testLabel: String = "Test",
@@ -363,34 +372,37 @@ private fun InputLevelRow(
                 Text("Input level", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
                 Text(
                     when {
-                        threshold == null -> "Live, after noise filtering & gain — keep peaks out of the red"
+                        !vadMode -> "Live, after noise filtering & gain — keep peaks out of the red"
                         calibrating -> "Listening… talk normally for a few seconds"
+                        manualThreshold == null -> "Automatic — sensitivity adapts to your mic & room"
                         else -> "Live, after filtering — set the line just above the bar's resting level"
                     },
                     fontSize = 12.sp, color = if (calibrating) c.primary else c.onSurfaceVar,
                 )
             }
-            if (threshold != null) {
+            if (manualThreshold != null) {
                 TextButton(onClick = onCalibrate, enabled = !calibrating) {
                     Text(if (calibrating) "…" else "Auto-set")
                 }
+            }
+            if (vadMode) {
                 TextButton(onClick = onTest, enabled = testEnabled) { Text(testLabel) }
             }
         }
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(c.surfHighest)) {
             Box(Modifier.fillMaxWidth(frac).height(14.dp).clip(RoundedCornerShape(7.dp)).background(barColor))
-            if (threshold != null) {
-                Box(Modifier.fillMaxWidth(rmsToMeterFrac(threshold)).height(14.dp),
+            if (manualThreshold != null) {
+                Box(Modifier.fillMaxWidth(rmsToMeterFrac(manualThreshold)).height(14.dp),
                     contentAlignment = Alignment.CenterEnd) {
                     Box(Modifier.width(3.dp).height(20.dp).background(c.primary))
                 }
             }
         }
-        if (threshold != null) {
+        if (manualThreshold != null) {
             // Slider is on the same dB scale as the meter, so the line lands where you see it.
             Slider(
-                value = rmsToMeterFrac(threshold),
+                value = rmsToMeterFrac(manualThreshold),
                 onValueChange = { p ->
                     val db = METER_MIN_DB + p * (METER_MAX_DB - METER_MIN_DB)
                     onThresholdChange(10f.pow(db / 20f))

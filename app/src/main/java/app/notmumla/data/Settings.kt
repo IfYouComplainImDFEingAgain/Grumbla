@@ -27,7 +27,8 @@ data class AppSettings(
     val transmissionMode: TransmissionMode = TransmissionMode.PTT,
     val micGainDb: Float = 0f,
     val autoGain: Boolean = true,
-    val vadSensitivity: Float = 0.008f, // normalized RMS threshold
+    val vadSensitivity: Float = 0.008f, // normalized RMS threshold (used when autoSensitivity=false)
+    val autoSensitivity: Boolean = true, // continuously adapt the VAD threshold
     val noiseSuppression: NoiseSuppression = NoiseSuppression.OFF,
     val echoCancellation: Boolean = true,
     val audioBitrate: Int = 72_000,
@@ -52,6 +53,7 @@ class SettingsRepository @Inject constructor(
         val MIC_GAIN = floatPreferencesKey("mic_gain_db")
         val AUTO_GAIN = booleanPreferencesKey("auto_gain")
         val VAD = floatPreferencesKey("vad_sensitivity")
+        val AUTO_SENS = booleanPreferencesKey("auto_sensitivity")
         val NS_MODE = stringPreferencesKey("ns_mode")
         val NS = booleanPreferencesKey("noise_suppression") // legacy (boolean) — for migration only
         val AEC = booleanPreferencesKey("echo_cancellation")
@@ -72,6 +74,7 @@ class SettingsRepository @Inject constructor(
             micGainDb = p[Keys.MIC_GAIN] ?: 0f,
             autoGain = p[Keys.AUTO_GAIN] ?: true,
             vadSensitivity = p[Keys.VAD] ?: 0.008f,
+            autoSensitivity = p[Keys.AUTO_SENS] ?: true,
             noiseSuppression = p[Keys.NS_MODE]?.let { runCatching { NoiseSuppression.valueOf(it) }.getOrNull() }
                 ?: p[Keys.NS]?.let { if (it) NoiseSuppression.STANDARD else NoiseSuppression.OFF }
                 ?: NoiseSuppression.OFF,
@@ -92,6 +95,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setMicGainDb(v: Float) = edit { it[Keys.MIC_GAIN] = v }
     suspend fun setAutoGain(v: Boolean) = edit { it[Keys.AUTO_GAIN] = v }
     suspend fun setVadSensitivity(v: Float) = edit { it[Keys.VAD] = v }
+    suspend fun setAutoSensitivity(v: Boolean) = edit { it[Keys.AUTO_SENS] = v }
     suspend fun setNoiseSuppression(v: NoiseSuppression) = edit { it[Keys.NS_MODE] = v.name }
     suspend fun setEchoCancellation(v: Boolean) = edit { it[Keys.AEC] = v }
     suspend fun setAudioBitrate(v: Int) = edit { it[Keys.BITRATE] = v }
