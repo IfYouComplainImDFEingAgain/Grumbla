@@ -18,6 +18,8 @@ class SessionViewModel @Inject constructor(
     val speakingSessions: StateFlow<Set<Int>> = sessionManager.speakingSessions
     val localTransmitting: StateFlow<Boolean> = sessionManager.localTransmitting
     val inputLevel: StateFlow<Float> = sessionManager.inputLevel
+    val userVolumes: StateFlow<Map<String, Float>> = sessionManager.userVolumes
+    fun setUserVolume(name: String, db: Float) = sessionManager.setUserVolume(name, db)
     val debugStats: StateFlow<app.notmumla.protocol.model.AudioDebugStats> = sessionManager.debugStats
     val availableRoutes: StateFlow<List<OutputRoute>> = sessionManager.availableRoutes
 

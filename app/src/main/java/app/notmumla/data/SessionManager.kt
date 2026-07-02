@@ -58,6 +58,10 @@ class SessionManager @Inject constructor(
     /** Whether the mic self-test can run now (only when not in a call — the engine holds the mic). */
     val canTestMic: Boolean get() = engine == null
 
+    private val _userVolumes = MutableStateFlow<Map<String, Float>>(emptyMap())
+    /** Local per-user volume adjustments (username -> gain in dB). */
+    val userVolumes: StateFlow<Map<String, Float>> = _userVolumes.asStateFlow()
+
     init {
         scope.launch {
             settingsRepo.settings.collect { s ->
@@ -67,6 +71,28 @@ class SessionManager @Inject constructor(
                 micMonitor.micGain = Math.pow(10.0, s.micGainDb / 20.0).toFloat()
                 micMonitor.noiseReductionMix = s.noiseReduction
             }
+        }
+        scope.launch {
+            settingsRepo.userVolumes.collect { _userVolumes.value = it; applyUserVolumes() }
+        }
+    }
+
+    /** Push each connected user's saved volume into the mixer (by session). No-op if not connected. */
+    private fun applyUserVolumes() {
+        val eng = engine ?: return
+        val vols = _userVolumes.value
+        _state.value.users.values.forEach { u ->
+            val db = vols[u.name] ?: 0f
+            eng.setUserVolume(u.session, Math.pow(10.0, db / 20.0).toFloat())
+        }
+    }
+
+    /** Set a user's local volume in dB (0 = default); persisted by name and applied live. */
+    fun setUserVolume(name: String, db: Float) {
+        scope.launch { settingsRepo.setUserVolume(name, db) }
+        val mult = Math.pow(10.0, db / 20.0).toFloat()
+        engine?.let { eng ->
+            _state.value.users.values.filter { it.name == name }.forEach { eng.setUserVolume(it.session, mult) }
         }
     }
 
@@ -281,6 +307,7 @@ class SessionManager @Inject constructor(
                     scheduleReconnect(server)
                 } else {
                     _state.value = s
+                    applyUserVolumes() // new/moved users pick up their saved volume
                     if (s.connection == ConnectionState.CONNECTED) onConnected(server, s)
                 }
             }

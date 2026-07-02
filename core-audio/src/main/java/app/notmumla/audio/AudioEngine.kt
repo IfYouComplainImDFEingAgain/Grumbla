@@ -144,6 +144,9 @@ class AudioEngine(
     /** PTT button down/up. */
     fun setPttHeld(held: Boolean) { pttHeld = held }
 
+    /** Local playback gain (multiplier) for a remote speaker session. */
+    fun setUserVolume(session: Int, gain: Float) = mixer.setUserGain(session, gain)
+
     /** Apply a new capture/playback route, restarting the audio threads if running. */
     fun applyRoute(config: RouteConfig) {
         routeConfig = config

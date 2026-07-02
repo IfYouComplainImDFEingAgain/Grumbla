@@ -26,7 +26,7 @@ fun initialsFor(name: String): String {
     }
 }
 
-private fun User.toUiUser(isYou: Boolean, speaking: Boolean): UiUser = UiUser(
+private fun User.toUiUser(isYou: Boolean, speaking: Boolean, gainDb: Int): UiUser = UiUser(
     id = session,
     name = name,
     initials = initialsFor(name),
@@ -38,6 +38,7 @@ private fun User.toUiUser(isYou: Boolean, speaking: Boolean): UiUser = UiUser(
     },
     isYou = isYou,
     isPrioritySpeaker = prioritySpeaker,
+    gainDb = gainDb,
 )
 
 /**
@@ -45,7 +46,10 @@ private fun User.toUiUser(isYou: Boolean, speaking: Boolean): UiUser = UiUser(
  * which the Tree/Speakers/Compact layouts already know how to render.
  * [speakingSessions] marks users currently transmitting (populated once audio lands in M3).
  */
-fun ServerState.toUiChannels(speakingSessions: Set<Int> = emptySet()): List<UiChannel> {
+fun ServerState.toUiChannels(
+    speakingSessions: Set<Int> = emptySet(),
+    userVolumes: Map<String, Float> = emptyMap(),
+): List<UiChannel> {
     val selfSession = sessionId
     val currentChannel = self?.channelId
     val out = mutableListOf<UiChannel>()
@@ -53,7 +57,11 @@ fun ServerState.toUiChannels(speakingSessions: Set<Int> = emptySet()): List<UiCh
     fun walk(parentId: Int?, depth: Int) {
         for (channel in childChannels(parentId)) {
             val users = usersInChannel(channel.id).map {
-                it.toUiUser(isYou = it.session == selfSession, speaking = it.session in speakingSessions)
+                it.toUiUser(
+                    isYou = it.session == selfSession,
+                    speaking = it.session in speakingSessions,
+                    gainDb = userVolumes[it.name]?.let { db -> Math.round(db) } ?: 0,
+                )
             }
             out += UiChannel(
                 id = channel.id,
