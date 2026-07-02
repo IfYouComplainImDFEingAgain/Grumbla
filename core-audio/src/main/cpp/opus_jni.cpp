@@ -17,13 +17,17 @@ JNIEXPORT jlong JNICALL
 Java_app_notmumla_audio_codec_OpusNative_encoderCreate(
         JNIEnv *env, jclass, jint sampleRate, jint channels, jint bitrate) {
     int err = 0;
-    OpusEncoder *enc = opus_encoder_create(sampleRate, channels, OPUS_APPLICATION_VOIP, &err);
+    // AUDIO (full-band, fuller/natural) for normal bitrates; VOIP only at very low bitrates where
+    // it stays intelligible. The engine recreates the encoder each talk-spurt, so this adapts live.
+    const int application = bitrate < 32000 ? OPUS_APPLICATION_VOIP : OPUS_APPLICATION_AUDIO;
+    OpusEncoder *enc = opus_encoder_create(sampleRate, channels, application, &err);
     if (err != OPUS_OK || enc == nullptr) return 0;
     opus_encoder_ctl(enc, OPUS_SET_BITRATE(bitrate));
     opus_encoder_ctl(enc, OPUS_SET_VBR(1));
-    opus_encoder_ctl(enc, OPUS_SET_VBR_CONSTRAINT(0));        // unconstrained VBR -> best quality
-    opus_encoder_ctl(enc, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
-    opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY(10));           // max quality
+    opus_encoder_ctl(enc, OPUS_SET_VBR_CONSTRAINT(0));                    // unconstrained VBR -> best quality
+    opus_encoder_ctl(enc, OPUS_SET_SIGNAL(OPUS_AUTO));                    // detect speech vs. music
+    opus_encoder_ctl(enc, OPUS_SET_MAX_BANDWIDTH(OPUS_BANDWIDTH_FULLBAND)); // full 20 kHz band
+    opus_encoder_ctl(enc, OPUS_SET_COMPLEXITY(10));                       // max quality
     // No inband FEC: audio rides the reliable TCP tunnel (no loss), so FEC would only waste bits.
     return reinterpret_cast<jlong>(enc);
 }

@@ -85,7 +85,7 @@ private fun OutputRoute.displayLabel(): String = when (this) {
     OutputRoute.BT_HEADSET_SCO -> "Bluetooth headset"
 }
 
-private val BITRATES = listOf(16_000, 24_000, 40_000, 72_000, 96_000)
+private val BITRATES = listOf(16_000, 24_000, 40_000, 72_000, 96_000, 128_000, 160_000)
 
 @Composable
 fun SettingsScreen(

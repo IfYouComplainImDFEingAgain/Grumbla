@@ -8,7 +8,7 @@ import app.notmumla.audio.AudioConstants
 class OpusEncoder(
     sampleRate: Int = AudioConstants.SAMPLE_RATE,
     channels: Int = AudioConstants.CHANNELS,
-    bitrate: Int = 72_000,
+    bitrate: Int = 128_000,
 ) {
     private var handle = OpusNative.encoderCreate(sampleRate, channels, bitrate)
     private val scratch = ByteArray(MAX_PACKET)

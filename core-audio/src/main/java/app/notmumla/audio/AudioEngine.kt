@@ -56,7 +56,7 @@ class AudioEngine(
     /** RNNoise strength: 1.0 = full, lower blends in the original to soften over-suppression. */
     @Volatile var noiseReductionMix: Float = 1.0f
     @Volatile var echoCancellation: Boolean = true
-    @Volatile var bitrate: Int = 72_000
+    @Volatile var bitrate: Int = 128_000
     /** When true (default), VAD sensitivity adapts continuously; [vadThreshold] is ignored. */
     @Volatile var autoSensitivity: Boolean = true
     @Volatile private var pttHeld: Boolean = false
