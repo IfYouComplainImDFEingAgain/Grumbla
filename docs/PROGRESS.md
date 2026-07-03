@@ -48,14 +48,43 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - [x] Auto-reconnect with exponential backoff (1s..15s, 8 tries), rejoins last channel.
 - [x] Mention notifications (sound/vibrate gated by setting) + TTS read-aloud; licenses screen.
 
-### Added since M5
-- **AI noise suppression (RNNoise)**: Settings → Noise suppression is now Off / Standard (hardware) /
-  AI. AI runs the vendored RNNoise model (`librnnoisejni.so`, ~165KB) on each 480-sample mic frame
-  before Opus encode; disables hardware NS when on. Also: automatic gain control via the platform
-  AGC effect (the earlier software AGC was removed — it fought the VAD); a live VAD calibration meter.
-- **Audio quality**: default Opus bitrate 40→72 kbit/s, inband FEC (encoder) + FEC-aware jitter
-  buffer (lost frames recovered from the next packet), unconstrained VBR, and a mixer that buffers
-  decoded PCM so any incoming frame size plays back without truncation.
+### Audio pipeline overhaul (post-M5, extensive — supersedes earlier audio notes)
+- **Capture routing (fixes "quiet" + "distorted" mic)**: phone/wired now use `VOICE_COMMUNICATION` +
+  `MODE_IN_COMMUNICATION` with output explicitly routed to the built-in loudspeaker (like Mumble/Mumla)
+  — clean, hardware-leveled, loud. We do **not** stack our own NS/AEC/AGC effects on the comms source
+  (native already runs them; stacking over-suppressed close-mic). See CLAUDE.md gotcha #5 (rewritten).
+- **Raw microphone toggle** (Audio·Input): switches phone/wired to the unprocessed `VOICE_RECOGNITION`
+  source — natural/full-band, no native NS/AGC/echo-cancel (best with headphones; SCO/A2DP unaffected).
+- **Codec quality**: `OPUS_APPLICATION_AUDIO` (VOIP only < 32k) + `OPUS_AUTO` signal + forced fullband,
+  complexity 10, unconstrained VBR, **no FEC** (pointless over the reliable TCP tunnel). Default bitrate
+  **128 kbit/s**; presets to 160k. Each talk-spurt starts with a **fresh encoder** (self-contained first
+  frame) and ends with an **empty terminator** — fixes onset/tail transition distortion.
+- **Playback**: `JitterBuffer` plays in **arrival order** (no sequence-gap concealment/FEC — Mumble
+  `frame_number` is a 10 ms-unit timestamp, so a peer's 20 ms frames aren't false "loss"). `SpeakerMixer`
+  mixes through a **float accumulator** with a **soft output limiter** (no hard-clip on overlap),
+  optional **per-speaker leveling** (Settings→Output "Audio leveling"), and **per-user volume**.
+- **Per-user volume**: long-press a user → dB slider (persisted by name, JSON in DataStore), inline
+  `+10`/`-3` badge, applied as a per-session mixer multiplier. Local only.
+- **VAD**: `AdaptiveVad` (shared by engine + mic test) — peak-follow envelope + **continuous automatic
+  sensitivity** (tracks noise floor & speech level, sets threshold ~⅓ up in dB; toggle, default on) or
+  a manual dB threshold; **pre-roll** (~60 ms) so onsets aren't clipped. Manual **Auto-set** calibration
+  samples ~5 s of speech; **Test mic** records→VAD-gates→plays back so the user hears what transmits.
+- **Noise suppression**: Off (default) / Standard (hardware) / AI (RNNoise `librnnoisejni.so`), with a
+  **strength** wet/dry mix so RNNoise isn't over-aggressive. Live **input-level meter** on a dB scale
+  with a mic **preview in Settings** (works disconnected; transmission is suppressed while Settings open).
+- **16 KB page alignment** for native libs (`-Wl,-z,max-page-size=16384` + `useLegacyPackaging=false`)
+  for Android 15+/Pixel 10.
+- **Debug overlay** (Settings→Developer): live TX/RX packet rate + totals + est. loss on the voice screen.
+
+### Other additions since M5
+- **Identity certificate dialog**: tap shows CN + validity + SHA-256/SHA-1; **regenerate / import (.p12)
+  / export** actions (crypto off-thread, SAF file pickers).
+- **Voice notification**: ongoing FGS notification with **Mute / Deafen / Disconnect** actions +
+  status; requests `POST_NOTIFICATIONS` at runtime (Android 13+) so it isn't silently hidden.
+- **Screen-off survival**: `VoiceService` holds a partial wake lock + low-latency Wi-Fi lock for the call.
+- **Settings from Connect screen**; **Permissions** section (mic/notifications/bluetooth + battery
+  "Run in background") that re-requests missing grants; **transmission mode is Settings-only** (removed
+  the in-call VoiceBar/QuickSettings toggle so it doesn't override the persisted setting).
 - **Server-cert-changed dialog**: TOFU now surfaces a "trust new certificate?" prompt when a
   server's cert changes (instead of failing silently); auto-reconnect skips cert mismatches.
 - **Background**: requests battery-optimization exemption on connect so the foreground voice
@@ -93,9 +122,10 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 ---
 
 ## Backlog / not-yet-wired (post-M5)
-- **Still visual-only settings**: master volume, priority speaker, join/leave sounds,
-  channel-layout persistence (engine gets the persisted transmission mode, but the in-call
-  VoiceBar/QuickSettings layout+mode toggles remain ephemeral and aren't persisted).
+- **Still visual-only settings**: master volume, priority speaker, join/leave sounds. Channel-**layout**
+  selection (VoiceBar/QuickSettings) is still ephemeral (not persisted); transmission mode **is** now
+  persisted (Settings-only). Per-user volume is done; a true one-tap **local mute** entry (vs. −30 dB)
+  is still a quick add.
 - **UDP + OCB2** voice path — currently audio uses only the TCP tunnel (works everywhere). Add a UDP
   socket with OCB2-AES128 (`CryptSetup` already arrives) + UDP-ping-based switch for lower latency.
   (`:core-protocol/udp/` is the home for this; port `~/git/mumble/src/crypto/CryptStateOCB2.cpp`.)
