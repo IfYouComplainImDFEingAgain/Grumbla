@@ -10,7 +10,9 @@ import app.notmumla.protocol.model.User
 import app.notmumla.protocol.net.ControlChannel
 import app.notmumla.protocol.net.TofuTrustManager
 import app.notmumla.protocol.proto.MessageType
+import app.notmumla.protocol.udp.CryptStateOCB2
 import app.notmumla.protocol.udp.LegacyAudio
+import app.notmumla.protocol.udp.UdpTransport
 import MumbleUDP.Audio as UdpAudio
 import okio.ByteString.Companion.toByteString
 import kotlinx.coroutines.CoroutineScope
@@ -27,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import MumbleProto.Authenticate
 import MumbleProto.ChannelRemove
+import MumbleProto.CryptSetup
 import MumbleProto.ChannelState
 import MumbleProto.Ping
 import MumbleProto.Reject
@@ -88,6 +91,12 @@ class MumbleClient(
     private var pingJob: Job? = null
     private var statsJob: Job? = null
 
+    // Direct UDP voice path (OCB2-encrypted). Falls back to the TCP tunnel until UDP is confirmed.
+    private val crypt = CryptStateOCB2()
+    @Volatile private var udp: UdpTransport? = null
+    @Volatile private var udpActive = false
+    @Volatile private var connectConfig: ConnectConfig? = null
+
     // Live audio packet stats (debug overlay).
     private val _stats = MutableStateFlow(AudioDebugStats())
     val stats: StateFlow<AudioDebugStats> = _stats.asStateFlow()
@@ -111,6 +120,7 @@ class MumbleClient(
         get() = serverVersion < PROTOBUF_VERSION || clientVersion < PROTOBUF_VERSION
 
     fun connect(config: ConnectConfig) {
+        connectConfig = config
         _state.update { ServerState(connection = ConnectionState.CONNECTING) }
         readJob = scope.launch(Dispatchers.IO) {
             val trust = TofuTrustManager(config.pinnedServerSha256)
@@ -149,6 +159,9 @@ class MumbleClient(
             } finally {
                 pingJob?.cancel()
                 statsJob?.cancel()
+                udp?.stop()
+                udp = null
+                udpActive = false
             }
         }
     }
@@ -169,6 +182,7 @@ class MumbleClient(
                     sent = tx, received = rx, lost = rxLost,
                     sentPerSec = ((tx - lastTx) * 2).toInt(),
                     recvPerSec = ((rx - lastRx) * 2).toInt(),
+                    udp = udpActive,
                 )
                 lastTx = tx
                 lastRx = rx
@@ -242,10 +256,11 @@ class MumbleClient(
             MessageType.TEXT_MESSAGE -> onText(TextMessage.ADAPTER.decode(frame.payload))
             MessageType.REJECT -> onReject(Reject.ADAPTER.decode(frame.payload))
             MessageType.SERVER_CONFIG -> onServerConfig(ServerConfig.ADAPTER.decode(frame.payload))
+            MessageType.CRYPT_SETUP -> onCryptSetup(CryptSetup.ADAPTER.decode(frame.payload))
             // The UDPTunnel message body is the raw UDP audio packet, not a protobuf wrapper.
             MessageType.UDP_TUNNEL -> onAudioPacket(frame.payload)
             MessageType.PING -> Unit
-            else -> Unit // unhandled types (ACL, stats, codec, crypt-setup) — wired up in later milestones
+            else -> Unit // unhandled types (ACL, stats, codec) — wired up in later milestones
         }
     }
 
@@ -337,6 +352,43 @@ class MumbleClient(
     }
 
     /**
+     * Handle the server's CryptSetup for the UDP voice channel. A full setup (key + both nonces)
+     * initializes OCB2 and starts the direct UDP path; a lone server_nonce is a decrypt-IV resync;
+     * an empty message is the server asking for our encrypt IV, which we echo back.
+     */
+    private fun onCryptSetup(msg: CryptSetup) {
+        val key = msg.key?.toByteArray()
+        val clientNonce = msg.client_nonce?.toByteArray()
+        val serverNonce = msg.server_nonce?.toByteArray()
+        when {
+            key != null && clientNonce != null && serverNonce != null -> {
+                if (crypt.setKey(key, clientNonce, serverNonce)) startUdp()
+            }
+            serverNonce != null -> crypt.setDecryptIv(serverNonce)
+            else -> runCatching {
+                channel?.send(CryptSetup(client_nonce = crypt.encryptIvCopy().toByteString()))
+            }
+        }
+    }
+
+    /** Bring up the UDP transport (idempotent). Failure is silent — audio stays on the TCP tunnel. */
+    private fun startUdp() {
+        if (udp != null) return
+        val config = connectConfig ?: return
+        val transport = UdpTransport(
+            host = config.host,
+            port = config.port,
+            crypt = crypt,
+            scope = scope,
+            legacy = useLegacyAudio,
+            onAudio = { onAudioPacket(it) },
+            onActiveChanged = { udpActive = it },
+        )
+        udp = transport
+        runCatching { transport.start() }.onFailure { udp = null }
+    }
+
+    /**
      * Parse a raw inbound UDP audio packet and surface it. Auto-detects the format by the header
      * byte: protobuf Audio = `0x00`; legacy Opus = top 3 bits == 4 (`0x80`..`0x9F`).
      */
@@ -388,7 +440,13 @@ class MumbleClient(
         audioSequence += 1
         if (terminator) audioSequence = 0
         txCount++
-        runCatching { channel?.sendRaw(MessageType.UDP_TUNNEL.id, packet) }
+        // Prefer the direct UDP path once it's confirmed; otherwise tunnel over the TCP control channel.
+        val transport = udp
+        if (transport != null && udpActive) {
+            transport.sendAudio(packet)
+        } else {
+            runCatching { channel?.sendRaw(MessageType.UDP_TUNNEL.id, packet) }
+        }
     }
 
     private fun onReject(msg: Reject) {
@@ -425,6 +483,9 @@ class MumbleClient(
     fun disconnect() {
         readJob?.cancel()
         pingJob?.cancel()
+        udp?.stop()
+        udp = null
+        udpActive = false
         channel?.close()
         channel = null
         _state.update { ServerState(connection = ConnectionState.DISCONNECTED) }

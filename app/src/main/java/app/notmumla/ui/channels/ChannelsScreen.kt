@@ -186,6 +186,8 @@ private fun DebugOverlay(stats: app.notmumla.protocol.model.AudioDebugStats) {
         Text("RX ${stats.recvPerSec}/s·${stats.received}", fontSize = 12.sp, fontFamily = mono, color = c.primary)
         Text("LOST ${stats.lost}", fontSize = 12.sp, fontFamily = mono,
             color = if (stats.lost > 0) c.muted else c.onSurfaceVar)
+        Text(if (stats.udp) "UDP" else "TCP", fontSize = 12.sp, fontFamily = mono,
+            color = if (stats.udp) c.speaking else c.onSurfaceVar)
     }
 }
 
