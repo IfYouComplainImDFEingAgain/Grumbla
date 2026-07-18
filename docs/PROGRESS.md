@@ -121,14 +121,30 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 
 ---
 
+### Direct UDP voice path + OCB2 (post-M5)
+- **OCB-AES128** (`udp/CryptStateOCB2.kt`) — pure-Kotlin port of the reference `CryptStateOCB2.cpp`
+  (`AES/ECB/NoPadding` block primitive, byte-wise GF(2^128) doubling, per-packet IV counter, the
+  reorder/loss IV-resync window + replay history, and the 2019 counter-cryptanalysis guards). Unit
+  tested (`CryptStateOCB2Test`): roundtrip across lengths, IV advance, tamper/replay rejection,
+  mild-reorder tolerance, digital-silence bit-flip.
+- **`udp/UdpTransport.kt`** — `DatagramSocket` to the same host:port, encrypts audio + periodic pings,
+  decrypts inbound datagrams back into raw audio packets (same bytes as a UDPTunnel body). Any packet
+  that decrypts marks the path **active**; if nothing decrypts for ~8 s it drops back to the TCP tunnel
+  but keeps pinging so it can recover. Protobuf (≥1.5) and legacy (<1.5) ping/audio framing both handled.
+- **`MumbleClient` wiring** — handles `CryptSetup` (full key+nonces → init+start UDP; lone server_nonce
+  → decrypt-IV resync; empty → echo our encrypt IV), routes `sendAudio` over UDP when active (else TCP),
+  feeds inbound UDP through the existing `onAudioPacket` parser. Transparent to the app/audio engine.
+  Debug overlay shows **UDP/TCP**. Automatic with TCP fallback (no setting — fallback covers blocked UDP).
+- **Verified**: `UdpVoiceIntegrationTest` against the real 1.5 server — the encrypted ping echo
+  round-trips (proving byte-exact OCB2 both directions) and audio loops back over UDP (target 31).
+
 ## Backlog / not-yet-wired (post-M5)
 - **Still visual-only settings**: master volume, priority speaker, join/leave sounds. Channel-**layout**
   selection (VoiceBar/QuickSettings) is still ephemeral (not persisted); transmission mode **is** now
   persisted (Settings-only). Per-user volume is done; a true one-tap **local mute** entry (vs. −30 dB)
   is still a quick add.
-- **UDP + OCB2** voice path — currently audio uses only the TCP tunnel (works everywhere). Add a UDP
-  socket with OCB2-AES128 (`CryptSetup` already arrives) + UDP-ping-based switch for lower latency.
-  (`:core-protocol/udp/` is the home for this; port `~/git/mumble/src/crypto/CryptStateOCB2.cpp`.)
+- **UDP + OCB2** voice path — ✅ done (see the section above). Remaining polish: decode ping echoes for
+  a real RTT/jitter readout, and surface UDP↔TCP transitions in the UI beyond the debug overlay.
 - **Server-cert TOFU on first connect** still auto-accepts/pins silently; only a *changed* cert now
   prompts. A first-connect "trust this fingerprint?" prompt is still not shown.
 - **Profile editing** (display name/avatar/comment), blocked users, local mute list (designed, stubbed).

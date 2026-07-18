@@ -38,6 +38,8 @@ data class AudioDebugStats(
     val lost: Long = 0,
     val sentPerSec: Int = 0,
     val recvPerSec: Int = 0,
+    /** True while voice is flowing over the direct UDP path; false when tunneled over TCP. */
+    val udp: Boolean = false,
 )
 
 data class ServerState(
