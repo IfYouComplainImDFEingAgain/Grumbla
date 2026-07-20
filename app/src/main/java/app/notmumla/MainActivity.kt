@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -26,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.notmumla.protocol.model.ConnectionState
 import app.notmumla.ui.channels.ChannelsScreen
@@ -149,6 +151,23 @@ private fun CertChangedDialog(fingerprint: String, onTrust: () -> Unit, onCancel
 @Composable
 private fun AppNav() {
     val nav = rememberNavController()
+
+    // The live session lives in an application-scoped singleton, so it outlives this UI. If the UI
+    // ever drifts back to the Connect screen while a session is still up — Back pressed on an older
+    // build's path, the Activity/back-stack recreated onto the start destination after the app was
+    // backgrounded, a stale pop — return to the session screen so the voice UI is never stranded.
+    val sessionVm: SessionViewModel = hiltViewModel()
+    val sessionState by sessionVm.state.collectAsState()
+    val sessionActive = sessionState.connection == ConnectionState.CONNECTING ||
+        sessionState.connection == ConnectionState.HANDSHAKING ||
+        sessionState.connection == ConnectionState.CONNECTED
+    val currentRoute = nav.currentBackStackEntryAsState().value?.destination?.route
+    LaunchedEffect(sessionActive, currentRoute) {
+        if (sessionActive && currentRoute == Routes.CONNECT) {
+            nav.navigate(Routes.CHANNELS) { launchSingleTop = true }
+        }
+    }
+
     NavHost(navController = nav, startDestination = Routes.CONNECT) {
         composable(Routes.CONNECT) {
             val vm: ConnectViewModel = hiltViewModel()
@@ -185,6 +204,12 @@ private fun AppNav() {
 
             // Request microphone access; start the audio engine once granted.
             val ctx = LocalContext.current
+
+            // On the live session screen, Back backgrounds the app (like a call app) instead of
+            // popping to Connect — the session keeps running and is reachable again via the
+            // launcher, recents, or the foreground-service notification. Leaving is the explicit
+            // Disconnect button. (Disposed with this route, so Back works normally elsewhere.)
+            BackHandler { (ctx as? android.app.Activity)?.moveTaskToBack(true) }
             val micPermission = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestPermission(),
             ) { granted -> if (granted) vm.onAudioPermissionGranted() }
