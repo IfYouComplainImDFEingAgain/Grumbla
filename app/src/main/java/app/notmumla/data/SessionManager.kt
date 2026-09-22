@@ -487,7 +487,9 @@ class SessionManager @Inject constructor(
         _inputLevel.value = 0f
         _debugStats.value = app.notmumla.protocol.model.AudioDebugStats()
         _state.value = ServerState(connection = toState)
-        app.notmumla.service.VoiceService.stop(context)
+        // Keep the FGS alive across reconnects: a microphone FGS restarted while the screen is off
+        // is denied mic access (while-in-use rule), so reconnecting would leave us silently muted.
+        if (toState == ConnectionState.DISCONNECTED) app.notmumla.service.VoiceService.stop(context)
     }
 
     private companion object {
