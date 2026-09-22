@@ -15,6 +15,7 @@ import app.notmumla.protocol.udp.LegacyAudio
 import app.notmumla.protocol.udp.OpusPacket
 import app.notmumla.protocol.udp.UdpTransport
 import MumbleUDP.Audio as UdpAudio
+import com.squareup.wire.Message
 import okio.ByteString.Companion.toByteString
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -111,6 +112,9 @@ class MumbleClient(
     @Volatile var voiceSink: VoiceSink? = null
 
     private var audioSequence = 0L
+
+    /** Serial lane for UI-initiated control sends (preserves mute→deafen / join ordering). */
+    private val sendDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     /** The server's protocol version, learned from its Version message during the handshake. */
     @Volatile private var serverVersion: Long = Long.MAX_VALUE
@@ -469,29 +473,30 @@ class MumbleClient(
         events.tryEmit(Event.Rejected(reason))
     }
 
+    /**
+     * Send a control message from any thread (typically the UI). A socket write on the main thread
+     * throws NetworkOnMainThreadException *after* the frame is buffered, so it was silently swallowed
+     * and only went out with the next keep-alive ping seconds later. One serial lane keeps ordering.
+     */
+    private fun sendAsync(message: Message<*, *>) {
+        scope.launch(sendDispatcher) { runCatching { channel?.send(message) } }
+    }
+
     /** Move our user to [channelId]. */
     fun joinChannel(channelId: Int) {
         val session = _state.value.sessionId ?: return
-        runCatching {
-            channel?.send(UserState(session = session, channel_id = channelId))
-        }
+        sendAsync(UserState(session = session, channel_id = channelId))
     }
 
     /** Set our self-mute / self-deafen flags. */
     fun setSelfMuteDeaf(selfMute: Boolean, selfDeaf: Boolean) {
         val session = _state.value.sessionId ?: return
-        runCatching {
-            channel?.send(UserState(session = session, self_mute = selfMute, self_deaf = selfDeaf))
-        }
+        sendAsync(UserState(session = session, self_mute = selfMute, self_deaf = selfDeaf))
     }
 
-    /** Send a text message to [channelId]. Dispatched off the caller (UI) thread. */
+    /** Send a text message to [channelId]. */
     fun sendText(channelId: Int, message: String) {
-        scope.launch(Dispatchers.IO) {
-            runCatching {
-                channel?.send(TextMessage(message = message, channel_id = listOf(channelId)))
-            }
-        }
+        sendAsync(TextMessage(message = message, channel_id = listOf(channelId)))
     }
 
     fun disconnect() {
