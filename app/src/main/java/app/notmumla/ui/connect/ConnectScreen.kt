@@ -79,7 +79,7 @@ fun ConnectScreen(
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Filled.Mic, null, tint = c.onPrimary, modifier = Modifier.size(40.dp)) }
             Spacer(Modifier.height(16.dp))
-            Text("Mumble", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = c.onSurface)
+            Text("Grumbla", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = c.onSurface)
             Text("Connect to a voice server", fontSize = 14.sp, color = c.onSurfaceVar,
                 modifier = Modifier.padding(top = 4.dp))
         }

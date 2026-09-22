@@ -71,7 +71,7 @@ class MumbleClient(
     private val identity: Identity,
     private val scope: CoroutineScope,
     private val clientVersion: Long = encodeVersion(1, 5, 0),
-    private val clientName: String = "not-mumla",
+    private val clientName: String = "Grumbla",
     private val osName: String = "Android",
     private val osVersion: String = "",
 ) {
