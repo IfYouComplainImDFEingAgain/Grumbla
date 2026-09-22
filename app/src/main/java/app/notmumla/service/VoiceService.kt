@@ -152,7 +152,7 @@ class VoiceService : Service() {
 
     private fun buildNotification(): Notification {
         val state = sessionManager.state.value
-        val label = sessionManager.serverLabel.value.ifBlank { "Mumble" }
+        val label = sessionManager.serverLabel.value.ifBlank { "Grumbla" }
         val muted = state.self?.selfMute ?: false
         val deafened = state.self?.selfDeaf ?: false
         val statusText = when (state.connection) {
