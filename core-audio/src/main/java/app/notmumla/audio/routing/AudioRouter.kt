@@ -39,11 +39,10 @@ class AudioRouter(context: Context) {
     fun startObserving() = am.registerAudioDeviceCallback(deviceCallback, handler)
     fun stopObserving() = am.unregisterAudioDeviceCallback(deviceCallback)
 
+    // Fallback / auto-switch policy lives with the owner (it depends on user settings and has to
+    // re-apply the engine too), so this only publishes what's selectable.
     private fun refresh() {
-        val routes = computeAvailable()
-        _available.value = routes
-        // If the active route's hardware disappeared, fall back to the phone.
-        if (_current.value !in routes) select(OutputRoute.PHONE_SPEAKER)
+        _available.value = computeAvailable()
     }
 
     private fun outputs() = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
@@ -146,6 +145,14 @@ class AudioRouter(context: Context) {
         am.mode = config.audioMode
         _current.value = route
         return config
+    }
+
+    /**
+     * Record [route] as the one to use without touching AudioManager — for when no call is active,
+     * so choosing a route doesn't leave the system stuck in MODE_IN_COMMUNICATION.
+     */
+    fun markCurrent(route: OutputRoute) {
+        _current.value = route
     }
 
     /** Restore the system audio mode/routing after a call ends. */

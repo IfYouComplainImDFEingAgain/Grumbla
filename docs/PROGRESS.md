@@ -138,6 +138,19 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - **Verified**: `UdpVoiceIntegrationTest` against the real 1.5 server — the encrypted ping echo
   round-trips (proving byte-exact OCB2 both directions) and audio loops back over UDP (target 31).
 
+## Output route priority
+- **Settings → Audio · Output** is a reorderable priority list (up/down arrows). A fresh connect uses
+  the first route whose hardware is present (default: Wired → BT HQ → BT headset → Phone); if the
+  active route's hardware vanishes mid-call it walks down the same list (was: always Phone speaker —
+  and it never re-applied the engine, so playback kept targeting the dead device).
+- **Remember last output**: starts on the last *manually* picked route (falls back to the priority
+  list if that hardware isn't present); greys out reordering.
+- **Switch to Bluetooth when connected** (default on): mid-call, a newly appearing BT route moves
+  output to the highest-priority BT route. Auto-reconnects keep the current route.
+- Picking a route while *not* in a call no longer sets `MODE_IN_COMMUNICATION` system-wide
+  (`AudioRouter.markCurrent`); AudioManager is only touched while the engine exists.
+- Not yet verified on hardware (phone was locked).
+
 ## Backlog / not-yet-wired (post-M5)
 - **Still visual-only settings**: master volume, priority speaker, join/leave sounds. Channel-**layout**
   selection (VoiceBar/QuickSettings) is still ephemeral (not persisted); transmission mode **is** now

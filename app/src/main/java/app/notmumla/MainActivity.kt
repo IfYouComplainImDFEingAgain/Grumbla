@@ -300,6 +300,7 @@ private fun AppNav() {
             val settingsVm: SettingsViewModel = hiltViewModel()
             val routes by session.availableRoutes.collectAsState()
             val current by session.currentRoute.collectAsState()
+            val connection by session.state.collectAsState()
             val settings by settingsVm.settings.collectAsState()
             val inputLevel by session.inputLevel.collectAsState()
             val vadCalibrating by session.vadCalibrating.collectAsState()
@@ -326,7 +327,12 @@ private fun AppNav() {
                 identity = identity,
                 availableRoutes = routes,
                 currentRoute = current,
+                inCall = connection.connection == ConnectionState.CONNECTED ||
+                    connection.connection == ConnectionState.CONNECTING,
                 onSelectRoute = session::selectRoute,
+                onSetRoutePriority = settingsVm::setRoutePriority,
+                onToggleRememberRoute = settingsVm::setRememberLastRoute,
+                onToggleAutoSwitchBluetooth = settingsVm::setAutoSwitchBluetooth,
                 onSetTheme = settingsVm::setTheme,
                 onSetTransmission = settingsVm::setTransmissionMode,
                 onSetVad = settingsVm::setVadSensitivity,
