@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,7 +66,7 @@ fun ChannelsScreen(
     unreadCount: Int,
     currentChannelName: String,
     transmissionMode: TransmissionMode,
-    debugStats: app.notmumla.protocol.model.AudioDebugStats?,
+    debugStats: kotlinx.coroutines.flow.StateFlow<app.notmumla.protocol.model.AudioDebugStats>?,
     onJoinChannel: (Int) -> Unit,
     onPttHeld: (Boolean) -> Unit,
     onToggleMute: () -> Unit,
@@ -174,7 +175,8 @@ private fun UserVolumeSheet(user: UiUser, onSet: (String, Float) -> Unit, onDism
 }
 
 @Composable
-private fun DebugOverlay(stats: app.notmumla.protocol.model.AudioDebugStats) {
+private fun DebugOverlay(statsFlow: kotlinx.coroutines.flow.StateFlow<app.notmumla.protocol.model.AudioDebugStats>) {
+    val stats by statsFlow.collectAsState()
     val c = MumbleTheme.colors
     val mono = androidx.compose.ui.text.font.FontFamily.Monospace
     Row(

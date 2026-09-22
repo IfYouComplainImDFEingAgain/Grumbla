@@ -1,5 +1,6 @@
 package app.notmumla.ui
 
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -9,6 +10,9 @@ import androidx.compose.ui.graphics.Color
 
 enum class UserStatus { ACTIVE, SPEAKING, MUTED, AFK }
 
+// @Immutable: the List fields otherwise make these "unstable", so Compose would compare them by
+// identity and re-render every row whenever the list is rebuilt. They are never mutated.
+@Immutable
 data class UiUser(
     val id: Int,
     val name: String,
@@ -21,6 +25,7 @@ data class UiUser(
     val gainDb: Int = 0,
 )
 
+@Immutable
 data class UiChannel(
     val id: Int,
     val name: String,
@@ -45,6 +50,7 @@ data class UiServer(
 
 enum class ChatKind { SYSTEM, OTHER, ME, FILE }
 
+@Immutable
 data class UiMessage(
     val id: Int,
     val kind: ChatKind,

@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +19,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -53,33 +60,46 @@ fun Avatar(
     }
 }
 
-/** Three animated bars indicating active speech (design `@keyframes bar`). */
+/**
+ * Three animated bars indicating active speech (design `@keyframes bar`). Heights are read only in
+ * the draw phase, so each animation frame is a redraw — no recomposition or relayout. With
+ * [animate] false the bars sit still (no running animation at all).
+ */
 @Composable
 fun SpeakingBars(
     color: Color = MumbleTheme.colors.speaking,
     barWidth: Dp = 3.dp,
     maxHeight: Dp = 14.dp,
+    animate: Boolean = true,
 ) {
-    val transition = rememberInfiniteTransition(label = "speaking")
-    val heights = listOf(0f, 0.15f, 0.3f).map { delay ->
-        transition.animateFloat(
-            initialValue = 0.4f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 900, delayMillis = (delay * 1000).toInt()),
-                repeatMode = RepeatMode.Reverse,
-            ),
-            label = "bar",
-        )
+    val heights: List<State<Float>> = if (animate) {
+        val transition = rememberInfiniteTransition(label = "speaking")
+        listOf(0, 150, 300).map { delay ->
+            transition.animateFloat(
+                initialValue = 0.4f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 900, delayMillis = delay),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "bar",
+            )
+        }
+    } else {
+        remember { List(3) { mutableFloatStateOf(0.4f) } }
     }
-    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        heights.forEach { h ->
-            Box(
-                Modifier
-                    .width(barWidth)
-                    .height(maxHeight * h.value)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(color),
+    val gap = 2.dp
+    Canvas(Modifier.size(width = barWidth * 3 + gap * 2, height = maxHeight)) {
+        val w = barWidth.toPx()
+        val step = w + gap.toPx()
+        val radius = CornerRadius(2.dp.toPx())
+        heights.forEachIndexed { i, h ->
+            val barH = size.height * h.value
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(i * step, size.height - barH),
+                size = Size(w, barH),
+                cornerRadius = radius,
             )
         }
     }
