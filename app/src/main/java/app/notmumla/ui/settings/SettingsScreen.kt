@@ -60,6 +60,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -183,7 +184,7 @@ fun SettingsScreen(
             SectionLabel("APPEARANCE")
             SettingsGroup {
                 ToggleRow(Icons.Filled.DarkMode, "Dark theme", "Force dark theme",
-                    isDark) { onSetTheme(if (it) ThemeMode.DARK else ThemeMode.LIGHT) }
+                    isDark, { onSetTheme(if (it) ThemeMode.DARK else ThemeMode.LIGHT) })
                 Divider()
                 ToggleRow(Icons.Filled.Person, "Show user avatars", null,
                     settings.showAvatars, onToggleAvatars)
@@ -231,7 +232,8 @@ fun SettingsScreen(
                 )
                 Divider()
                 ToggleRow(Icons.Filled.GraphicEq, "Automatic gain control",
-                    "Auto-level your mic", settings.autoGain, onToggleAutoGain)
+                    if (settings.noiseSuppression == NoiseSuppression.AI) "Boosts your voice after AI noise suppression"
+                    else "Auto-level your mic", settings.autoGain, onToggleAutoGain)
                 if (!settings.autoGain) {
                     Divider()
                     SliderRow(
@@ -270,10 +272,14 @@ fun SettingsScreen(
                 ToggleRow(Icons.Filled.GraphicEq, "Echo cancellation", null,
                     settings.echoCancellation, onToggleEchoCancellation)
                 Divider()
+                // AI suppression always captures raw (RNNoise replaces the phone's processing), so
+                // the toggle is locked on — shown, not written, so the saved choice returns with Off/Standard.
+                val aiNs = settings.noiseSuppression == NoiseSuppression.AI
                 ToggleRow(Icons.Filled.Mic, "Raw microphone",
-                    "Skip the phone's voice processing — natural, no over-cancelling. No echo " +
+                    if (aiNs) "Always on with AI noise suppression"
+                    else "Skip the phone's voice processing — natural, no over-cancelling. No echo " +
                         "cancellation, so best with headphones.",
-                    settings.rawMic, onToggleRawMic)
+                    settings.rawMic || aiNs, enabled = !aiNs, onChange = onToggleRawMic)
             }
 
             SectionLabel("AUDIO · OUTPUT")
@@ -747,10 +753,12 @@ private fun RowBase(
     subtitle: String?,
     trailing: @Composable () -> Unit,
     onClick: (() -> Unit)? = null,
+    enabled: Boolean = true,
 ) {
     val c = MumbleTheme.colors
     Row(
-        Modifier.fillMaxWidth().let { if (onClick != null) it.clickable(onClick = onClick) else it }
+        Modifier.fillMaxWidth().let { if (onClick != null && enabled) it.clickable(onClick = onClick) else it }
+            .alpha(if (enabled) 1f else 0.4f)
             .padding(horizontal = 16.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -782,18 +790,18 @@ private fun ValueRow(icon: ImageVector, title: String, value: String,
 
 @Composable
 private fun ToggleRow(icon: ImageVector?, title: String, subtitle: String?,
-                      checked: Boolean, onChange: (Boolean) -> Unit) {
-    RowBase(icon, title, subtitle, trailing = { ToggleSwitch(checked, onChange) },
-        onClick = { onChange(!checked) })
+                      checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
+    RowBase(icon, title, subtitle, trailing = { ToggleSwitch(checked, onChange, enabled) },
+        onClick = { onChange(!checked) }, enabled = enabled)
 }
 
 @Composable
-private fun ToggleSwitch(checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun ToggleSwitch(checked: Boolean, onChange: (Boolean) -> Unit, enabled: Boolean = true) {
     val c = MumbleTheme.colors
     Box(
         Modifier.size(width = 46.dp, height = 26.dp).clip(RoundedCornerShape(13.dp))
             .background(if (checked) c.primary else c.surfHighest)
-            .clickable { onChange(!checked) },
+            .clickable(enabled = enabled) { onChange(!checked) },
     ) {
         Box(
             Modifier.padding(start = if (checked) 23.dp else 5.dp, top = if (checked) 3.dp else 5.dp)
