@@ -1,6 +1,5 @@
 package app.notmumla.ui.chat
 
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -40,10 +39,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -138,20 +137,28 @@ private fun MessageRow(msg: UiMessage, onImageClick: (ByteArray) -> Unit) {
 @Composable
 private fun InlineImage(msg: UiMessage, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val bytes = msg.imageBytes ?: return
-    val bitmap = remember(msg.id) {
-        runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull()
-    } ?: return
+    val (imgW, imgH) = remember(bytes) { ChatImages.bounds(bytes) } ?: return
 
     // Size the thumbnail box to the image's own aspect ratio, bounded so it never overflows.
     val maxW = 240f
     val maxH = 300f
-    val aspect = bitmap.width.toFloat() / bitmap.height.toFloat().coerceAtLeast(1f)
+    val aspect = imgW.toFloat() / imgH.toFloat().coerceAtLeast(1f)
     val (wDp, hDp) = if (aspect >= maxW / maxH) maxW to (maxW / aspect) else (maxH * aspect) to maxH
+    val box = modifier.size(wDp.dp, hDp.dp).clip(RoundedCornerShape(14.dp))
+
+    val maxPx = with(LocalDensity.current) { maxOf(wDp, hDp).dp.roundToPx() }
+    val bitmap by rememberChatImage(bytes, maxPx)
+    val loaded = bitmap
+    if (loaded == null) {
+        // Placeholder of the final size while decoding, so the chat doesn't jump.
+        Box(box.background(MumbleTheme.colors.surfHigh))
+        return
+    }
 
     Image(
-        bitmap = bitmap,
+        bitmap = loaded,
         contentDescription = "Shared image — tap to view",
-        modifier = modifier.size(wDp.dp, hDp.dp).clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick),
+        modifier = box.clickable(onClick = onClick),
         contentScale = ContentScale.Fit,
     )
 }
@@ -159,16 +166,15 @@ private fun InlineImage(msg: UiMessage, modifier: Modifier = Modifier, onClick: 
 /** Full-screen image viewer with pinch-to-zoom and pan; back or the close button dismisses. */
 @Composable
 private fun FullScreenImageViewer(bytes: ByteArray, onClose: () -> Unit) {
-    val bitmap = remember(bytes) {
-        runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull()
-    }
+    // Enough resolution for some pinch-zoom, capped so a huge photo can't blow up memory.
+    val bitmap by rememberChatImage(bytes, maxPx = 2048)
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            if (bitmap != null) {
+            bitmap?.let { img ->
                 var scale by remember { mutableStateOf(1f) }
                 var offset by remember { mutableStateOf(Offset.Zero) }
                 Image(
-                    bitmap = bitmap,
+                    bitmap = img,
                     contentDescription = "Full image",
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()

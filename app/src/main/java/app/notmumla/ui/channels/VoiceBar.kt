@@ -95,7 +95,10 @@ fun VoiceBar(
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (mode == TransmissionMode.VAD) {
-                        SpeakingBars(color = c.onPrimary, maxHeight = 16.dp, barWidth = 4.dp)
+                        // Only animate while the VAD is actually sending; idle VAD shows still bars
+                        // instead of running a frame-rate animation for the whole session.
+                        SpeakingBars(color = c.onPrimary, maxHeight = 16.dp, barWidth = 4.dp,
+                            animate = transmitting)
                     } else {
                         Icon(Icons.Filled.Mic, null,
                             tint = if (active) c.onPrimary else c.onSurfaceVar)

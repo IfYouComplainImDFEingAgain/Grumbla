@@ -110,6 +110,7 @@ class AudioEngine(
     val transmitting: StateFlow<Boolean> = _transmitting
 
     private val _speaking = MutableStateFlow<Set<Int>>(emptySet())
+    private companion object { const val SPEAKING_HOLD_FRAMES = 15 } // 300 ms of 20 ms frames
     /** Remote sessions currently producing audio (drives speaking indicators). */
     val speakingSessions: StateFlow<Set<Int>> = _speaking
 
@@ -310,9 +311,22 @@ class AudioEngine(
         try {
             track.play()
             var idleSpins = 0
+            // Frames since each session last produced audio. The raw per-frame set flickers on
+            // every inter-word pause / jitter gap; each flip re-renders the channel list, so hold
+            // a speaker "on" for SPEAKING_HOLD_FRAMES (like Mumble's talk-indicator hold).
+            val heldFor = HashMap<Int, Int>()
             while (running) {
                 val speaking = mixer.mixNextFrame(out)
-                if (_speaking.value != speaking) _speaking.value = speaking
+                for (s in speaking) heldFor[s] = 0
+                var changed = speaking.any { it !in _speaking.value }
+                val iter = heldFor.entries.iterator()
+                while (iter.hasNext()) {
+                    val e = iter.next()
+                    if (e.key in speaking) continue
+                    e.setValue(e.value + 1)
+                    if (e.value > SPEAKING_HOLD_FRAMES) { iter.remove(); changed = true }
+                }
+                if (changed) _speaking.value = heldFor.keys.toSet()
                 track.write(out, 0, frame)
                 // mixNextFrame consumes one 20ms frame; AudioTrack.write blocks to pace us.
                 if (speaking.isEmpty()) {

@@ -200,7 +200,6 @@ private fun AppNav() {
             val userVolumes by vm.userVolumes.collectAsState()
             val settingsVm: SettingsViewModel = hiltViewModel()
             val appSettings by settingsVm.settings.collectAsState()
-            val debugStats by vm.debugStats.collectAsState()
 
             // Request microphone access; start the audio engine once granted.
             val ctx = LocalContext.current
@@ -263,15 +262,19 @@ private fun AppNav() {
                 serverName = serverName,
                 serverInitial = initialsFor(serverName).take(1),
                 connectionLabel = connectionLabel,
-                channels = state.toUiChannels(speaking, userVolumes),
-                chatMessages = chat.map { it.toUiMessage() },
+                // Remembered so unrelated updates (e.g. `transmitting` flipping) hand the screen the
+                // same list instances and Compose can skip the channel tree / chat entirely.
+                channels = remember(state, speaking, userVolumes) { state.toUiChannels(speaking, userVolumes) },
+                chatMessages = remember(chat) { chat.map { it.toUiMessage() } },
                 selfMuted = self?.selfMute ?: false,
                 selfDeafened = self?.selfDeaf ?: false,
                 transmitting = transmitting,
                 unreadCount = unread,
                 currentChannelName = currentChannelName,
                 transmissionMode = appSettings.transmissionMode.toUiMode(),
-                debugStats = if (appSettings.debugOverlay) debugStats else null,
+                // Pass the flow, not its value: stats tick every 500 ms, and reading them here would
+                // recompose the whole screen each tick. Only the overlay collects it.
+                debugStats = if (appSettings.debugOverlay) vm.debugStats else null,
                 onJoinChannel = vm::joinChannel,
                 onPttHeld = vm::setPttHeld,
                 onToggleMute = {
