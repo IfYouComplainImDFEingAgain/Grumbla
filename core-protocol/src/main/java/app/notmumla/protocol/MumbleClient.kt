@@ -12,6 +12,7 @@ import app.notmumla.protocol.net.TofuTrustManager
 import app.notmumla.protocol.proto.MessageType
 import app.notmumla.protocol.udp.CryptStateOCB2
 import app.notmumla.protocol.udp.LegacyAudio
+import app.notmumla.protocol.udp.OpusPacket
 import app.notmumla.protocol.udp.UdpTransport
 import MumbleUDP.Audio as UdpAudio
 import okio.ByteString.Companion.toByteString
@@ -103,7 +104,8 @@ class MumbleClient(
     @Volatile private var txCount = 0L
     @Volatile private var rxCount = 0L
     @Volatile private var rxLost = 0L
-    private val lastSeqBySession = HashMap<Int, Long>()
+    /** Per session: the frame number the next packet should carry (null = start of a talk-spurt). */
+    private val expectedSeqBySession = HashMap<Int, Long>()
 
     /** Set by the audio engine to receive inbound voice frames. */
     @Volatile var voiceSink: VoiceSink? = null
@@ -169,7 +171,7 @@ class MumbleClient(
     /** Emit a packet-stats snapshot ~twice a second, computing per-second rates from the deltas. */
     private fun startStats() {
         txCount = 0; rxCount = 0; rxLost = 0
-        lastSeqBySession.clear()
+        expectedSeqBySession.clear()
         _stats.value = AudioDebugStats()
         statsJob = scope.launch(Dispatchers.IO) {
             var lastTx = 0L
@@ -190,13 +192,24 @@ class MumbleClient(
         }
     }
 
-    /** Track an inbound audio frame for the stats: count it and estimate loss from sequence gaps. */
-    private fun recordRx(session: Int, sequence: Long) {
+    /**
+     * Track an inbound audio packet for the stats: count it and estimate lost *packets* from gaps.
+     * `frame_number` counts 10 ms units, so each packet advances it by its own duration (2 for a
+     * 20 ms packet, etc.) — compare against that, not +1. The sender's counter also keeps running
+     * through silence, so the packet after a terminator starts a new spurt and is never a "gap".
+     */
+    private fun recordRx(session: Int, sequence: Long, opus: ByteArray, terminator: Boolean) {
         rxCount++
-        val last = lastSeqBySession[session]
-        // A jump of >1 with a sane gap = missing frames. Large jumps / resets (new talk-spurt) ignored.
-        if (last != null && sequence > last + 1 && sequence - last < 100) rxLost += sequence - last - 1
-        lastSeqBySession[session] = sequence
+        val units = OpusPacket.tenMsUnits(opus)
+        val expected = expectedSeqBySession[session]
+        if (expected != null && sequence > expected && sequence - expected < 100) {
+            rxLost += (sequence - expected + units - 1) / units
+        }
+        if (terminator) expectedSeqBySession.remove(session)
+        // A late (reordered) packet mustn't pull the expectation backwards; a big backwards jump is
+        // the sender's counter resetting, so resync.
+        else if (expected == null || sequence + units > expected || expected - sequence > 100)
+            expectedSeqBySession[session] = sequence + units
     }
 
     private fun sendHandshake(control: ControlChannel, config: ConnectConfig) {
@@ -398,17 +411,18 @@ class MumbleClient(
             packet[0].toInt() == UDP_TYPE_AUDIO -> { // protobuf
                 val audio = runCatching { UdpAudio.ADAPTER.decode(packet.copyOfRange(1, packet.size)) }
                     .getOrNull() ?: return
-                recordRx(audio.sender_session, audio.frame_number)
+                val opus = audio.opus_data.toByteArray()
+                recordRx(audio.sender_session, audio.frame_number, opus, audio.is_terminator)
                 voiceSink?.onIncomingAudio(
                     session = audio.sender_session,
                     sequence = audio.frame_number,
-                    opus = audio.opus_data.toByteArray(),
+                    opus = opus,
                     terminator = audio.is_terminator,
                 )
             }
             LegacyAudio.isLegacyOpus(packet) -> {
                 val a = LegacyAudio.decodeIncoming(packet) ?: return
-                recordRx(a.session, a.sequence)
+                recordRx(a.session, a.sequence, a.opus, a.terminator)
                 voiceSink?.onIncomingAudio(a.session, a.sequence, a.opus, a.terminator)
             }
             // else: ping packets (protobuf type 1, legacy 0x20) — ignored
