@@ -2,5 +2,5 @@
 <resources>
     <!-- design token: surface (light) -->
     <color name="window_background">#FBFCFF</color>
-    <color name="ic_launcher_background">#2A6FDB</color>
+    <color name="ic_launcher_background">#FFFFFF</color>
 </resources>
