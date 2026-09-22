@@ -26,7 +26,10 @@ import javax.inject.Inject
  * backgrounded, and surfaces an ongoing notification with mute / disconnect actions.
  *
  * The session itself lives in the singleton [SessionManager]; this service owns the foreground
- * lifecycle and notification. Declared with foregroundServiceType="microphone|connectedDevice".
+ * lifecycle and notification. Declared with foregroundServiceType="microphone" only: every declared
+ * type is claimed on start, and connectedDevice needs FOREGROUND_SERVICE_CONNECTED_DEVICE + a granted
+ * runtime permission — without them startForeground throws, there is no FGS, and the OS silences
+ * the mic (and mutes playback) as soon as the screen turns off.
  */
 @AndroidEntryPoint
 class VoiceService : Service() {
@@ -83,8 +86,12 @@ class VoiceService : Service() {
         // Promote to foreground immediately to satisfy the startForegroundService contract. Guard
         // against the background-start restriction so a race can never crash the app.
         try {
-            startForeground(NOTIFICATION_ID, buildNotification())
+            androidx.core.app.ServiceCompat.startForeground(
+                this, NOTIFICATION_ID, buildNotification(),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+            )
         } catch (t: Throwable) {
+            android.util.Log.e(TAG, "startForeground failed; voice will stop when backgrounded", t)
             stopSelf()
             return START_NOT_STICKY
         }
@@ -186,6 +193,7 @@ class VoiceService : Service() {
     }
 
     companion object {
+        private const val TAG = "VoiceService"
         private const val CHANNEL_ID = "voice_session"
         private const val NOTIFICATION_ID = 1001
         const val ACTION_TOGGLE_MUTE = "app.notmumla.action.TOGGLE_MUTE"
@@ -193,7 +201,9 @@ class VoiceService : Service() {
         const val ACTION_DISCONNECT = "app.notmumla.action.DISCONNECT"
 
         fun start(context: Context) {
-            context.startForegroundService(Intent(context, VoiceService::class.java))
+            // Throws ForegroundServiceStartNotAllowedException if called from the background.
+            runCatching { context.startForegroundService(Intent(context, VoiceService::class.java)) }
+                .onFailure { android.util.Log.e(TAG, "startForegroundService failed", it) }
         }
 
         fun stop(context: Context) {
