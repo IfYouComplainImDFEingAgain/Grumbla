@@ -57,7 +57,7 @@ class MicLevelMonitor {
         val sessionId = record.audioSessionId
         val ns = if (noiseSuppression && NoiseSuppressor.isAvailable())
             runCatching { NoiseSuppressor.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
-        val agc = if (autoGain && AutomaticGainControl.isAvailable())
+        val agc = if (autoGain && !aiNoiseSuppression && AutomaticGainControl.isAvailable())
             runCatching { AutomaticGainControl.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
         val denoiser = if (aiNoiseSuppression)
             runCatching { Denoiser().takeIf { it.frameSize == frame } }.getOrNull() else null
@@ -74,7 +74,7 @@ class MicLevelMonitor {
                 }
                 if (read < frame) continue
 
-                denoiser?.let { it.mix = noiseReductionMix; it.process(pcm) }
+                denoiser?.let { it.mix = noiseReductionMix; it.leveling = autoGain; it.process(pcm) }
                 val gain = micGain
                 if (gain != 1.0f) {
                     for (i in 0 until read) {

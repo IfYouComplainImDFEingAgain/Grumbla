@@ -171,8 +171,12 @@ class AudioEngine(
         ).coerceAtLeast(frame * 2 * 4)
 
         // Raw mic: use the unprocessed VOICE_RECOGNITION source on phone/wired (SCO must keep the
-        // comms source to capture the headset mic; A2DP-HQ already uses raw MIC).
-        val source = if (rawMic && config.route != OutputRoute.BT_HEADSET_SCO &&
+        // comms source to capture the headset mic; A2DP-HQ already uses raw MIC). AI (RNNoise)
+        // suppression also needs the raw source: RNNoise is a spectral-gate meant to run on
+        // unprocessed audio, so layering it over VOICE_COMMUNICATION's native NS/AGC double-gates the
+        // spectrum → metallic/underwater artifacts. Capturing raw lets RNNoise *replace* native NS.
+        val wantRawSource = rawMic || aiNoiseSuppression
+        val source = if (wantRawSource && config.route != OutputRoute.BT_HEADSET_SCO &&
             config.recordSource == android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION
         ) android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION else config.recordSource
         val record = openRecord(source, minBuf)
@@ -193,7 +197,8 @@ class AudioEngine(
             runCatching { NoiseSuppressor.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
         val aecEffect = if (rawSource && echoCancellation && AcousticEchoCanceler.isAvailable())
             runCatching { AcousticEchoCanceler.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
-        val agcEffect = if (rawSource && autoGain && AutomaticGainControl.isAvailable())
+        // With RNNoise on, the Denoiser does speech-gated leveling itself; a second AGC would pump.
+        val agcEffect = if (rawSource && autoGain && !aiNoiseSuppression && AutomaticGainControl.isAvailable())
             runCatching { AutomaticGainControl.create(sessionId)?.apply { enabled = true } }.getOrNull() else null
 
         var encoder = OpusEncoder(bitrate = bitrate)
@@ -219,7 +224,7 @@ class AudioEngine(
                 }
                 if (read < frame) continue
 
-                denoiser?.let { it.mix = noiseReductionMix; it.process(pcm) }
+                denoiser?.let { it.mix = noiseReductionMix; it.leveling = autoGain; it.process(pcm) }
                 applyGain(pcm, read, micGain)
                 val level = rms(pcm)
                 _inputLevel.value = level
