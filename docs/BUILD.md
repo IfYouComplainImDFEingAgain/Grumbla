@@ -25,6 +25,33 @@ How to build the debug APK and push it to an Android phone over USB.
 Use the Gradle **wrapper** (`./gradlew`), not a system Gradle — the wrapper is pinned to a version
 compatible with the build plugins.
 
+## Release build (signed)
+Release APKs are signed with the project's release key (`~/keys/grumbla-release.jks`, alias
+`grumbla`, `CN=user`). The key is **not** in the repo; Gradle reads its location and passwords from a
+gitignored `keystore.properties` at the repo root:
+```properties
+storeFile=/absolute/path/to/grumbla-release.jks
+storePassword=...
+keyAlias=grumbla
+keyPassword=...
+```
+```sh
+./gradlew :app:assembleRelease
+# output: app/build/outputs/apk/release/app-release.apk
+```
+Without `keystore.properties` the release build is produced **unsigned** (debug builds are
+unaffected). Verify a signed APK came from the real key:
+```sh
+apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+# SHA-256 digest must be 6fda439f1d91b4b628397d5784ec0ecc1dbb5f310154d8feababd87613797245
+```
+- **Losing the key means installs can never be updated in place** — keep an off-machine backup of
+  the `.jks` and its password.
+- Bump `versionCode` (and `versionName`) in `app/build.gradle.kts` for every release; Android
+  rejects an update whose `versionCode` isn't higher than the installed one.
+- Debug and release builds are signed with different keys, so switching a phone from one to the
+  other needs an uninstall (export the identity certificate in-app first — uninstall wipes it).
+
 ## Install on a phone
 ```sh
 adb devices                                              # confirm the phone shows as "device"
