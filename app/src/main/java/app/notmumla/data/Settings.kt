@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.notmumla.audio.TransmissionMode
+import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.ui.ChannelLayout
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -41,7 +42,25 @@ data class AppSettings(
     val ttsReadAloud: Boolean = false,
     val mentionSound: Boolean = true,
     val debugOverlay: Boolean = false,
+    /** Output routes in preference order; on connect the first one currently available is used. */
+    val routePriority: List<OutputRoute> = DEFAULT_ROUTE_PRIORITY,
+    /** Start with the last manually chosen route instead of walking [routePriority]. */
+    val rememberLastRoute: Boolean = false,
+    val lastRoute: OutputRoute? = null,
+    /** Mid-call, jump to Bluetooth output as soon as a Bluetooth device connects. */
+    val autoSwitchBluetooth: Boolean = true,
 )
+
+val DEFAULT_ROUTE_PRIORITY = listOf(
+    OutputRoute.WIRED, OutputRoute.BT_A2DP_HQ, OutputRoute.BT_HEADSET_SCO, OutputRoute.PHONE_SPEAKER,
+)
+
+/** Parse a stored priority list, tolerating unknown names and appending routes added since. */
+internal fun decodeRoutePriority(s: String?): List<OutputRoute> {
+    val parsed = s.orEmpty().split(',').mapNotNull { n -> runCatching { OutputRoute.valueOf(n.trim()) }.getOrNull() }
+        .distinct()
+    return parsed + DEFAULT_ROUTE_PRIORITY.filter { it !in parsed }
+}
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("settings")
 
@@ -70,6 +89,10 @@ class SettingsRepository @Inject constructor(
         val TTS = booleanPreferencesKey("tts_read_aloud")
         val MENTION = booleanPreferencesKey("mention_sound")
         val DEBUG = booleanPreferencesKey("debug_overlay")
+        val ROUTE_PRIORITY = stringPreferencesKey("route_priority") // comma-separated OutputRoute names
+        val REMEMBER_ROUTE = booleanPreferencesKey("remember_last_route")
+        val LAST_ROUTE = stringPreferencesKey("last_route")
+        val AUTO_BT = booleanPreferencesKey("auto_switch_bluetooth")
         val USER_VOLUMES = stringPreferencesKey("user_volumes") // JSON: {name: gainDb}
     }
 
@@ -119,6 +142,10 @@ class SettingsRepository @Inject constructor(
             ttsReadAloud = p[Keys.TTS] ?: false,
             mentionSound = p[Keys.MENTION] ?: true,
             debugOverlay = p[Keys.DEBUG] ?: false,
+            routePriority = decodeRoutePriority(p[Keys.ROUTE_PRIORITY]),
+            rememberLastRoute = p[Keys.REMEMBER_ROUTE] ?: false,
+            lastRoute = p[Keys.LAST_ROUTE]?.let { runCatching { OutputRoute.valueOf(it) }.getOrNull() },
+            autoSwitchBluetooth = p[Keys.AUTO_BT] ?: true,
         )
     }
 
@@ -141,6 +168,10 @@ class SettingsRepository @Inject constructor(
     suspend fun setTtsReadAloud(v: Boolean) = edit { it[Keys.TTS] = v }
     suspend fun setMentionSound(v: Boolean) = edit { it[Keys.MENTION] = v }
     suspend fun setDebugOverlay(v: Boolean) = edit { it[Keys.DEBUG] = v }
+    suspend fun setRoutePriority(v: List<OutputRoute>) = edit { it[Keys.ROUTE_PRIORITY] = v.joinToString(",") { r -> r.name } }
+    suspend fun setRememberLastRoute(v: Boolean) = edit { it[Keys.REMEMBER_ROUTE] = v }
+    suspend fun setLastRoute(v: OutputRoute) = edit { it[Keys.LAST_ROUTE] = v.name }
+    suspend fun setAutoSwitchBluetooth(v: Boolean) = edit { it[Keys.AUTO_BT] = v }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.dataStore.edit(block)

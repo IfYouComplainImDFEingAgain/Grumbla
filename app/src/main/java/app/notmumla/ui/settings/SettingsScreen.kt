@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
@@ -101,7 +103,11 @@ fun SettingsScreen(
     identity: IdentityInfo?,
     availableRoutes: List<OutputRoute>,
     currentRoute: OutputRoute,
+    inCall: Boolean,
     onSelectRoute: (OutputRoute) -> Unit,
+    onSetRoutePriority: (List<OutputRoute>) -> Unit,
+    onToggleRememberRoute: (Boolean) -> Unit,
+    onToggleAutoSwitchBluetooth: (Boolean) -> Unit,
     onSetTheme: (ThemeMode) -> Unit,
     onSetTransmission: (TransmissionMode) -> Unit,
     onSetVad: (Float) -> Unit,
@@ -292,21 +298,45 @@ fun SettingsScreen(
                         Text("Output device", fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                             color = c.onSurface)
                     }
+                    Text(
+                        if (settings.rememberLastRoute) "Starts on the output you last picked"
+                        else "Tried top to bottom when you connect",
+                        fontSize = 13.sp, color = c.onSurfaceVar, modifier = Modifier.padding(start = 36.dp),
+                    )
                     Spacer(Modifier.height(10.dp))
-                    OutputRoute.entries.forEach { route ->
-                        val enabled = route in availableRoutes
+                    val order = settings.routePriority
+                    val reorderable = !settings.rememberLastRoute
+                    // Out of a call the priority list decides the route, so a tap would just be
+                    // overridden on connect — only allow picking when it takes effect.
+                    val pickable = inCall || settings.rememberLastRoute
+                    order.forEachIndexed { i, route ->
+                        val available = route in availableRoutes
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                                .clickable(enabled = enabled) { onSelectRoute(route) }
-                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                                .clickable(enabled = available && pickable) { onSelectRoute(route) }
+                                .padding(vertical = 2.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                route.displayLabel() + if (!enabled) " (unavailable)" else "",
+                                "${i + 1}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                color = c.onSurfaceVar.copy(alpha = if (reorderable) 1f else 0.4f),
+                                modifier = Modifier.width(22.dp),
+                            )
+                            Text(
+                                route.displayLabel() + if (!available) " (unavailable)" else "",
                                 fontSize = 14.sp,
-                                color = if (enabled) c.onSurface else c.onSurfaceVar.copy(alpha = 0.5f),
+                                color = if (available) c.onSurface else c.onSurfaceVar.copy(alpha = 0.5f),
                                 modifier = Modifier.weight(1f),
                             )
+                            MoveButton(Icons.Filled.KeyboardArrowUp, "Move ${route.displayLabel()} up",
+                                enabled = reorderable && i > 0) {
+                                onSetRoutePriority(order.toMutableList().apply { add(i - 1, removeAt(i)) })
+                            }
+                            MoveButton(Icons.Filled.KeyboardArrowDown, "Move ${route.displayLabel()} down",
+                                enabled = reorderable && i < order.lastIndex) {
+                                onSetRoutePriority(order.toMutableList().apply { add(i + 1, removeAt(i)) })
+                            }
+                            Spacer(Modifier.width(8.dp))
                             RadioDot(selected = route == currentRoute)
                         }
                     }
@@ -319,6 +349,14 @@ fun SettingsScreen(
                         )
                     }
                 }
+                Divider()
+                ToggleRow(Icons.Filled.Autorenew, "Remember last output",
+                    "Start on the output you last picked instead of the priority order",
+                    settings.rememberLastRoute, onToggleRememberRoute)
+                Divider()
+                ToggleRow(Icons.Filled.Bluetooth, "Switch to Bluetooth when connected",
+                    "Move audio to a Bluetooth device as soon as it connects during a call",
+                    settings.autoSwitchBluetooth, onToggleAutoSwitchBluetooth)
                 Divider()
                 ToggleRow(Icons.AutoMirrored.Filled.VolumeUp, "Audio leveling",
                     "Even out quiet and loud talkers to a consistent volume",
@@ -857,6 +895,18 @@ private fun RadioDot(selected: Boolean) {
     ) {
         if (selected) Box(Modifier.size(8.dp).clip(CircleShape).background(c.onPrimary))
         else Box(Modifier.size(18.dp).clip(CircleShape).background(c.outline.copy(alpha = 0.3f)))
+    }
+}
+
+@Composable
+private fun MoveButton(icon: ImageVector, description: String, enabled: Boolean, onClick: () -> Unit) {
+    val c = MumbleTheme.colors
+    Box(
+        Modifier.size(36.dp).clip(CircleShape).clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, description, tint = c.onSurfaceVar.copy(alpha = if (enabled) 1f else 0.25f),
+            modifier = Modifier.size(22.dp))
     }
 }
 

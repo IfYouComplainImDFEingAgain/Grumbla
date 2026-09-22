@@ -18,6 +18,7 @@ import app.notmumla.protocol.MumbleClient
 import app.notmumla.protocol.model.ConnectionState
 import app.notmumla.protocol.model.ServerState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -209,6 +210,64 @@ class SessionManager @Inject constructor(
     val availableRoutes: StateFlow<List<OutputRoute>> = router.available
     val currentRoute: StateFlow<OutputRoute> = router.current
 
+    init {
+        // Route changes restart the engine's audio threads, so serialize them on the main thread
+        // alongside UI-initiated selections.
+        scope.launch(Dispatchers.Main) {
+            var prev = router.available.value
+            router.available.collect { now ->
+                onRoutesChanged(prev, now)
+                prev = now
+            }
+        }
+        scope.launch(Dispatchers.Main) {
+            settingsRepo.settings.collect { s ->
+                // Out of a call, keep the displayed route in step with what the next connect will use.
+                if (engine == null) router.markCurrent(startupRoute(s))
+            }
+        }
+    }
+
+    /** Route a fresh connection starts on: the remembered one, else the first available by priority. */
+    private fun startupRoute(s: AppSettings = settings): OutputRoute {
+        val available = router.available.value
+        if (s.rememberLastRoute) s.lastRoute?.takeIf { it in available }?.let { return it }
+        return bestByPriority(available, s)
+    }
+
+    private fun bestByPriority(available: List<OutputRoute>, s: AppSettings = settings): OutputRoute =
+        s.routePriority.firstOrNull { it in available } ?: OutputRoute.PHONE_SPEAKER
+
+    private fun onRoutesChanged(prev: List<OutputRoute>, now: List<OutputRoute>) {
+        val current = router.current.value
+        val btAppeared = now.any { it.isBluetooth && it !in prev }
+        val target = when {
+            // A Bluetooth device just connected: move to its best route (A2DP and SCO often appear
+            // in separate callbacks, so this may step from one to the higher-priority other).
+            btAppeared && settings.autoSwitchBluetooth && engine != null ->
+                settings.routePriority.firstOrNull { it.isBluetooth && it in now }
+            // The active route's hardware went away: walk down the priority list.
+            current !in now -> bestByPriority(now)
+            // Not in a call: just track what the next connect would pick.
+            engine == null -> startupRoute()
+            else -> null
+        }
+        if (target != null && target != current) applyRoute(target)
+    }
+
+    private val OutputRoute.isBluetooth
+        get() = this == OutputRoute.BT_A2DP_HQ || this == OutputRoute.BT_HEADSET_SCO
+
+    /** Switch routes; only touches AudioManager/engine while a call is live. */
+    private fun applyRoute(route: OutputRoute) {
+        val eng = engine
+        if (eng == null) {
+            router.markCurrent(route)
+        } else {
+            eng.applyRoute(router.select(route))
+        }
+    }
+
     private val _state = MutableStateFlow(ServerState())
     val state: StateFlow<ServerState> = _state.asStateFlow()
 
@@ -266,6 +325,8 @@ class SessionManager @Inject constructor(
         reconnectJob = null
         reconnectAttempts = 0
         lastKnownChannelId = null
+        // Auto-reconnects keep whatever route is active; only a fresh connect re-picks it.
+        router.markCurrent(startupRoute())
         doConnect(server)
     }
 
@@ -290,7 +351,7 @@ class SessionManager @Inject constructor(
         engine = eng
         applyAudioSettings(settings)
         // Apply the current route (configures AudioManager mode/device + engine) before audio starts.
-        selectRoute(router.current.value)
+        applyRoute(router.current.value)
         scope.launch { eng.speakingSessions.collect { _speaking.value = it } }
         scope.launch { eng.transmitting.collect { _localTransmitting.value = it } }
         scope.launch { eng.inputLevel.collect { _inputLevel.value = it } }
@@ -390,10 +451,10 @@ class SessionManager @Inject constructor(
         doConnect(server.copy(pinnedSha256 = newFp))
     }
 
-    /** Switch the audio output route (phone / wired / Bluetooth HQ / Bluetooth headset). */
+    /** User picked an output route (phone / wired / Bluetooth HQ / Bluetooth headset). */
     fun selectRoute(route: OutputRoute) {
-        val config = router.select(route)
-        engine?.applyRoute(config)
+        applyRoute(route)
+        scope.launch { settingsRepo.setLastRoute(route) }
     }
 
     fun joinChannel(channelId: Int) = client?.joinChannel(channelId)
@@ -467,6 +528,7 @@ class SessionManager @Inject constructor(
         lastServer = null
         reconnectJob?.cancel()
         teardown(ConnectionState.DISCONNECTED)
+        router.markCurrent(startupRoute())
         _chat.value = emptyList()
         _unread.value = 0
     }

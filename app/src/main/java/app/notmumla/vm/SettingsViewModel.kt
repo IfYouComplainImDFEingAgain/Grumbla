@@ -104,6 +104,9 @@ class SettingsViewModel @Inject constructor(
     fun setTtsReadAloud(v: Boolean) = update { repo.setTtsReadAloud(v) }
     fun setMentionSound(v: Boolean) = update { repo.setMentionSound(v) }
     fun setDebugOverlay(v: Boolean) = update { repo.setDebugOverlay(v) }
+    fun setRoutePriority(v: List<app.notmumla.audio.routing.OutputRoute>) = update { repo.setRoutePriority(v) }
+    fun setRememberLastRoute(v: Boolean) = update { repo.setRememberLastRoute(v) }
+    fun setAutoSwitchBluetooth(v: Boolean) = update { repo.setAutoSwitchBluetooth(v) }
 
     private inline fun update(crossinline block: suspend () -> Unit) {
         viewModelScope.launch { block() }
