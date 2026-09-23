@@ -6,21 +6,25 @@ build/
 *.apk
 *.aab
 
-# Local config
+# Local config / signing secrets
 local.properties
 keystore.properties
 *.jks
 *.keystore
+*.p12
+
+# Vendored native sources (fetched per core-audio/src/main/cpp/README.md)
+core-audio/src/main/cpp/opus/
+core-audio/src/main/cpp/rnnoise/
+
+# Design handoff (local reference only)
+*.zip
+mumble-android-chat-app/
 
 # IDE
 .idea/
 *.iml
 .DS_Store
 
-# Design handoff archive (kept as unpacked folder, not the zip)
-*.zip
-core-audio/src/main/cpp/opus/
-
-# Claude project guide (local only)
+# Local agent notes
 CLAUDE.md
-core-audio/src/main/cpp/rnnoise/

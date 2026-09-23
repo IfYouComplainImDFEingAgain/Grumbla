@@ -1,8 +1,7 @@
 # Progress & TODO — not-mumla
 
-Status tracker for the Android Mumble client. Milestones come from the implementation plan
-(internal plan). See `CLAUDE.md` for architecture, build/test
-commands, and hard-won gotchas.
+Status tracker for the Android Mumble client (Grumbla). Build/test commands are in
+[`BUILD.md`](BUILD.md).
 
 Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not started
 
@@ -52,7 +51,7 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - **Capture routing (fixes "quiet" + "distorted" mic)**: phone/wired now use `VOICE_COMMUNICATION` +
   `MODE_IN_COMMUNICATION` with output explicitly routed to the built-in loudspeaker (like Mumble/Mumla)
   — clean, hardware-leveled, loud. We do **not** stack our own NS/AEC/AGC effects on the comms source
-  (native already runs them; stacking over-suppressed close-mic). See CLAUDE.md gotcha #5 (rewritten).
+  (native already runs them; stacking over-suppressed close-mic).
 - **Raw microphone toggle** (Audio·Input): switches phone/wired to the unprocessed `VOICE_RECOGNITION`
   source — natural/full-band, no native NS/AGC/echo-cancel (best with headphones; SCO/A2DP unaffected).
 - **Codec quality**: `OPUS_APPLICATION_AUDIO` (VOIP only < 32k) + `OPUS_AUTO` signal + forced fullband,
@@ -167,7 +166,7 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 
 ## Known issues / watch-outs
 - On-device UI automation is unreliable on the test phone (auto-locks to PIN, multi-display). Live
-  driving needs the user to keep it unlocked. See CLAUDE.md "On-device notes".
+  driving needs the user to keep it unlocked.
 - Integration tests need a running server on `127.0.0.1:64738` or they skip.
 - The full integration suite makes >10 rapid connections and trips Mumble's brute-force auto-ban
   (default 10/120s). Run the docker test server with `-e MUMBLE_CONFIG_autobanAttempts=0`, or

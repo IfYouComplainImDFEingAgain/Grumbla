@@ -67,10 +67,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk # -r = replace/keep dat
 ### Multiple phones connected
 `adb` needs a target when more than one device is attached. Get the serial from `adb devices`, then:
 ```sh
-adb devices                          # e.g. SERIAL_A and SERIAL_B
-adb -s SERIAL_A install -r app/build/outputs/apk/debug/app-debug.apk
+adb devices                          # e.g. ABC123 and DEF456
+adb -s ABC123 install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-(Or set `ANDROID_SERIAL=SERIAL_A` to make every `adb` command target that phone.)
+(Or set `ANDROID_SERIAL=ABC123` to make every `adb` command target that phone.)
 
 ## Launch / inspect after install
 ```sh

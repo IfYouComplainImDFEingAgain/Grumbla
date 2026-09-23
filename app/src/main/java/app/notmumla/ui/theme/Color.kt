@@ -4,8 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 
 /**
- * Design tokens lifted verbatim from the Claude Design handoff
- * (mumble-android-chat-app/project/Mumble.dc.html, LIGHT/DARK maps).
+ * Design tokens lifted verbatim from the original HTML design mockup (LIGHT/DARK maps).
  *
  * The design uses tokens beyond Material 3's standard scheme (speaking, afk, muted,
  * several surface tiers), so we carry them in a dedicated [MumbleColors] holder exposed
