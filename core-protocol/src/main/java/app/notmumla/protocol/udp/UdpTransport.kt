@@ -40,6 +40,7 @@ class UdpTransport(
     private var socket: DatagramSocket? = null
     private var recvJob: Job? = null
     private var pingJob: Job? = null
+    private val sendLock = Any()
 
     @Volatile private var lastGoodMs = 0L
     @Volatile var active = false
@@ -55,9 +56,16 @@ class UdpTransport(
     }
 
     /** Encrypt and send one raw audio packet over UDP. No-op if the socket is gone. */
-    fun sendAudio(rawPacket: ByteArray) {
-        val s = socket ?: return
-        val enc = runCatching { crypt.encrypt(rawPacket) }.getOrNull() ?: return
+    fun sendAudio(rawPacket: ByteArray) = encryptAndSend(rawPacket)
+
+    /**
+     * Encrypt + send under one lock. Every encrypt consumes an IV, and the server counts IV gaps as
+     * lost and reordering as late — so each IV must go out exactly once, in order, even with the
+     * audio thread and the ping loop sending concurrently.
+     */
+    private fun encryptAndSend(plain: ByteArray) = synchronized(sendLock) {
+        val s = socket ?: return@synchronized
+        val enc = runCatching { crypt.encrypt(plain) }.getOrNull() ?: return@synchronized
         runCatching { s.send(DatagramPacket(enc, enc.size, remote)) }
     }
 
@@ -90,7 +98,7 @@ class UdpTransport(
 
     private suspend fun pingLoop() {
         while (scope.isActive) {
-            runCatching { socket?.send(DatagramPacket(pingPacket(), pingPacket().size, remote)) }
+            encryptAndSend(pingBody())
             // Drop back to TCP if we haven't decrypted anything from the server in a while.
             if (active && System.currentTimeMillis() - lastGoodMs > CONFIRM_WINDOW_MS) setActive(false)
             delay(PING_INTERVAL_MS)
@@ -103,10 +111,10 @@ class UdpTransport(
         onActiveChanged(value)
     }
 
-    /** Build an encrypted UDP ping. The timestamp is opaque (we don't decode echoes for RTT yet). */
-    private fun pingPacket(): ByteArray {
+    /** Build a plaintext UDP ping. The timestamp is opaque (we don't decode echoes for RTT yet). */
+    private fun pingBody(): ByteArray {
         val ts = System.nanoTime()
-        val body = if (legacy) {
+        return if (legacy) {
             ByteArrayOutputStream().apply {
                 write(LEGACY_PING_HEADER)
                 MumbleVarint.encode(this, ts)
@@ -118,7 +126,6 @@ class UdpTransport(
                 proto.copyInto(it, 1)
             }
         }
-        return crypt.encrypt(body)
     }
 
     /** True if a decrypted packet is a ping (echo), not audio — by the same header rule as sending. */
