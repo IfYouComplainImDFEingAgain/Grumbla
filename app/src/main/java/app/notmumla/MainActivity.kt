@@ -197,6 +197,7 @@ private fun AppNav() {
             val transmitting by vm.localTransmitting.collectAsState()
             val chat by vm.chat.collectAsState()
             val unread by vm.unreadChat.collectAsState()
+            val whisper by vm.whisper.collectAsState()
             val userVolumes by vm.userVolumes.collectAsState()
             val settingsVm: SettingsViewModel = hiltViewModel()
             val appSettings by settingsVm.settings.collectAsState()
@@ -292,6 +293,9 @@ private fun AppNav() {
                 onChatRead = vm::markChatRead,
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onSetUserVolume = vm::setUserVolume,
+                whisperingTo = whisper?.name,
+                onWhisper = { u -> vm.startWhisper(u.id, u.name) },
+                onStopWhisper = vm::stopWhisper,
                 onDisconnect = {
                     vm.disconnect()
                     nav.popBackStack(Routes.CONNECT, inclusive = false)

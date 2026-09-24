@@ -30,6 +30,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import MumbleProto.Authenticate
+import MumbleProto.VoiceTarget
 import MumbleProto.ChannelRemove
 import MumbleProto.CryptSetup
 import MumbleProto.ChannelState
@@ -486,6 +487,14 @@ class MumbleClient(
     fun joinChannel(channelId: Int) {
         val session = _state.value.sessionId ?: return
         sendAsync(UserState(session = session, channel_id = channelId))
+    }
+
+    /**
+     * Register voice target [id] (1..30) as a whisper to [sessions]. Audio sent with that target then
+     * reaches only those users. Must be sent before the first frame that uses the target.
+     */
+    fun setWhisperTarget(id: Int, sessions: List<Int>) {
+        sendAsync(VoiceTarget(id = id, targets = listOf(VoiceTarget.Target(session = sessions))))
     }
 
     /** Set our self-mute / self-deafen flags. */
