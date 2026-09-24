@@ -76,6 +76,9 @@ fun ChannelsScreen(
     onChatRead: () -> Unit,
     onOpenSettings: () -> Unit,
     onSetUserVolume: (name: String, db: Float) -> Unit,
+    whisperingTo: String?,
+    onWhisper: (UiUser) -> Unit,
+    onStopWhisper: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -116,6 +119,8 @@ fun ChannelsScreen(
                 muted = selfMuted,
                 deafened = selfDeafened,
                 transmitting = transmitting,
+                whisperingTo = whisperingTo,
+                onStopWhisper = onStopWhisper,
                 onPttHeld = onPttHeld,
                 onToggleMute = onToggleMute,
                 onToggleDeafen = onToggleDeafen,
@@ -132,13 +137,22 @@ fun ChannelsScreen(
             )
         }
         volumeUser?.let { u ->
-            UserVolumeSheet(u, onSetUserVolume, onDismiss = { volumeUser = null })
+            UserVolumeSheet(
+                u, onSetUserVolume,
+                onWhisper = { onWhisper(u); volumeUser = null },
+                onDismiss = { volumeUser = null },
+            )
         }
     }
 }
 
 @Composable
-private fun UserVolumeSheet(user: UiUser, onSet: (String, Float) -> Unit, onDismiss: () -> Unit) {
+private fun UserVolumeSheet(
+    user: UiUser,
+    onSet: (String, Float) -> Unit,
+    onWhisper: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val c = MumbleTheme.colors
     var db by remember(user.id) { mutableStateOf(user.gainDb.toFloat()) }
     androidx.compose.material3.AlertDialog(
@@ -163,6 +177,12 @@ private fun UserVolumeSheet(user: UiUser, onSet: (String, Float) -> Unit, onDism
                     ),
                 )
                 Text("Only affects how you hear them.", fontSize = 12.sp, color = c.onSurfaceVar)
+                Spacer(Modifier.height(16.dp))
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = onWhisper,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Whisper to ${user.name}") }
+                Text("Your voice goes only to them until you stop.", fontSize = 12.sp, color = c.onSurfaceVar)
             }
         },
         confirmButton = {

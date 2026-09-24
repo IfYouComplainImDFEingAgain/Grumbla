@@ -49,6 +49,9 @@ fun VoiceBar(
     muted: Boolean,
     deafened: Boolean,
     transmitting: Boolean,
+    /** Name of the user we're whispering to, or null for normal talk. */
+    whisperingTo: String?,
+    onStopWhisper: () -> Unit,
     onPttHeld: (Boolean) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
@@ -61,6 +64,24 @@ fun VoiceBar(
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        if (whisperingTo != null) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background(c.primaryContainer)
+                    .padding(start = 14.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Whispering to $whisperingTo",
+                    Modifier.weight(1f),
+                    color = c.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                androidx.compose.material3.TextButton(onClick = onStopWhisper) {
+                    Text("Stop", color = c.onPrimaryContainer)
+                }
+            }
+        }
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -106,7 +127,8 @@ fun VoiceBar(
                     Text(
                         when {
                             mode == TransmissionMode.VAD -> "Voice Activated"
-                            transmitting -> "Transmitting…"
+                            transmitting -> if (whisperingTo != null) "Whispering…" else "Transmitting…"
+                            whisperingTo != null -> "Hold to Whisper"
                             else -> "Hold to Talk"
                         },
                         color = if (active) c.onPrimary else c.onSurface,

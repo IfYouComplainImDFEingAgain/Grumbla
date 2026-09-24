@@ -346,7 +346,14 @@ class SessionManager @Inject constructor(
         )
         client = mc
 
-        val eng = AudioEngine(audioManager) { opus, terminator -> mc.sendAudio(opus, terminator) }
+        var spurtTarget: Int? = null
+        val eng = AudioEngine(audioManager) { opus, terminator ->
+            // Lock the target for the whole talk spurt: toggling whisper mid-sentence must not split
+            // one spurt across two targets (the first would never get its terminator).
+            val target = spurtTarget ?: (if (whisperTo != null) WHISPER_TARGET_ID else 0).also { spurtTarget = it }
+            mc.sendAudio(opus, terminator, target)
+            if (terminator) spurtTarget = null
+        }
         mc.voiceSink = eng
         engine = eng
         applyAudioSettings(settings)
@@ -369,6 +376,7 @@ class SessionManager @Inject constructor(
                 } else {
                     _state.value = s
                     applyUserVolumes() // new/moved users pick up their saved volume
+                    _whisper.value?.let { w -> if (w.session !in s.users) stopWhisper() }
                     if (s.connection == ConnectionState.CONNECTED) onConnected(server, s)
                 }
             }
@@ -434,6 +442,23 @@ class SessionManager @Inject constructor(
         audioStarted = true
         // Start the foreground service now that RECORD_AUDIO is granted (FGS microphone type).
         app.notmumla.service.VoiceService.start(context)
+    }
+
+    private val _whisper = MutableStateFlow<WhisperTarget?>(null)
+    /** The user we're currently whispering to (all our outgoing voice goes only to them), or null. */
+    val whisper: StateFlow<WhisperTarget?> = _whisper.asStateFlow()
+    @Volatile private var whisperTo: WhisperTarget? = null
+
+    /** Route our voice privately to [session] until [stopWhisper] (or they leave / we disconnect). */
+    fun startWhisper(session: Int, name: String) {
+        val mc = client ?: return
+        mc.setWhisperTarget(WHISPER_TARGET_ID, listOf(session))
+        WhisperTarget(session, name).let { whisperTo = it; _whisper.value = it }
+    }
+
+    fun stopWhisper() {
+        whisperTo = null
+        _whisper.value = null
     }
 
     // Engine controls surfaced to the UI.
@@ -545,6 +570,7 @@ class SessionManager @Inject constructor(
         client = null
         activeServerId = null
         _speaking.value = emptySet()
+        stopWhisper() // session ids don't survive a reconnect
         _localTransmitting.value = false
         _inputLevel.value = 0f
         _debugStats.value = app.notmumla.protocol.model.AudioDebugStats()
@@ -556,6 +582,11 @@ class SessionManager @Inject constructor(
 
     private companion object {
         const val MAX_RECONNECT_ATTEMPTS = 8
+        /** Voice target slot we register for whispers (0 = normal talk, 31 = server loopback). */
+        const val WHISPER_TARGET_ID = 1
         const val CALIBRATION_MS = 5000L
     }
 }
+
+/** A whisper recipient; [name] is kept for display. */
+data class WhisperTarget(val session: Int, val name: String)

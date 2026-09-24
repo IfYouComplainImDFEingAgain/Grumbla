@@ -20,6 +20,9 @@ class SessionViewModel @Inject constructor(
     val inputLevel: StateFlow<Float> = sessionManager.inputLevel
     val userVolumes: StateFlow<Map<String, Float>> = sessionManager.userVolumes
     fun setUserVolume(name: String, db: Float) = sessionManager.setUserVolume(name, db)
+    val whisper: StateFlow<app.notmumla.data.WhisperTarget?> = sessionManager.whisper
+    fun startWhisper(session: Int, name: String) = sessionManager.startWhisper(session, name)
+    fun stopWhisper() = sessionManager.stopWhisper()
     val debugStats: StateFlow<app.notmumla.protocol.model.AudioDebugStats> = sessionManager.debugStats
     val availableRoutes: StateFlow<List<OutputRoute>> = sessionManager.availableRoutes
 
