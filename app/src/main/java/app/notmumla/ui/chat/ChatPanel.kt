@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -74,25 +75,8 @@ fun ChatPanel(
     var viewerImage by remember { mutableStateOf<ByteArray?>(null) }
 
     Column(Modifier.fillMaxSize().background(c.surface)) {
-        if (privateTo != null) {
-            Row(
-                Modifier.fillMaxWidth().background(c.primaryContainer)
-                    .padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Lock, null, tint = c.onPrimaryContainer, modifier = Modifier.size(14.dp))
-                Text("Private chat with $privateTo", fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                    color = c.onPrimaryContainer, modifier = Modifier.weight(1f).padding(start = 6.dp))
-                Box(Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onClosePrivate),
-                    contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Close, "Back to #$channelName", tint = c.onPrimaryContainer,
-                        modifier = Modifier.size(18.dp))
-                }
-            }
-        } else {
-            Text("# $channelName", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.onSurfaceVar,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp))
-        }
+        Text("# $channelName", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.onSurfaceVar,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp))
         Box(Modifier.fillMaxWidth().size(1.dp).background(c.outlineVariant))
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth().padding(14.dp),
@@ -108,6 +92,8 @@ fun ChatPanel(
         }
         Composer(
             placeholder = if (privateTo != null) "Message $privateTo privately" else "Message #$channelName",
+            privateTo = privateTo,
+            onClosePrivate = onClosePrivate,
             onSend = onSend,
             onAttach = {
                 pickImage.launch(
@@ -255,7 +241,13 @@ private fun FullScreenImageViewer(bytes: ByteArray, onClose: () -> Unit) {
 }
 
 @Composable
-private fun Composer(placeholder: String, onSend: (String) -> Unit, onAttach: () -> Unit) {
+private fun Composer(
+    placeholder: String,
+    privateTo: String?,
+    onClosePrivate: () -> Unit,
+    onSend: (String) -> Unit,
+    onAttach: () -> Unit,
+) {
     val c = MumbleTheme.colors
     var text by remember { mutableStateOf("") }
     Box(Modifier.fillMaxWidth().size(1.dp).background(c.outlineVariant))
@@ -268,15 +260,31 @@ private fun Composer(placeholder: String, onSend: (String) -> Unit, onAttach: ()
             contentAlignment = Alignment.Center) {
             Icon(Icons.Filled.Add, "Attach image", tint = c.onSurfaceVar, modifier = Modifier.size(24.dp))
         }
-        Box(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(c.surfHigh)
-            .padding(horizontal = 16.dp, vertical = 11.dp)) {
+        Row(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).background(c.surfHigh)
+            .padding(start = if (privateTo != null) 6.dp else 16.dp, end = 16.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            // Private-mode chip: shows who we're messaging and is the way back to the channel.
+            if (privateTo != null) {
+                Row(
+                    Modifier.padding(end = 8.dp).clip(RoundedCornerShape(14.dp)).background(c.primaryContainer)
+                        .clickable(onClick = onClosePrivate).padding(start = 8.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.Lock, null, tint = c.onPrimaryContainer, modifier = Modifier.size(12.dp))
+                    Text(privateTo, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = c.onPrimaryContainer,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 4.dp).widthIn(max = 110.dp))
+                    Icon(Icons.Filled.Close, "Stop messaging $privateTo privately", tint = c.onPrimaryContainer,
+                        modifier = Modifier.size(14.dp))
+                }
+            }
             BasicTextField(
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
                 textStyle = LocalTextStyle.current.copy(color = c.onSurface, fontSize = 14.sp),
                 cursorBrush = SolidColor(c.primary),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.weight(1f).padding(vertical = 11.dp),
                 decorationBox = { inner ->
                     if (text.isEmpty()) Text(placeholder, color = c.onSurfaceVar, fontSize = 14.sp)
                     inner()
