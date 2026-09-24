@@ -60,7 +60,15 @@ data class ConnectConfig(
 )
 
 /** A chat message received from the server. */
-data class IncomingText(val actorSession: Int?, val message: String)
+/**
+ * An inbound text message. [isPrivate] is true when it was addressed to users directly (the
+ * `session` field) rather than to a channel or channel tree — i.e. a private message to us.
+ */
+data class IncomingText(
+    val actorSession: Int?,
+    val message: String,
+    val isPrivate: Boolean = false,
+)
 
 /**
  * Drives one Mumble session: TLS connect, the login handshake (Version → Authenticate → …
@@ -352,7 +360,10 @@ class MumbleClient(
     }
 
     private fun onText(msg: TextMessage) {
-        events.tryEmit(Event.Text(IncomingText(msg.actor, msg.message)))
+        // The server forwards the sender's addressing fields untouched; like the reference client,
+        // a message with user targets and no channel/tree targets is a private message.
+        val toUsersOnly = msg.session.isNotEmpty() && msg.channel_id.isEmpty() && msg.tree_id.isEmpty()
+        events.tryEmit(Event.Text(IncomingText(msg.actor, msg.message, isPrivate = toUsersOnly)))
     }
 
     private fun onServerVersion(msg: PVersion) {
@@ -506,6 +517,11 @@ class MumbleClient(
     /** Send a text message to [channelId]. */
     fun sendText(channelId: Int, message: String) {
         sendAsync(TextMessage(message = message, channel_id = listOf(channelId)))
+    }
+
+    /** Send a private text message to the user with session [session]. */
+    fun sendPrivateText(session: Int, message: String) {
+        sendAsync(TextMessage(message = message, session = listOf(session)))
     }
 
     fun disconnect() {

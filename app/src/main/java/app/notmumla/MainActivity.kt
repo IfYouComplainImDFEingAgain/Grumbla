@@ -82,6 +82,8 @@ private fun app.notmumla.data.ChatLine.toUiMessage(): app.notmumla.ui.UiMessage 
     time = chatTimeFmt.format(java.util.Date(timeMillis)),
     text = text,
     imageBytes = imageBytes,
+    privateWith = privatePeer?.name,
+    privateSession = privatePeer?.session,
 )
 
 @AndroidEntryPoint
@@ -198,6 +200,7 @@ private fun AppNav() {
             val chat by vm.chat.collectAsState()
             val unread by vm.unreadChat.collectAsState()
             val whisper by vm.whisper.collectAsState()
+            val privateChat by vm.privateChat.collectAsState()
             val userVolumes by vm.userVolumes.collectAsState()
             val settingsVm: SettingsViewModel = hiltViewModel()
             val appSettings by settingsVm.settings.collectAsState()
@@ -296,6 +299,9 @@ private fun AppNav() {
                 whisperingTo = whisper?.name,
                 onWhisper = { u -> vm.startWhisper(u.id, u.name) },
                 onStopWhisper = vm::stopWhisper,
+                privateChatWith = privateChat?.name,
+                onStartPrivateChat = vm::startPrivateChat,
+                onClosePrivateChat = vm::stopPrivateChat,
                 onDisconnect = {
                     vm.disconnect()
                     nav.popBackStack(Routes.CONNECT, inclusive = false)
