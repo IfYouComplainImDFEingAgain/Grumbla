@@ -20,7 +20,7 @@ class SessionViewModel @Inject constructor(
     val inputLevel: StateFlow<Float> = sessionManager.inputLevel
     val userVolumes: StateFlow<Map<String, Float>> = sessionManager.userVolumes
     fun setUserVolume(name: String, db: Float) = sessionManager.setUserVolume(name, db)
-    val whisper: StateFlow<app.notmumla.data.WhisperTarget?> = sessionManager.whisper
+    val whisper: StateFlow<app.notmumla.data.UserRef?> = sessionManager.whisper
     fun startWhisper(session: Int, name: String) = sessionManager.startWhisper(session, name)
     fun stopWhisper() = sessionManager.stopWhisper()
     val debugStats: StateFlow<app.notmumla.protocol.model.AudioDebugStats> = sessionManager.debugStats
@@ -46,6 +46,10 @@ class SessionViewModel @Inject constructor(
     fun markChatRead() = sessionManager.markChatRead()
 
     fun joinChannel(channelId: Int) = sessionManager.joinChannel(channelId)
+
+    val privateChat: StateFlow<app.notmumla.data.UserRef?> = sessionManager.privateChat
+    fun startPrivateChat(session: Int, name: String) = sessionManager.startPrivateChat(session, name)
+    fun stopPrivateChat() = sessionManager.stopPrivateChat()
 
     fun sendText(channelId: Int, message: String) = sessionManager.sendText(channelId, message)
 

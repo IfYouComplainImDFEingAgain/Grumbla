@@ -79,6 +79,10 @@ fun ChannelsScreen(
     whisperingTo: String?,
     onWhisper: (UiUser) -> Unit,
     onStopWhisper: () -> Unit,
+    /** Name of the user the composer is privately messaging, or null for the channel. */
+    privateChatWith: String?,
+    onStartPrivateChat: (session: Int, name: String) -> Unit,
+    onClosePrivateChat: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -110,6 +114,9 @@ fun ChannelsScreen(
                         onSendImage = onSendImage,
                         messages = chatMessages,
                         channelName = currentChannelName,
+                        privateTo = privateChatWith,
+                        onReplyPrivately = onStartPrivateChat,
+                        onClosePrivate = onClosePrivateChat,
                     )
                 }
             }
@@ -140,6 +147,7 @@ fun ChannelsScreen(
             UserVolumeSheet(
                 u, onSetUserVolume,
                 onWhisper = { onWhisper(u); volumeUser = null },
+                onMessage = { onStartPrivateChat(u.id, u.name); volumeUser = null; tab = 1 },
                 onDismiss = { volumeUser = null },
             )
         }
@@ -151,6 +159,7 @@ private fun UserVolumeSheet(
     user: UiUser,
     onSet: (String, Float) -> Unit,
     onWhisper: () -> Unit,
+    onMessage: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -183,6 +192,11 @@ private fun UserVolumeSheet(
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Whisper to ${user.name}") }
                 Text("Your voice goes only to them until you stop.", fontSize = 12.sp, color = c.onSurfaceVar)
+                Spacer(Modifier.height(12.dp))
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = onMessage,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Message ${user.name} privately") }
             }
         },
         confirmButton = {

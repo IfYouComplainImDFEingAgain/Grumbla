@@ -10,4 +10,9 @@ data class ChatLine(
     val isSystem: Boolean = false,
     /** Decoded image bytes when the message carried an inline `<img>` data URI. */
     val imageBytes: ByteArray? = null,
+    /**
+     * Set for private messages: the other party (the sender for inbound, the recipient for our own).
+     * Null for channel/server messages.
+     */
+    val privatePeer: UserRef? = null,
 )

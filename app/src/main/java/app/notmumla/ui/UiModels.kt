@@ -63,6 +63,9 @@ data class UiMessage(
     val fileSize: String = "",
     /** Inline image bytes (JPEG/PNG) when this message carries an image. */
     val imageBytes: ByteArray? = null,
+    /** For private messages: the other party's name and session (to reply privately). */
+    val privateWith: String? = null,
+    val privateSession: Int? = null,
 )
 
 enum class ChannelLayout { TREE, SPEAKERS, COMPACT }

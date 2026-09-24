@@ -377,6 +377,13 @@ class SessionManager @Inject constructor(
                     _state.value = s
                     applyUserVolumes() // new/moved users pick up their saved volume
                     _whisper.value?.let { w -> if (w.session !in s.users) stopWhisper() }
+                    _privateChat.value?.let { p ->
+                        if (p.session !in s.users) {
+                            stopPrivateChat()
+                            appendChat(ChatLine(chatId++, "", "${p.name} left — private chat closed",
+                                System.currentTimeMillis(), isSystem = true))
+                        }
+                    }
                     if (s.connection == ConnectionState.CONNECTED) onConnected(server, s)
                 }
             }
@@ -444,16 +451,16 @@ class SessionManager @Inject constructor(
         app.notmumla.service.VoiceService.start(context)
     }
 
-    private val _whisper = MutableStateFlow<WhisperTarget?>(null)
+    private val _whisper = MutableStateFlow<UserRef?>(null)
     /** The user we're currently whispering to (all our outgoing voice goes only to them), or null. */
-    val whisper: StateFlow<WhisperTarget?> = _whisper.asStateFlow()
-    @Volatile private var whisperTo: WhisperTarget? = null
+    val whisper: StateFlow<UserRef?> = _whisper.asStateFlow()
+    @Volatile private var whisperTo: UserRef? = null
 
     /** Route our voice privately to [session] until [stopWhisper] (or they leave / we disconnect). */
     fun startWhisper(session: Int, name: String) {
         val mc = client ?: return
         mc.setWhisperTarget(WHISPER_TARGET_ID, listOf(session))
-        WhisperTarget(session, name).let { whisperTo = it; _whisper.value = it }
+        UserRef(session, name).let { whisperTo = it; _whisper.value = it }
     }
 
     fun stopWhisper() {
@@ -486,21 +493,51 @@ class SessionManager @Inject constructor(
 
     fun setSelfMuteDeaf(mute: Boolean, deaf: Boolean) = client?.setSelfMuteDeaf(mute, deaf)
 
+    private val _privateChat = MutableStateFlow<UserRef?>(null)
+    /** While set, the chat composer sends private messages to this user instead of the channel. */
+    val privateChat: StateFlow<UserRef?> = _privateChat.asStateFlow()
+
+    /**
+     * Open a private chat with [name]. Session ids are reassigned on reconnect, so an old message's
+     * [session] may be stale or now belong to someone else: resolve by name when it doesn't match.
+     */
+    fun startPrivateChat(session: Int, name: String) {
+        val users = _state.value.users
+        val user = users[session]?.takeIf { it.name == name } ?: users.values.firstOrNull { it.name == name }
+        if (user == null) {
+            appendChat(ChatLine(chatId++, "", "$name is not connected", System.currentTimeMillis(), isSystem = true))
+            return
+        }
+        _privateChat.value = UserRef(user.session, user.name)
+    }
+    fun stopPrivateChat() { _privateChat.value = null }
+
+    /** Send [message] to the open private chat if there is one, else to [channelId]. */
     fun sendText(channelId: Int, message: String) {
-        client?.sendText(channelId, message)
+        val mc = client ?: return
+        val to = _privateChat.value
+        if (to != null) mc.sendPrivateText(to.session, message) else mc.sendText(channelId, message)
         // The server does not echo our own messages back, so add it locally.
-        appendChat(ChatLine(chatId++, "You", message, System.currentTimeMillis(), isMe = true))
+        appendChat(
+            ChatLine(chatId++, "You", message, System.currentTimeMillis(), isMe = true,
+                privatePeer = to),
+        )
         markChatRead()
     }
 
-    /** Load, compress and send [uri] as an inline image to [channelId]. */
+    /** Load, compress and send [uri] as an inline image (to the open private chat, else [channelId]). */
     fun sendImage(channelId: Int, uri: android.net.Uri) {
+        // Capture the target now: the user may close the private chat while we compress.
+        val to = _privateChat.value
         scope.launch {
             val bytes = ImageUtil.loadCompressed(context, uri, _state.value.imageMessageLength)
                 ?: return@launch
-            client?.sendText(channelId, ImageUtil.toImageHtml(bytes))
+            val mc = client ?: return@launch
+            val html = ImageUtil.toImageHtml(bytes)
+            if (to != null) mc.sendPrivateText(to.session, html) else mc.sendText(channelId, html)
             appendChat(
-                ChatLine(chatId++, "You", "", System.currentTimeMillis(), isMe = true, imageBytes = bytes),
+                ChatLine(chatId++, "You", "", System.currentTimeMillis(), isMe = true, imageBytes = bytes,
+                    privatePeer = to),
             )
             markChatRead()
         }
@@ -520,16 +557,23 @@ class SessionManager @Inject constructor(
                 timeMillis = System.currentTimeMillis(),
                 isSystem = text.actorSession == null,
                 imageBytes = image,
+                privatePeer = text.actorSession?.takeIf { text.isPrivate }?.let { UserRef(it, name) },
             ),
         )
         _unread.value += 1
 
         val myName = _state.value.self?.name ?: lastServer?.username
         val mention = myName != null && clean.contains(myName, ignoreCase = true)
-        val spoken = if (clean.isBlank() && image != null) "$name sent an image" else "$name says $clean"
+        val says = if (text.isPrivate) "privately says" else "says"
+        val spoken = if (clean.isBlank() && image != null) "$name sent an image" else "$name $says $clean"
         if (settings.ttsReadAloud && (clean.isNotBlank() || image != null)) tts.speak(spoken)
-        // Notify on mentions (plain channel messages would be too noisy).
-        if (mention) notifier.postMessage(sender = name, text = clean, mention = true, sound = settings.mentionSound)
+        // Notify on private messages and mentions (plain channel messages would be too noisy).
+        val preview = clean.ifBlank { if (image != null) "Sent an image" else "" }
+        if (text.isPrivate) {
+            notifier.postMessage(sender = name, text = preview, mention = false, isPrivate = true, sound = settings.mentionSound)
+        } else if (mention) {
+            notifier.postMessage(sender = name, text = clean, mention = true, sound = settings.mentionSound)
+        }
     }
 
     private fun appendChat(line: ChatLine) {
@@ -571,6 +615,7 @@ class SessionManager @Inject constructor(
         activeServerId = null
         _speaking.value = emptySet()
         stopWhisper() // session ids don't survive a reconnect
+        stopPrivateChat()
         _localTransmitting.value = false
         _inputLevel.value = 0f
         _debugStats.value = app.notmumla.protocol.model.AudioDebugStats()
@@ -588,5 +633,5 @@ class SessionManager @Inject constructor(
     }
 }
 
-/** A whisper recipient; [name] is kept for display. */
-data class WhisperTarget(val session: Int, val name: String)
+/** A user by session id (whisper / private-chat peer); [name] is kept for display. */
+data class UserRef(val session: Int, val name: String)

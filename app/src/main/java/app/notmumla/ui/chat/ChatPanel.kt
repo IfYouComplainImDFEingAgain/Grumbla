@@ -6,6 +6,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
@@ -60,6 +62,10 @@ fun ChatPanel(
     onSendImage: (Uri) -> Unit = {},
     messages: List<UiMessage> = MockData.messages,
     channelName: String = "General",
+    /** When set, the composer sends private messages to this user instead of the channel. */
+    privateTo: String? = null,
+    onReplyPrivately: (session: Int, name: String) -> Unit = { _, _ -> },
+    onClosePrivate: () -> Unit = {},
 ) {
     val c = MumbleTheme.colors
     val pickImage = rememberLauncherForActivityResult(
@@ -68,17 +74,40 @@ fun ChatPanel(
     var viewerImage by remember { mutableStateOf<ByteArray?>(null) }
 
     Column(Modifier.fillMaxSize().background(c.surface)) {
-        Text("# $channelName", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.onSurfaceVar,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp))
+        if (privateTo != null) {
+            Row(
+                Modifier.fillMaxWidth().background(c.primaryContainer)
+                    .padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Lock, null, tint = c.onPrimaryContainer, modifier = Modifier.size(14.dp))
+                Text("Private chat with $privateTo", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                    color = c.onPrimaryContainer, modifier = Modifier.weight(1f).padding(start = 6.dp))
+                Box(Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onClosePrivate),
+                    contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Close, "Back to #$channelName", tint = c.onPrimaryContainer,
+                        modifier = Modifier.size(18.dp))
+                }
+            }
+        } else {
+            Text("# $channelName", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.onSurfaceVar,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp))
+        }
         Box(Modifier.fillMaxWidth().size(1.dp).background(c.outlineVariant))
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth().padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(messages) { msg -> MessageRow(msg, onImageClick = { viewerImage = it }) }
+            items(messages) { msg ->
+                MessageRow(
+                    msg,
+                    onImageClick = { viewerImage = it },
+                    onOpenPrivate = { s, n -> onReplyPrivately(s, n) },
+                )
+            }
         }
         Composer(
-            channelName = channelName,
+            placeholder = if (privateTo != null) "Message $privateTo privately" else "Message #$channelName",
             onSend = onSend,
             onAttach = {
                 pickImage.launch(
@@ -94,19 +123,33 @@ fun ChatPanel(
 }
 
 @Composable
-private fun MessageRow(msg: UiMessage, onImageClick: (ByteArray) -> Unit) {
+private fun MessageRow(
+    msg: UiMessage,
+    onImageClick: (ByteArray) -> Unit,
+    onOpenPrivate: (session: Int, name: String) -> Unit,
+) {
     val c = MumbleTheme.colors
+    val isPrivate = msg.privateWith != null
+    // Private bubbles get a primary outline so they stand out from channel chatter; tapping one
+    // opens (or returns to) the private chat with that user.
+    fun privateMod(shape: androidx.compose.ui.graphics.Shape): Modifier {
+        val peer = msg.privateWith ?: return Modifier
+        val session = msg.privateSession ?: return Modifier.border(1.5.dp, c.primary, shape)
+        return Modifier.clip(shape).border(1.5.dp, c.primary, shape).clickable { onOpenPrivate(session, peer) }
+    }
     when (msg.kind) {
         ChatKind.SYSTEM -> Text(
             msg.text, fontSize = 12.sp, color = c.onSurfaceVar,
             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         )
-        ChatKind.ME -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        ChatKind.ME -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
+            if (isPrivate) PrivateLabel("Private to ${msg.privateWith}")
             if (msg.imageBytes != null) {
-                InlineImage(msg, onClick = { onImageClick(msg.imageBytes) })
+                InlineImage(msg, modifier = privateMod(RoundedCornerShape(14.dp)), onClick = { onImageClick(msg.imageBytes) })
             } else {
+                val shape = RoundedCornerShape(14.dp, 14.dp, 4.dp, 14.dp)
                 Box(
-                    Modifier.clip(RoundedCornerShape(14.dp, 14.dp, 4.dp, 14.dp))
+                    privateMod(shape).clip(shape)
                         .background(c.primaryContainer).padding(horizontal = 12.dp, vertical = 9.dp),
                 ) { Text(msg.text, color = c.onPrimaryContainer, fontSize = 14.sp) }
             }
@@ -118,19 +161,31 @@ private fun MessageRow(msg: UiMessage, onImageClick: (ByteArray) -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(msg.name, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = c.onSurface)
                     Text(msg.time, fontSize = 11.sp, color = c.onSurfaceVar)
+                    if (isPrivate) PrivateLabel("Private")
                 }
                 if (msg.imageBytes != null) {
-                    InlineImage(msg, modifier = Modifier.padding(top = 3.dp),
+                    InlineImage(msg, modifier = Modifier.padding(top = 3.dp).then(privateMod(RoundedCornerShape(14.dp))),
                         onClick = { onImageClick(msg.imageBytes) })
                 }
                 if (msg.text.isNotBlank()) {
+                    val shape = RoundedCornerShape(4.dp, 14.dp, 14.dp, 14.dp)
                     Box(
-                        Modifier.padding(top = 3.dp).clip(RoundedCornerShape(4.dp, 14.dp, 14.dp, 14.dp))
+                        Modifier.padding(top = 3.dp).then(privateMod(shape)).clip(shape)
                             .background(c.surfHigh).padding(horizontal = 12.dp, vertical = 9.dp),
                     ) { Text(msg.text, color = c.onSurface, fontSize = 14.sp) }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PrivateLabel(text: String) {
+    val c = MumbleTheme.colors
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 2.dp)) {
+        Icon(Icons.Filled.Lock, null, tint = c.primary, modifier = Modifier.size(11.dp))
+        Text(text, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = c.primary,
+            modifier = Modifier.padding(start = 3.dp))
     }
 }
 
@@ -200,7 +255,7 @@ private fun FullScreenImageViewer(bytes: ByteArray, onClose: () -> Unit) {
 }
 
 @Composable
-private fun Composer(channelName: String, onSend: (String) -> Unit, onAttach: () -> Unit) {
+private fun Composer(placeholder: String, onSend: (String) -> Unit, onAttach: () -> Unit) {
     val c = MumbleTheme.colors
     var text by remember { mutableStateOf("") }
     Box(Modifier.fillMaxWidth().size(1.dp).background(c.outlineVariant))
@@ -223,7 +278,7 @@ private fun Composer(channelName: String, onSend: (String) -> Unit, onAttach: ()
                 cursorBrush = SolidColor(c.primary),
                 modifier = Modifier.fillMaxWidth(),
                 decorationBox = { inner ->
-                    if (text.isEmpty()) Text("Message #$channelName", color = c.onSurfaceVar, fontSize = 14.sp)
+                    if (text.isEmpty()) Text(placeholder, color = c.onSurfaceVar, fontSize = 14.sp)
                     inner()
                 },
             )

@@ -31,8 +31,12 @@ class Notifier @Inject constructor(
         )
     }
 
-    /** Show a message notification. [mention] raises priority and enables sound/vibration. */
-    fun postMessage(sender: String, text: String, mention: Boolean, sound: Boolean) {
+    /**
+     * Show a message notification. [mention] and [isPrivate] (a message addressed only to us) raise
+     * priority and enable sound/vibration.
+     */
+    fun postMessage(sender: String, text: String, mention: Boolean, sound: Boolean, isPrivate: Boolean = false) {
+        val urgent = mention || isPrivate
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
         ) return
@@ -43,16 +47,16 @@ class Notifier @Inject constructor(
         )
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_mic)
-            .setContentTitle(if (mention) "$sender mentioned you" else sender)
+            .setContentTitle(when { isPrivate -> "Private message from $sender"; mention -> "$sender mentioned you"; else -> sender })
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
             .setContentIntent(open)
-            .setPriority(if (mention) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(if (urgent) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
 
         val defaults = when {
-            mention && sound -> NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE
-            mention -> NotificationCompat.DEFAULT_VIBRATE
+            urgent && sound -> NotificationCompat.DEFAULT_SOUND or NotificationCompat.DEFAULT_VIBRATE
+            urgent -> NotificationCompat.DEFAULT_VIBRATE
             else -> 0
         }
         builder.setDefaults(defaults)
