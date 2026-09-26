@@ -118,6 +118,13 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   are excluded. 🟡 Needs on-device verification. Suspect for intermittent send stutter: see
   "Known issues / watch-outs".
 
+- **Channel listeners**: `User.listeningChannels` tracks `UserState.listening_channel_add/remove`
+  (deltas). Listeners render above a channel's members (ear icon, italic `listener` blue) and are
+  not counted in its user badge. Long-press a channel (Tree/Compact) → Join / Listen / Stop
+  listening (`MumbleClient.setListening`). Listens are re-added after auto-reconnect (unregistered
+  users lose them server-side). `PermissionDenied` is now surfaced as a toast (was silently
+  dropped). Verified on-device.
+
 ### Fixes since M5 (user-reported)
 - **Dropped from busy servers after a few seconds** (silent EOF, no reason). The keep-alive idle
   timer (`ControlChannel.idleMs()`) was reset by **receives as well as sends**, so on a populated
