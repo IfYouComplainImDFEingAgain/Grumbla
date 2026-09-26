@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.MoreVert
@@ -38,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -321,6 +323,7 @@ private fun TreeLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onUserL
         }
         items(channels) { channel ->
             ChannelHeaderRow(channel, onJoin)
+            channel.listeners.forEach { ListenerRow(it) { onUserLongPress(it) } }
             channel.users.forEach { user -> UserRow(user) { onUserLongPress(user) } }
         }
     }
@@ -367,6 +370,31 @@ private fun ChannelHeaderRow(channel: UiChannel, onJoin: (Int) -> Unit) {
                     fontWeight = FontWeight.Bold, color = fg)
             }
         }
+    }
+}
+
+/** Someone listening to this channel from elsewhere: ear icon + italic light-blue name. */
+@Composable
+private fun ListenerRow(
+    user: UiUser,
+    startPadding: androidx.compose.ui.unit.Dp = 38.dp,
+    iconSize: androidx.compose.ui.unit.Dp = 18.dp,
+    fontSize: androidx.compose.ui.unit.TextUnit = 14.sp,
+    verticalPadding: androidx.compose.ui.unit.Dp = 7.dp,
+    onLongPress: () -> Unit,
+) {
+    val c = MumbleTheme.colors
+    Row(
+        Modifier.fillMaxWidth()
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
+            .padding(start = startPadding, end = 12.dp, top = verticalPadding, bottom = verticalPadding),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(Icons.Filled.Hearing, "listening", tint = c.listener, modifier = Modifier.size(iconSize))
+        Text(user.name, fontSize = fontSize, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Medium,
+            color = c.listener, modifier = Modifier.weight(1f))
+        if (user.isYou) Text("YOU", color = c.primary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
     }
 }
 
@@ -432,6 +460,10 @@ private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onU
             Text("IN ${current.name.uppercase()}", color = c.onSurfaceVar, fontWeight = FontWeight.Bold,
                 fontSize = 11.sp, letterSpacing = 0.06.sp,
                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
+            current.listeners.forEach {
+                ListenerRow(it, startPadding = 12.dp, iconSize = 16.dp, fontSize = 13.sp,
+                    verticalPadding = 6.dp) { onUserLongPress(it) }
+            }
         }
         items(others) { user ->
             Row(
@@ -496,6 +528,10 @@ private fun CompactLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onUs
                     Text("${channel.users.size}", fontFamily = MonoFamily, fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (channel.isCurrent) c.primary else c.onSurfaceVar)
+            }
+            channel.listeners.forEach {
+                ListenerRow(it, startPadding = 40.dp, iconSize = 14.dp, fontSize = 13.sp,
+                    verticalPadding = 5.dp) { onUserLongPress(it) }
             }
             channel.users.forEach { user ->
                 Row(

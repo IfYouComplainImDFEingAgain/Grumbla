@@ -15,6 +15,8 @@ data class User(
     val prioritySpeaker: Boolean = false,
     val comment: String? = null,
     val certHash: String? = null,
+    /** Channels this user is listening to (channel listeners) without being in them. */
+    val listeningChannels: Set<Int> = emptySet(),
 ) {
     val effectivelyMuted: Boolean get() = mute || selfMute || suppress
     val effectivelyDeaf: Boolean get() = deaf || selfDeaf
@@ -63,6 +65,10 @@ data class ServerState(
     /** Users grouped by channel id, for rendering the tree. */
     fun usersInChannel(channelId: Int): List<User> =
         users.values.filter { it.channelId == channelId }.sortedBy { it.name.lowercase() }
+
+    /** Users listening to [channelId] from elsewhere (Mumble "channel listeners"). */
+    fun listenersOf(channelId: Int): List<User> =
+        users.values.filter { channelId in it.listeningChannels }.sortedBy { it.name.lowercase() }
 
     /**
      * Direct children of [parentId], ordered by position then name. The Mumble root channel
