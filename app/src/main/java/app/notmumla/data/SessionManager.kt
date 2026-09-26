@@ -553,11 +553,12 @@ class SessionManager @Inject constructor(
     fun stopPrivateChat() { _privateChat.value = null }
 
     /** Send [message] to the open private chat if there is one, else to [channelId]. */
-    fun sendText(channelId: Int, message: String) {
+    /** Send [message] (Markdown), or the rich composer's ready-made [html] with [message] as its plain text. */
+    fun sendText(channelId: Int, message: String, html: String? = null) {
         val mc = client ?: return
         val to = _privateChat.value
         // Chat is HTML on the wire; like the desktop client, the composer's text is Markdown.
-        val html = ChatMarkdown.toHtml(message)
+        val html = html ?: ChatMarkdown.toHtml(message)
         if (to != null) mc.sendPrivateText(to.session, html) else mc.sendText(channelId, html)
         // The server does not echo our own messages back, so add it locally.
         appendChat(

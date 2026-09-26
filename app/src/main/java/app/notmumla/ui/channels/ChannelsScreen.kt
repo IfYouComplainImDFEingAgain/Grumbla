@@ -74,7 +74,7 @@ fun ChannelsScreen(
     onPttHeld: (Boolean) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
-    onSendText: (String) -> Unit,
+    onSendText: (text: String, html: String?) -> Unit,
     onSendImage: (android.net.Uri) -> Unit,
     onChatRead: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -91,6 +91,7 @@ fun ChannelsScreen(
     /** Remove a chat message from our local history (by [app.notmumla.ui.UiMessage.id]). */
     onDeleteMessage: (Int) -> Unit = {},
     onClearChat: () -> Unit = {},
+    richComposer: Boolean = false,
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -130,6 +131,7 @@ fun ChannelsScreen(
                         onClosePrivate = onClosePrivateChat,
                         onDeleteMessage = onDeleteMessage,
                         onClearChat = onClearChat,
+                        richComposer = richComposer,
                     )
                 }
             }

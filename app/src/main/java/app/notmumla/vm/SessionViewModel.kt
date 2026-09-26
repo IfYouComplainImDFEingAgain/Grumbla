@@ -62,7 +62,8 @@ class SessionViewModel @Inject constructor(
     fun startPrivateChat(session: Int, name: String) = sessionManager.startPrivateChat(session, name)
     fun stopPrivateChat() = sessionManager.stopPrivateChat()
 
-    fun sendText(channelId: Int, message: String) = sessionManager.sendText(channelId, message)
+    fun sendText(channelId: Int, message: String, html: String? = null) =
+        sessionManager.sendText(channelId, message, html)
 
     fun sendImage(channelId: Int, uri: android.net.Uri) = sessionManager.sendImage(channelId, uri)
 

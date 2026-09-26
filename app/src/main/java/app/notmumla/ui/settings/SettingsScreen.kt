@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.FormatBold
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Error
@@ -126,6 +127,7 @@ fun SettingsScreen(
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleTts: (Boolean) -> Unit,
     onToggleMentionSound: (Boolean) -> Unit,
+    onToggleRichComposer: (Boolean) -> Unit,
     onToggleDebugOverlay: (Boolean) -> Unit,
     onRegenerateIdentity: () -> Unit,
     onExportIdentity: suspend (password: String) -> ByteArray?,
@@ -367,6 +369,14 @@ fun SettingsScreen(
                 ToggleRow(Icons.AutoMirrored.Filled.VolumeUp, "Audio leveling",
                     "Even out quiet and loud talkers to a consistent volume",
                     settings.audioLeveling, onToggleAudioLeveling)
+            }
+
+            SectionLabel("CHAT")
+            SettingsGroup {
+                ToggleRow(Icons.Filled.FormatBold, "Formatting toolbar",
+                    if (settings.richComposer) "Bold, italic, color… buttons above the message box"
+                    else "Off: format by typing Markdown (**bold**, *italic*, `code`)",
+                    settings.richComposer, onToggleRichComposer)
             }
 
             SectionLabel("NOTIFICATIONS")

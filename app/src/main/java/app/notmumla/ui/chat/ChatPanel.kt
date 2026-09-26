@@ -33,6 +33,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.FormatBold
+import androidx.compose.material.icons.filled.FormatColorReset
+import androidx.compose.material.icons.filled.FormatColorText
+import androidx.compose.material.icons.filled.FormatItalic
+import androidx.compose.material.icons.filled.FormatStrikethrough
+import androidx.compose.material.icons.filled.FormatUnderlined
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
@@ -77,7 +84,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun ChatPanel(
-    onSend: (String) -> Unit = {},
+    /** Send [text]; [html] is set when the rich composer formatted it (else [text] is Markdown). */
+    onSend: (text: String, html: String?) -> Unit = { _, _ -> },
     onSendImage: (Uri) -> Unit = {},
     messages: List<UiMessage> = MockData.messages,
     channelName: String = "General",
@@ -87,6 +95,8 @@ fun ChatPanel(
     onClosePrivate: () -> Unit = {},
     onDeleteMessage: (id: Int) -> Unit = {},
     onClearChat: () -> Unit = {},
+    /** Show the WYSIWYG formatting toolbar instead of typing Markdown. */
+    richComposer: Boolean = false,
 ) {
     val c = MumbleTheme.colors
     val pickImage = rememberLauncherForActivityResult(
@@ -145,6 +155,7 @@ fun ChatPanel(
             privateTo = privateTo,
             onClosePrivate = onClosePrivate,
             onSend = onSend,
+            rich = richComposer,
             onAttach = {
                 pickImage.launch(
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -424,12 +435,15 @@ private fun Composer(
     placeholder: String,
     privateTo: String?,
     onClosePrivate: () -> Unit,
-    onSend: (String) -> Unit,
+    onSend: (text: String, html: String?) -> Unit,
+    rich: Boolean,
     onAttach: () -> Unit,
 ) {
     val c = MumbleTheme.colors
     var text by remember { mutableStateOf("") }
+    var draft by remember { mutableStateOf(RichDraft()) }
     Box(Modifier.fillMaxWidth().size(1.dp).background(c.outlineVariant))
+    if (rich) FormatBar(draft, onChange = { draft = it })
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -457,27 +471,107 @@ private fun Composer(
                         modifier = Modifier.size(14.dp))
                 }
             }
-            BasicTextField(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                textStyle = LocalTextStyle.current.copy(color = c.onSurface, fontSize = 14.sp),
-                cursorBrush = SolidColor(c.primary),
-                modifier = Modifier.weight(1f).padding(vertical = 11.dp),
-                decorationBox = { inner ->
-                    if (text.isEmpty()) Text(placeholder, color = c.onSurfaceVar, fontSize = 14.sp)
-                    inner()
-                },
-            )
+            val textStyle = LocalTextStyle.current.copy(color = c.onSurface, fontSize = 14.sp)
+            val fieldMod = Modifier.weight(1f).padding(vertical = 11.dp)
+            val empty = if (rich) draft.text.isEmpty() else text.isEmpty()
+            val decoration: @Composable (@Composable () -> Unit) -> Unit = { inner ->
+                if (empty) Text(placeholder, color = c.onSurfaceVar, fontSize = 14.sp)
+                inner()
+            }
+            if (rich) {
+                BasicTextField(
+                    value = draft.value,
+                    onValueChange = { draft = draft.edit(it) },
+                    singleLine = true,
+                    textStyle = textStyle,
+                    cursorBrush = SolidColor(c.primary),
+                    visualTransformation = RichDraftTransformation(draft.styles),
+                    modifier = fieldMod,
+                    decorationBox = decoration,
+                )
+            } else {
+                BasicTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    singleLine = true,
+                    textStyle = textStyle,
+                    cursorBrush = SolidColor(c.primary),
+                    modifier = fieldMod,
+                    decorationBox = decoration,
+                )
+            }
         }
         val send = {
-            val t = text.trim()
-            if (t.isNotEmpty()) { onSend(t); text = "" }
+            if (rich) {
+                val d = draft.trimmed()
+                if (d.text.isNotEmpty()) { onSend(d.text, d.toHtml()); draft = RichDraft() }
+            } else {
+                val t = text.trim()
+                if (t.isNotEmpty()) { onSend(t, null); text = "" }
+            }
         }
         Box(
             Modifier.size(40.dp).clip(RoundedCornerShape(20.dp)).background(c.primary)
                 .clickable { send() },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = c.onPrimary, modifier = Modifier.size(20.dp)) }
+    }
+}
+
+private val TEXT_COLORS = listOf(0xE53935, 0xF57C00, 0xFBC02D, 0x43A047, 0x1E88E5, 0x8E24AA, 0xD81B60)
+
+/** WYSIWYG toolbar: toggles apply to the selection, or to what's typed next when nothing is selected. */
+@Composable
+private fun FormatBar(draft: RichDraft, onChange: (RichDraft) -> Unit) {
+    val c = MumbleTheme.colors
+    var colors by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().padding(start = 60.dp, end = 12.dp, top = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        @Composable
+        fun toggle(f: Format, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
+            val on = draft.isOn(f)
+            Box(
+                Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
+                    .background(if (on) c.primaryContainer else Color.Transparent)
+                    .clickable { onChange(draft.toggle(f)) },
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, label, tint = if (on) c.onPrimaryContainer else c.onSurfaceVar, modifier = Modifier.size(20.dp)) }
+        }
+        toggle(Format.BOLD, Icons.Filled.FormatBold, "Bold")
+        toggle(Format.ITALIC, Icons.Filled.FormatItalic, "Italic")
+        toggle(Format.UNDERLINE, Icons.Filled.FormatUnderlined, "Underline")
+        toggle(Format.STRIKE, Icons.Filled.FormatStrikethrough, "Strikethrough")
+        toggle(Format.CODE, Icons.Filled.Code, "Code")
+        val current = if (draft.value.selection.collapsed) draft.typingStyle.color
+            else draft.styles.getOrNull(draft.value.selection.min)?.color
+        Box {
+            Box(
+                Modifier.size(34.dp).clip(RoundedCornerShape(8.dp)).clickable { colors = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.FormatColorText, "Text color",
+                    tint = current?.let { Color(0xFF000000 or it.toLong()) } ?: c.onSurfaceVar,
+                    modifier = Modifier.size(20.dp))
+            }
+            DropdownMenu(expanded = colors, onDismissRequest = { colors = false }, containerColor = c.surfContainer) {
+                Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Default color first: clears any color.
+                    Box(
+                        Modifier.size(28.dp).clip(CircleShape).border(1.5.dp, c.onSurfaceVar, CircleShape)
+                            .clickable { onChange(draft.color(null)); colors = false },
+                        contentAlignment = Alignment.Center,
+                    ) { Icon(Icons.Filled.FormatColorReset, "Default color", tint = c.onSurfaceVar, modifier = Modifier.size(16.dp)) }
+                    TEXT_COLORS.forEach { rgb ->
+                        Box(
+                            Modifier.size(28.dp).clip(CircleShape).background(Color(0xFF000000 or rgb.toLong()))
+                                .clickable { onChange(draft.color(rgb)); colors = false },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
