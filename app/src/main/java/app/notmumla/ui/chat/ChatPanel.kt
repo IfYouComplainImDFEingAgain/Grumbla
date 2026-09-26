@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -32,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,15 +76,31 @@ fun ChatPanel(
     ) { uri -> uri?.let(onSendImage) }
     var viewerImage by remember { mutableStateOf<ByteArray?>(null) }
 
+    // The panel is recreated on every tab switch, so open at the newest message.
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = messages.lastIndex.coerceAtLeast(0))
+    // Keyed on the newest id, not the count: the history is capped, so at the cap size stays flat.
+    var lastSeenId by remember { mutableStateOf(messages.lastOrNull()?.id) }
+    LaunchedEffect(messages.lastOrNull()?.id) {
+        val newest = messages.lastOrNull() ?: return@LaunchedEffect
+        val prevId = lastSeenId
+        lastSeenId = newest.id
+        if (newest.id == prevId) return@LaunchedEffect
+        // Only follow new messages if the previous newest was on screen (or we sent it), so
+        // reading scrollback isn't yanked away by incoming chatter.
+        val wasAtBottom = prevId == null || listState.layoutInfo.visibleItemsInfo.any { it.key == prevId }
+        if (wasAtBottom || newest.kind == ChatKind.ME) listState.animateScrollToItem(messages.lastIndex)
+    }
+
     Column(Modifier.fillMaxSize().background(c.surface)) {
         Text("# $channelName", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = c.onSurfaceVar,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp))
         Box(Modifier.fillMaxWidth().size(1.dp).background(c.outlineVariant))
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth().padding(14.dp),
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(messages) { msg ->
+            items(messages, key = { it.id }) { msg ->
                 MessageRow(
                     msg,
                     onImageClick = { viewerImage = it },
