@@ -14,6 +14,8 @@ Kotlin and Jetpack Compose (not a fork of Mumla/Plumble).
   both the Mumble ≥1.5 protobuf and legacy audio formats, auto-reconnect, kick/ban reporting.
 - **Identity**: self-signed client certificate generated on-device; view, regenerate, and
   import/export as PKCS#12. Trust-on-first-use server certificate pinning.
+- **Private messages and whisper**: send a user a private text/image message (shown inline in the
+  chat, marked 🔒, always notifies), or whisper — route your voice to just one user.
 - Channel tree / speakers / compact views, text chat with images, saved servers, foreground service
   with Mute / Deafen / Disconnect in the notification, light and dark themes.
 

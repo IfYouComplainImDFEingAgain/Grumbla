@@ -93,6 +93,14 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   and rendered in the bubble. Verified by `ImageMessageTest`. (Doesn't yet act on `allow_html=false`.)
   Thumbnails are aspect-bounded (240×300dp) so they never overflow; tap opens a full-screen viewer
   with pinch-zoom + pan.
+- **Whisper**: user sheet → "Whisper to X" registers `VoiceTarget` 1 for that session; the target is
+  locked per talk spurt and cleared when they leave or we reconnect. Verified by `WhisperIntegrationTest`.
+- **Private messages**: inbound `TextMessage` with `session` set and no `channel_id`/`tree_id` is
+  flagged private (same rule as the reference client); shown inline with a 🔒 label + outlined
+  bubble, always notifies, TTS says "privately says". Send via user sheet → "Message X privately"
+  or by tapping a private message; the composer shows a 🔒 name ✕ chip while in private mode. Target
+  is re-resolved by name if its session id is stale, and cleared when the peer leaves / on reconnect.
+  Verified by `TextMessageTest.privateMessageReachesOnlyTargetAndIsFlagged`.
 - **Legacy voice protocol** (pre-1.5 servers): auto-selects the legacy Opus packet format when
   the server (or our advertised version) predates 1.5.0, so voice works on 1.3.x/1.4.x servers;
   inbound format is auto-detected by header byte. Verified by `LegacyVoiceTest`. The 1.5 protobuf
