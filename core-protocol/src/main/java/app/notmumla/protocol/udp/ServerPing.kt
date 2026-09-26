@@ -37,12 +37,23 @@ object ServerPing {
         val v = buf.int
         if (buf.long != ident) return null
         return ServerPingInfo(
-            version = "${(v ushr 16) and 0xFFFF}.${(v ushr 8) and 0xFF}.${v and 0xFF}",
+            version = legacyVersion(v),
             users = buf.int,
             maxUsers = buf.int,
             maxBandwidth = buf.int,
             latencyMs = latencyMs,
         )
+    }
+
+    /**
+     * The legacy format caps minor/patch at 255, so 1.5.901 arrives as 1.5.255; a capped patch is
+     * dropped rather than shown as a version the server isn't running.
+     */
+    private fun legacyVersion(v: Int): String {
+        val major = (v ushr 16) and 0xFFFF
+        val minor = (v ushr 8) and 0xFF
+        val patch = v and 0xFF
+        return if (patch == 0xFF) "$major.$minor" else "$major.$minor.$patch"
     }
 
     /** Pings [host]:[port], retrying once; null if unresolvable, unreachable or pings are off. */

@@ -27,11 +27,17 @@ class ServerPingTest {
             .putInt((1 shl 16) or (5 shl 8) or 255).putLong(42L)
             .putInt(7).putInt(100).putInt(558_000).array()
         val info = ServerPing.parse(reply, 24, 42L, 12)!!
-        assertEquals("1.5.255", info.version)
+        assertEquals("1.5", info.version)
         assertEquals(7, info.users)
         assertEquals(100, info.maxUsers)
         assertEquals(558_000, info.maxBandwidth)
         assertEquals(12, info.latencyMs)
+    }
+
+    @Test
+    fun keepsUncappedPatch() {
+        val reply = ByteBuffer.allocate(24).putInt((1 shl 16) or (4 shl 8) or 230).putLong(1L).array()
+        assertEquals("1.4.230", ServerPing.parse(reply, 24, 1L, 0)!!.version)
     }
 
     @Test

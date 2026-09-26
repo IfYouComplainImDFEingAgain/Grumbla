@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.IconButton
@@ -40,6 +41,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.sp
 import app.notmumla.data.db.ServerEntity
 import app.notmumla.protocol.Mumble
@@ -58,9 +61,7 @@ fun ConnectScreen(
     onOpenSettings: () -> Unit,
 ) {
     val c = MumbleTheme.colors
-    var host by remember { mutableStateOf("") }
-    var port by remember { mutableStateOf(Mumble.DEFAULT_PORT.toString()) }
-    var username by remember { mutableStateOf("user") }
+    var showAdd by remember { mutableStateOf(false) }
 
     Column(
         Modifier.fillMaxSize().background(c.surface).verticalScroll(rememberScrollState())
@@ -86,46 +87,102 @@ fun ConnectScreen(
                 modifier = Modifier.padding(top = 4.dp))
         }
 
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(c.surfContainer)
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(Modifier.weight(1f)) {
-                    LabeledField("Server address", host, "example.com") { host = it }
-                }
-                Box(Modifier.width(110.dp)) {
-                    LabeledField("Port", port, "64738", numeric = true) {
-                        port = it.filter(Char::isDigit).take(5)
-                    }
-                }
-            }
-            LabeledField("Username", username, "user") { username = it }
-            val canConnect = host.isNotBlank() && username.isNotBlank()
-            Box(
-                Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(16.dp))
-                    .background(if (canConnect) c.primary else c.surfHighest)
-                    .clickable(enabled = canConnect) {
-                        onConnectNew(host.trim(), port.toIntOrNull() ?: Mumble.DEFAULT_PORT,
-                            username.trim(), null)
-                    }
-                    .padding(15.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("Connect", color = if (canConnect) c.onPrimary else c.onSurfaceVar,
-                    fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
-        }
-
-        if (savedServers.isNotEmpty()) {
+        if (savedServers.isEmpty()) {
+            NewServerForm(onConnectNew)
+        } else {
             Text("RECENT SERVERS", color = c.onSurfaceVar, fontWeight = FontWeight.Bold,
                 fontSize = 12.sp, letterSpacing = 0.06.sp,
-                modifier = Modifier.padding(top = 24.dp, bottom = 8.dp, start = 4.dp))
+                modifier = Modifier.padding(bottom = 8.dp, start = 4.dp))
             savedServers.forEach { server ->
-                ServerRow(server, serverStatus[server.host to server.port], onClick = { onConnectSaved(server) }, onLongPress = { onDelete(server) })
+                ServerRow(server, serverStatus[server.host to server.port],
+                    onClick = { onConnectSaved(server) }, onLongPress = { onDelete(server) })
                 Spacer(Modifier.height(8.dp))
             }
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, c.outlineVariant, RoundedCornerShape(16.dp))
+                    .clickable { showAdd = true }
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Add, null, tint = c.primary, modifier = Modifier.size(20.dp))
+                Text("Add Server", color = c.primary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+        }
+    }
+
+    if (showAdd) {
+        Dialog(
+            onDismissRequest = { showAdd = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.padding(horizontal = 20.dp)) {
+                NewServerForm(
+                    onConnectNew = { host, port, user, pass ->
+                        showAdd = false
+                        onConnectNew(host, port, user, pass)
+                    },
+                    title = "Add Server",
+                    onCancel = { showAdd = false },
+                )
+            }
+        }
+    }
+}
+
+/** Address/port/username card; inline when nothing is saved yet, else shown in the Add Server dialog. */
+@Composable
+private fun NewServerForm(
+    onConnectNew: (host: String, port: Int, username: String, password: String?) -> Unit,
+    title: String? = null,
+    onCancel: (() -> Unit)? = null,
+) {
+    val c = MumbleTheme.colors
+    var host by remember { mutableStateOf("") }
+    var port by remember { mutableStateOf(Mumble.DEFAULT_PORT.toString()) }
+    var username by remember { mutableStateOf("user") }
+
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(c.surfContainer)
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        if (title != null) {
+            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = c.onSurface,
+                modifier = Modifier.padding(start = 4.dp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.weight(1f)) {
+                LabeledField("Server address", host, "example.com") { host = it }
+            }
+            Box(Modifier.width(110.dp)) {
+                LabeledField("Port", port, "64738", numeric = true) {
+                    port = it.filter(Char::isDigit).take(5)
+                }
+            }
+        }
+        LabeledField("Username", username, "user") { username = it }
+        val canConnect = host.isNotBlank() && username.isNotBlank()
+        Box(
+            Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(16.dp))
+                .background(if (canConnect) c.primary else c.surfHighest)
+                .clickable(enabled = canConnect) {
+                    onConnectNew(host.trim(), port.toIntOrNull() ?: Mumble.DEFAULT_PORT,
+                        username.trim(), null)
+                }
+                .padding(15.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Connect", color = if (canConnect) c.onPrimary else c.onSurfaceVar,
+                fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+        if (onCancel != null) {
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onCancel)
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text("Cancel", color = c.onSurfaceVar, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
         }
     }
 }
