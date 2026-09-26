@@ -2,7 +2,7 @@ package app.notmumla.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
 import android.util.Base64
 import java.io.ByteArrayOutputStream
@@ -24,8 +24,19 @@ object ImageUtil {
         val maxRaw = ((limit - 64) * 3 / 4) - 64
         if (maxRaw <= 0) return null
 
+        // ImageDecoder (unlike BitmapFactory) applies the EXIF orientation. Our re-encoded JPEG
+        // carries no EXIF, so the rotation must be baked into the pixels or receivers see it sideways.
         val source = runCatching {
-            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { d, info, _ ->
+                d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                // Downsample during decode: a full-res camera photo is tens of MB as a bitmap.
+                val longest = maxOf(info.size.width, info.size.height)
+                if (longest > MAX_DIMENSION) {
+                    val scale = MAX_DIMENSION.toFloat() / longest
+                    d.setTargetSize((info.size.width * scale).toInt().coerceAtLeast(1),
+                        (info.size.height * scale).toInt().coerceAtLeast(1))
+                }
+            }
         }.getOrNull() ?: return null
 
         var bmp = scaleDown(source, MAX_DIMENSION)
