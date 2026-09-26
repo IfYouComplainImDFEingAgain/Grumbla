@@ -345,6 +345,7 @@ class SessionManager @Inject constructor(
     private var reconnectAttempts = 0
     private var reconnectJob: Job? = null
     private var lastKnownChannelId: Int? = null
+    private var lastKnownListening: Set<Int> = emptySet()
 
     /** Connect to a saved server, generating the identity on first use. */
     fun connect(server: ServerEntity) {
@@ -353,6 +354,7 @@ class SessionManager @Inject constructor(
         reconnectJob = null
         reconnectAttempts = 0
         lastKnownChannelId = null
+        lastKnownListening = emptySet()
         // Auto-reconnects keep whatever route is active; only a fresh connect re-picks it.
         router.markCurrent(startupRoute())
         doConnect(server)
@@ -394,7 +396,10 @@ class SessionManager @Inject constructor(
 
         mirrorJob = scope.launch {
             mc.state.collect { s ->
-                s.self?.channelId?.let { lastKnownChannelId = it }
+                s.self?.let {
+                    lastKnownChannelId = it.channelId
+                    lastKnownListening = it.listeningChannels
+                }
                 if (s.connection == ConnectionState.FAILED &&
                     s.certMismatchFingerprint == null && !s.fatal && shouldReconnect()
                 ) {
@@ -440,6 +445,11 @@ class SessionManager @Inject constructor(
         val target = lastKnownChannelId
         if (reconnectAttempts > 0 && target != null && target != state.self?.channelId) {
             client?.joinChannel(target)
+        }
+        // Unregistered users' listeners die with the session; restore them too.
+        if (reconnectAttempts > 0) {
+            (lastKnownListening - state.self?.listeningChannels.orEmpty())
+                .forEach { client?.setListening(it, true) }
         }
         reconnectAttempts = 0
         val id = activeServerId ?: return
@@ -519,6 +529,7 @@ class SessionManager @Inject constructor(
     }
 
     fun joinChannel(channelId: Int) = client?.joinChannel(channelId)
+    fun setListening(channelId: Int, listen: Boolean) = client?.setListening(channelId, listen)
 
     fun setSelfMuteDeaf(mute: Boolean, deaf: Boolean) = client?.setSelfMuteDeaf(mute, deaf)
 

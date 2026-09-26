@@ -6,6 +6,8 @@ import app.notmumla.data.SessionManager
 import app.notmumla.protocol.model.ServerState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 @HiltViewModel
@@ -47,6 +49,12 @@ class SessionViewModel @Inject constructor(
     fun markChatRead() = sessionManager.markChatRead()
 
     fun joinChannel(channelId: Int) = sessionManager.joinChannel(channelId)
+    fun setListening(channelId: Int, listen: Boolean) = sessionManager.setListening(channelId, listen)
+
+    /** Server refusals (e.g. listener limit) to surface as a toast. */
+    val denials: kotlinx.coroutines.flow.Flow<String> = sessionManager.events
+        .filterIsInstance<app.notmumla.protocol.MumbleClient.Event.Denied>()
+        .map { it.message }
 
     val privateChat: StateFlow<app.notmumla.data.UserRef?> = sessionManager.privateChat
     fun startPrivateChat(session: Int, name: String) = sessionManager.startPrivateChat(session, name)

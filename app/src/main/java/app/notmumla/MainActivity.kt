@@ -254,6 +254,13 @@ private fun AppNav() {
                 )
             }
 
+            val toastCtx = androidx.compose.ui.platform.LocalContext.current
+            LaunchedEffect(Unit) {
+                vm.denials.collect {
+                    android.widget.Toast.makeText(toastCtx, it, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+
             val self = state.self
             val connectionLabel = when (state.connection) {
                 ConnectionState.CONNECTING -> "Connecting…"
@@ -283,6 +290,7 @@ private fun AppNav() {
                 // recompose the whole screen each tick. Only the overlay collects it.
                 debugStats = if (appSettings.debugOverlay) vm.debugStats else null,
                 onJoinChannel = vm::joinChannel,
+                onSetListening = vm::setListening,
                 onPttHeld = vm::setPttHeld,
                 onToggleMute = {
                     val s = state.self

@@ -34,6 +34,7 @@ import MumbleProto.VoiceTarget
 import MumbleProto.ChannelRemove
 import MumbleProto.CryptSetup
 import MumbleProto.ChannelState
+import MumbleProto.PermissionDenied
 import MumbleProto.Ping
 import MumbleProto.Reject
 import MumbleProto.ServerConfig
@@ -95,6 +96,8 @@ class MumbleClient(
         data class Text(val text: IncomingText) : Event
         data class Rejected(val reason: String) : Event
         data class Disconnected(val cause: String?) : Event
+        /** The server refused an action (join, listen, …); [message] is user-presentable. */
+        data class Denied(val message: String) : Event
     }
 
     private var channel: ControlChannel? = null
@@ -285,6 +288,7 @@ class MumbleClient(
             MessageType.CRYPT_SETUP -> onCryptSetup(CryptSetup.ADAPTER.decode(frame.payload))
             // The UDPTunnel message body is the raw UDP audio packet, not a protobuf wrapper.
             MessageType.UDP_TUNNEL -> onAudioPacket(frame.payload)
+            MessageType.PERMISSION_DENIED -> onPermissionDenied(PermissionDenied.ADAPTER.decode(frame.payload))
             MessageType.PING -> Unit
             else -> Unit // unhandled types (ACL, stats, codec) — wired up in later milestones
         }
@@ -304,6 +308,17 @@ class MumbleClient(
             )
             s.copy(channels = s.channels + (id to updated))
         }
+    }
+
+    private fun onPermissionDenied(msg: PermissionDenied) {
+        val channel = msg.channel_id?.let { _state.value.channels[it]?.name }
+        val text = msg.reason?.takeIf { it.isNotBlank() } ?: when (msg.type) {
+            PermissionDenied.DenyType.ChannelListenerLimit -> "No more listeners allowed in this channel"
+            PermissionDenied.DenyType.UserListenerLimit -> "You can't listen to any more channels"
+            PermissionDenied.DenyType.ChannelFull -> "Channel is full"
+            else -> if (channel != null) "Permission denied in $channel" else "Permission denied"
+        }
+        events.tryEmit(Event.Denied(text))
     }
 
     private fun onChannelRemove(msg: ChannelRemove) {
@@ -501,6 +516,15 @@ class MumbleClient(
     fun joinChannel(channelId: Int) {
         val session = _state.value.sessionId ?: return
         sendAsync(UserState(session = session, channel_id = channelId))
+    }
+
+    /** Start or stop listening to [channelId] without joining it (Mumble channel listener). */
+    fun setListening(channelId: Int, listen: Boolean) {
+        val session = _state.value.sessionId ?: return
+        sendAsync(
+            if (listen) UserState(session = session, listening_channel_add = listOf(channelId))
+            else UserState(session = session, listening_channel_remove = listOf(channelId)),
+        )
     }
 
     /**
