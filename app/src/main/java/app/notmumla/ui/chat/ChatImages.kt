@@ -1,6 +1,8 @@
 package app.notmumla.ui.chat
 
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.media.ExifInterface
 import android.util.LruCache
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
@@ -28,7 +30,16 @@ internal object ChatImages {
     fun bounds(bytes: ByteArray): Pair<Int, Int>? {
         val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
-        return if (o.outWidth > 0 && o.outHeight > 0) o.outWidth to o.outHeight else null
+        if (o.outWidth <= 0 || o.outHeight <= 0) return null
+        // Other clients may send photos with an EXIF rotation; decode() honors it, so match here.
+        val orientation = runCatching {
+            ExifInterface(bytes.inputStream()).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+        val swapped = orientation in setOf(
+            ExifInterface.ORIENTATION_ROTATE_90, ExifInterface.ORIENTATION_ROTATE_270,
+            ExifInterface.ORIENTATION_TRANSPOSE, ExifInterface.ORIENTATION_TRANSVERSE,
+        )
+        return if (swapped) o.outHeight to o.outWidth else o.outWidth to o.outHeight
     }
 
     fun cached(bytes: ByteArray, maxPx: Int): ImageBitmap? = cache.get(bytes to maxPx)
@@ -39,9 +50,11 @@ internal object ChatImages {
         val (w, h) = bounds(bytes) ?: return@withContext null
         var sample = 1
         while (maxOf(w, h) / (sample * 2) >= maxPx) sample *= 2
-        val o = BitmapFactory.Options().apply { inSampleSize = sample }
-        runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)?.asImageBitmap() }
-            .getOrNull()
+        // ImageDecoder applies EXIF orientation; BitmapFactory would show rotated photos sideways.
+        runCatching {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(bytes)) { d, _, _ -> d.setTargetSampleSize(sample) }
+                .asImageBitmap()
+        }.getOrNull()
             ?.also { cache.put(bytes to maxPx, it) }
     }
 }
