@@ -197,6 +197,7 @@ private fun AppNav() {
             val serverLabel by vm.serverLabel.collectAsState()
             val speaking by vm.speakingSessions.collectAsState()
             val transmitting by vm.localTransmitting.collectAsState()
+            val micYielded by vm.micYielded.collectAsState()
             val chat by vm.chat.collectAsState()
             val unread by vm.unreadChat.collectAsState()
             val whisper by vm.whisper.collectAsState()
@@ -296,6 +297,7 @@ private fun AppNav() {
                 onChatRead = vm::markChatRead,
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onSetUserVolume = vm::setUserVolume,
+                micInUseElsewhere = micYielded,
                 whisperingTo = whisper?.name,
                 onWhisper = { u -> vm.startWhisper(u.id, u.name) },
                 onStopWhisper = vm::stopWhisper,
@@ -356,6 +358,7 @@ private fun AppNav() {
                 onSetNoiseReduction = settingsVm::setNoiseReduction,
                 onToggleEchoCancellation = settingsVm::setEchoCancellation,
                 onToggleRawMic = settingsVm::setRawMic,
+                onToggleShareMic = settingsVm::setShareMic,
                 onToggleAudioLeveling = settingsVm::setAudioLeveling,
                 onSetBitrate = settingsVm::setAudioBitrate,
                 onToggleAvatars = settingsVm::setShowAvatars,

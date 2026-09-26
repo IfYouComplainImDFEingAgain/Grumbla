@@ -9,6 +9,7 @@ import app.notmumla.audio.MicTestState
 import app.notmumla.audio.MicTester
 import app.notmumla.audio.TransmissionMode
 import app.notmumla.audio.routing.AudioRouter
+import app.notmumla.audio.routing.MicContentionMonitor
 import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.data.db.ServerDao
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -68,6 +69,7 @@ class SessionManager @Inject constructor(
             settingsRepo.settings.collect { s ->
                 settings = s
                 applyAudioSettings(s)
+                updateMicSharing()
                 // Keep an active mic preview in sync with live setting changes (gain especially).
                 micMonitor.micGain = Math.pow(10.0, s.micGainDb / 20.0).toFloat()
                 micMonitor.noiseReductionMix = s.noiseReduction
@@ -264,7 +266,33 @@ class SessionManager @Inject constructor(
         if (eng == null) {
             router.markCurrent(route)
         } else {
-            eng.applyRoute(router.select(route))
+            val yielded = _micYielded.value
+            eng.applyRoute(router.select(route, shareMic = yielded), captureEnabled = !yielded)
+        }
+    }
+
+    private val micContention = MicContentionMonitor(audioManager) { engine?.isOwnSession(it) == true }
+
+    private val _micYielded = MutableStateFlow(false)
+    /** True while another app is recording and we've handed it the mic (playback continues). */
+    val micYielded: StateFlow<Boolean> = _micYielded.asStateFlow()
+
+    init {
+        scope.launch(Dispatchers.Main) {
+            micContention.otherAppRecording.collect { updateMicSharing() }
+        }
+    }
+
+    /**
+     * Release or retake the mic. Another app's capture is silenced (not refused) while we hold call
+     * mode or a privacy-sensitive capture, so yielding means stopping capture *and* dropping call mode.
+     */
+    private fun updateMicSharing() {
+        scope.launch(Dispatchers.Main) {
+            val want = engine != null && settings.shareMic && micContention.otherAppRecording.value
+            if (want == _micYielded.value) return@launch
+            _micYielded.value = want
+            if (engine != null) applyRoute(router.current.value)
         }
     }
 
@@ -445,6 +473,7 @@ class SessionManager @Inject constructor(
     }
 
     private fun startAudio() {
+        micContention.start()
         engine?.start()
         audioStarted = true
         // Start the foreground service now that RECORD_AUDIO is granted (FGS microphone type).
@@ -609,6 +638,8 @@ class SessionManager @Inject constructor(
         engine?.stop()
         engine = null
         audioStarted = false
+        micContention.stop()
+        _micYielded.value = false
         router.reset()
         client?.disconnect()
         client = null

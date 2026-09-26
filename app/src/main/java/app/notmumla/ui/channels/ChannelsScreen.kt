@@ -76,6 +76,8 @@ fun ChannelsScreen(
     onChatRead: () -> Unit,
     onOpenSettings: () -> Unit,
     onSetUserVolume: (name: String, db: Float) -> Unit,
+    /** Another app is recording and we've released the mic to it. */
+    micInUseElsewhere: Boolean,
     whisperingTo: String?,
     onWhisper: (UiUser) -> Unit,
     onStopWhisper: () -> Unit,
@@ -126,6 +128,7 @@ fun ChannelsScreen(
                 muted = selfMuted,
                 deafened = selfDeafened,
                 transmitting = transmitting,
+                micInUseElsewhere = micInUseElsewhere,
                 whisperingTo = whisperingTo,
                 onStopWhisper = onStopWhisper,
                 onPttHeld = onPttHeld,

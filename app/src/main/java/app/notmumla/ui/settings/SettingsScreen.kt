@@ -118,6 +118,7 @@ fun SettingsScreen(
     onSetNoiseReduction: (Float) -> Unit,
     onToggleEchoCancellation: (Boolean) -> Unit,
     onToggleRawMic: (Boolean) -> Unit,
+    onToggleShareMic: (Boolean) -> Unit,
     onToggleAudioLeveling: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
     onToggleAvatars: (Boolean) -> Unit,
@@ -286,6 +287,11 @@ fun SettingsScreen(
                     else "Skip the phone's voice processing — natural, no over-cancelling. No echo " +
                         "cancellation, so best with headphones.",
                     settings.rawMic || aiNs, enabled = !aiNs, onChange = onToggleRawMic)
+                Divider()
+                ToggleRow(Icons.Filled.Mic, "Share microphone",
+                    "Let other apps use the mic while connected. You keep hearing the channel but " +
+                        "can't talk until they're done.",
+                    settings.shareMic, onChange = onToggleShareMic)
             }
 
             SectionLabel("AUDIO · OUTPUT")
