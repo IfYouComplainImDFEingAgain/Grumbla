@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -202,7 +203,7 @@ private fun MessageRow(
                     Box(
                         privateMod(shape).clip(shape).then(hold)
                             .background(c.primaryContainer).padding(horizontal = 12.dp, vertical = 9.dp),
-                    ) { Text(msg.text, color = c.onPrimaryContainer, fontSize = 14.sp) }
+                    ) { LinkedText(msg.text, color = c.onPrimaryContainer, linkColor = c.onPrimaryContainer) }
                 }
             }
         }
@@ -227,7 +228,7 @@ private fun MessageRow(
                         Box(
                             Modifier.padding(top = 3.dp).then(privateMod(shape)).clip(shape).then(hold)
                                 .background(c.surfHigh).padding(horizontal = 12.dp, vertical = 9.dp),
-                        ) { Text(msg.text, color = c.onSurface, fontSize = 14.sp) }
+                        ) { LinkedText(msg.text, color = c.onSurface, linkColor = c.primary) }
                     }
                 }
             }
@@ -298,6 +299,14 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectFr
         ended = true
     }
     if (!ended) onLongPress()
+}
+
+/** Message text with tappable URLs; a tap on a link doesn't reach the bubble's own tap/hold. */
+@Composable
+private fun LinkedText(text: String, color: Color, linkColor: Color) {
+    val context = LocalContext.current
+    val linked = remember(text, linkColor) { ChatLinks.linkify(context, text, linkColor) }
+    Text(linked, color = color, fontSize = 14.sp)
 }
 
 @Composable
