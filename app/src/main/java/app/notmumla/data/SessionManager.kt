@@ -625,6 +625,12 @@ class SessionManager @Inject constructor(
         _chat.value = _chat.value.filterNot { it.id == id }
     }
 
+    /** Drop our whole local chat history (again local only; others keep theirs). */
+    fun clearChat() {
+        _chat.value = emptyList()
+        _unread.value = 0
+    }
+
     /** Mark the chat as read (call when the Chat tab is shown). */
     fun markChatRead() { _unread.value = 0 }
 

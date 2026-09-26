@@ -315,6 +315,7 @@ private fun AppNav() {
                 onStartPrivateChat = vm::startPrivateChat,
                 onClosePrivateChat = vm::stopPrivateChat,
                 onDeleteMessage = { id -> vm.deleteChat(id.toLong()) },
+                onClearChat = vm::clearChat,
                 onDisconnect = {
                     vm.disconnect()
                     nav.popBackStack(Routes.CONNECT, inclusive = false)
