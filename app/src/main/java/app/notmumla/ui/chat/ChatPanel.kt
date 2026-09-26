@@ -7,7 +7,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,7 +30,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
@@ -47,7 +53,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,6 +77,7 @@ fun ChatPanel(
     privateTo: String? = null,
     onReplyPrivately: (session: Int, name: String) -> Unit = { _, _ -> },
     onClosePrivate: () -> Unit = {},
+    onDeleteMessage: (id: Int) -> Unit = {},
 ) {
     val c = MumbleTheme.colors
     val pickImage = rememberLauncherForActivityResult(
@@ -105,6 +114,7 @@ fun ChatPanel(
                     msg,
                     onImageClick = { viewerImage = it },
                     onOpenPrivate = { s, n -> onReplyPrivately(s, n) },
+                    onDelete = { onDeleteMessage(msg.id) },
                 )
             }
         }
@@ -131,31 +141,38 @@ private fun MessageRow(
     msg: UiMessage,
     onImageClick: (ByteArray) -> Unit,
     onOpenPrivate: (session: Int, name: String) -> Unit,
+    onDelete: () -> Unit,
 ) {
     val c = MumbleTheme.colors
     val isPrivate = msg.privateWith != null
-    // Private bubbles get a primary outline so they stand out from channel chatter; tapping one
-    // opens (or returns to) the private chat with that user.
-    fun privateMod(shape: androidx.compose.ui.graphics.Shape): Modifier {
-        val peer = msg.privateWith ?: return Modifier
-        val session = msg.privateSession ?: return Modifier.border(1.5.dp, c.primary, shape)
-        return Modifier.clip(shape).border(1.5.dp, c.primary, shape).clickable { onOpenPrivate(session, peer) }
+    // Tapping a private bubble opens (or returns to) the private chat with that user.
+    val openPrivate: (() -> Unit)? = msg.privateWith?.let { peer ->
+        msg.privateSession?.let { session -> { onOpenPrivate(session, peer) } }
     }
+    // Private bubbles get a primary outline so they stand out from channel chatter.
+    fun privateMod(shape: androidx.compose.ui.graphics.Shape): Modifier =
+        if (isPrivate) Modifier.clip(shape).border(1.5.dp, c.primary, shape) else Modifier
     when (msg.kind) {
-        ChatKind.SYSTEM -> Text(
-            msg.text, fontSize = 12.sp, color = c.onSurfaceVar,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        )
+        ChatKind.SYSTEM -> MessageMenu(msg.text, onDelete, onTap = null) { hold ->
+            Text(
+                msg.text, fontSize = 12.sp, color = c.onSurfaceVar,
+                modifier = Modifier.fillMaxWidth().then(hold).padding(vertical = 2.dp),
+            )
+        }
         ChatKind.ME -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
             if (isPrivate) PrivateLabel("Private to ${msg.privateWith}")
             if (msg.imageBytes != null) {
-                InlineImage(msg, modifier = privateMod(RoundedCornerShape(14.dp)), onClick = { onImageClick(msg.imageBytes) })
+                MessageMenu(null, onDelete, onTap = { onImageClick(msg.imageBytes) }) { hold ->
+                    InlineImage(msg, modifier = privateMod(RoundedCornerShape(14.dp)), hold = hold)
+                }
             } else {
                 val shape = RoundedCornerShape(14.dp, 14.dp, 4.dp, 14.dp)
-                Box(
-                    privateMod(shape).clip(shape)
-                        .background(c.primaryContainer).padding(horizontal = 12.dp, vertical = 9.dp),
-                ) { Text(msg.text, color = c.onPrimaryContainer, fontSize = 14.sp) }
+                MessageMenu(msg.text, onDelete, onTap = openPrivate) { hold ->
+                    Box(
+                        privateMod(shape).clip(shape).then(hold)
+                            .background(c.primaryContainer).padding(horizontal = 12.dp, vertical = 9.dp),
+                    ) { Text(msg.text, color = c.onPrimaryContainer, fontSize = 14.sp) }
+                }
             }
         }
         ChatKind.OTHER, ChatKind.FILE -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -168,17 +185,57 @@ private fun MessageRow(
                     if (isPrivate) PrivateLabel("Private")
                 }
                 if (msg.imageBytes != null) {
-                    InlineImage(msg, modifier = Modifier.padding(top = 3.dp).then(privateMod(RoundedCornerShape(14.dp))),
-                        onClick = { onImageClick(msg.imageBytes) })
+                    MessageMenu(null, onDelete, onTap = { onImageClick(msg.imageBytes) }) { hold ->
+                        InlineImage(msg, modifier = Modifier.padding(top = 3.dp).then(privateMod(RoundedCornerShape(14.dp))),
+                            hold = hold)
+                    }
                 }
                 if (msg.text.isNotBlank()) {
                     val shape = RoundedCornerShape(4.dp, 14.dp, 14.dp, 14.dp)
-                    Box(
-                        Modifier.padding(top = 3.dp).then(privateMod(shape)).clip(shape)
-                            .background(c.surfHigh).padding(horizontal = 12.dp, vertical = 9.dp),
-                    ) { Text(msg.text, color = c.onSurface, fontSize = 14.sp) }
+                    MessageMenu(msg.text, onDelete, onTap = openPrivate) { hold ->
+                        Box(
+                            Modifier.padding(top = 3.dp).then(privateMod(shape)).clip(shape).then(hold)
+                                .background(c.surfHigh).padding(horizontal = 12.dp, vertical = 9.dp),
+                        ) { Text(msg.text, color = c.onSurface, fontSize = 14.sp) }
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Wraps a message element so a long-press opens its menu (copy text, delete locally). [content]
+ * receives the gesture modifier to apply after its clip, so the ripple follows the bubble shape.
+ * Tap and hold share one modifier: separate clickables would swallow each other's long-press.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MessageMenu(
+    copyText: String?,
+    onDelete: () -> Unit,
+    onTap: (() -> Unit)?,
+    content: @Composable (hold: Modifier) -> Unit,
+) {
+    val c = MumbleTheme.colors
+    val clipboard = LocalClipboardManager.current
+    var open by remember { mutableStateOf(false) }
+    Box {
+        content(Modifier.combinedClickable(onClick = { onTap?.invoke() }, onLongClick = { open = true }))
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = c.surfContainer) {
+            if (!copyText.isNullOrBlank()) {
+                DropdownMenuItem(
+                    text = { Text("Copy text", color = c.onSurface) },
+                    leadingIcon = { Icon(Icons.Filled.ContentCopy, null, tint = c.onSurfaceVar) },
+                    onClick = { clipboard.setText(AnnotatedString(copyText)); open = false },
+                )
+            }
+            // "for me": Mumble can't retract a message, so others still have it.
+            DropdownMenuItem(
+                text = { Text("Delete for me", color = c.onSurface) },
+                leadingIcon = { Icon(Icons.Filled.Delete, null, tint = c.onSurfaceVar) },
+                onClick = { open = false; onDelete() },
+            )
         }
     }
 }
@@ -194,7 +251,7 @@ private fun PrivateLabel(text: String) {
 }
 
 @Composable
-private fun InlineImage(msg: UiMessage, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun InlineImage(msg: UiMessage, modifier: Modifier = Modifier, hold: Modifier) {
     val bytes = msg.imageBytes ?: return
     val (imgW, imgH) = remember(bytes) { ChatImages.bounds(bytes) } ?: return
 
@@ -210,14 +267,14 @@ private fun InlineImage(msg: UiMessage, modifier: Modifier = Modifier, onClick: 
     val loaded = bitmap
     if (loaded == null) {
         // Placeholder of the final size while decoding, so the chat doesn't jump.
-        Box(box.background(MumbleTheme.colors.surfHigh))
+        Box(box.then(hold).background(MumbleTheme.colors.surfHigh))
         return
     }
 
     Image(
         bitmap = loaded,
-        contentDescription = "Shared image — tap to view",
-        modifier = box.clickable(onClick = onClick),
+        contentDescription = "Shared image — tap to view, hold for options",
+        modifier = box.then(hold),
         contentScale = ContentScale.Fit,
     )
 }

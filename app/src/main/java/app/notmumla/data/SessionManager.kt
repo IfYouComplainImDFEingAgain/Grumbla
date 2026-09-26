@@ -620,6 +620,11 @@ class SessionManager @Inject constructor(
         _chat.value = (_chat.value + line).takeLast(500)
     }
 
+    /** Remove a message from our own history only; Mumble has no way to retract a sent message. */
+    fun deleteChat(id: Long) {
+        _chat.value = _chat.value.filterNot { it.id == id }
+    }
+
     /** Mark the chat as read (call when the Chat tab is shown). */
     fun markChatRead() { _unread.value = 0 }
 
