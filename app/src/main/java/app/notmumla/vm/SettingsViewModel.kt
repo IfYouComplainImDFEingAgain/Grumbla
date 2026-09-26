@@ -96,6 +96,7 @@ class SettingsViewModel @Inject constructor(
     fun setNoiseReduction(v: Float) = update { repo.setNoiseReduction(v) }
     fun setRawMic(v: Boolean) = update { repo.setRawMic(v) }
     fun setEchoCancellation(v: Boolean) = update { repo.setEchoCancellation(v) }
+    fun setShareMic(v: Boolean) = update { repo.setShareMic(v) }
     fun setAudioLeveling(v: Boolean) = update { repo.setAudioLeveling(v) }
     fun setAudioBitrate(v: Int) = update { repo.setAudioBitrate(v) }
     fun setShowAvatars(v: Boolean) = update { repo.setShowAvatars(v) }

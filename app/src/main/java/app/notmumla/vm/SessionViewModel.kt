@@ -17,6 +17,7 @@ class SessionViewModel @Inject constructor(
     val serverLabel: StateFlow<String> = sessionManager.serverLabel
     val speakingSessions: StateFlow<Set<Int>> = sessionManager.speakingSessions
     val localTransmitting: StateFlow<Boolean> = sessionManager.localTransmitting
+    val micYielded: StateFlow<Boolean> = sessionManager.micYielded
     val inputLevel: StateFlow<Float> = sessionManager.inputLevel
     val userVolumes: StateFlow<Map<String, Float>> = sessionManager.userVolumes
     fun setUserVolume(name: String, db: Float) = sessionManager.setUserVolume(name, db)

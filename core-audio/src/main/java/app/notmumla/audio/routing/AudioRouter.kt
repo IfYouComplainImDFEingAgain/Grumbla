@@ -130,11 +130,33 @@ class AudioRouter(context: Context) {
     }
 
     /**
+     * Playback-only variant of [route] used while another app has the mic. Call mode makes Android
+     * silence every other app's capture, so it's dropped: MODE_NORMAL, no communication device, and
+     * media usage pinned to the route's output (voice usage outside call mode can land on the earpiece).
+     */
+    fun sharedConfigFor(route: OutputRoute): RouteConfig {
+        val base = configFor(route)
+        if (base.audioMode == AudioManager.MODE_NORMAL) return base
+        return base.copy(
+            audioMode = AudioManager.MODE_NORMAL,
+            communicationDeviceId = null,
+            trackUsage = AudioAttributes.USAGE_MEDIA,
+            trackDeviceId = when (route) {
+                OutputRoute.PHONE_SPEAKER -> outputDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)?.id
+                // Without SCO, the headset's A2DP profile (if it has one) is the way to reach it.
+                OutputRoute.BT_HEADSET_SCO -> outputDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)?.id
+                else -> base.trackDeviceId
+            },
+        )
+    }
+
+    /**
      * Apply [route] at the AudioManager level (audio mode + communication device) and return the
      * [RouteConfig] the engine should adopt. Caller passes the config to AudioEngine.applyRoute.
+     * [shareMic] selects the playback-only [sharedConfigFor] variant.
      */
-    fun select(route: OutputRoute): RouteConfig {
-        val config = configFor(route)
+    fun select(route: OutputRoute, shareMic: Boolean = false): RouteConfig {
+        val config = if (shareMic) sharedConfigFor(route) else configFor(route)
         val commId = config.communicationDeviceId
         if (commId != null) {
             am.availableCommunicationDevices.firstOrNull { it.id == commId }

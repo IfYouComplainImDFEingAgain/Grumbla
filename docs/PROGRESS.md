@@ -106,6 +106,17 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   inbound format is auto-detected by header byte. Verified by `LegacyVoiceTest`. The 1.5 protobuf
   path is unchanged.
 
+- **Share microphone** (Settings → Audio input, default on): other apps used to get silence from
+  the mic for the whole session, because we hold `MODE_IN_COMMUNICATION` (Android silences every
+  non-owner capture during a VoIP call) and `VOICE_COMMUNICATION` is privacy-sensitive by default.
+  Now our `AudioRecord` is `setPrivacySensitive(false)`, and `MicContentionMonitor` watches
+  `AudioRecordingCallback` for a foreign mic capture (silenced clients still show up, anonymized).
+  When one appears, we stop capture and switch to `AudioRouter.sharedConfigFor` (MODE_NORMAL, no
+  comm device, `USAGE_MEDIA` pinned to the route's output), so the other app gets the mic and we
+  keep playing the channel. When it stops, we retake the mic and call mode. The voice bar shows
+  "Mic in use by another app". Debounced 300 ms (yield) / 1 s (resume); our own record session ids
+  are excluded. 🟡 Needs on-device verification.
+
 ### Fixes since M5 (user-reported)
 - **Dropped from busy servers after a few seconds** (silent EOF, no reason). The keep-alive idle
   timer (`ControlChannel.idleMs()`) was reset by **receives as well as sends**, so on a populated

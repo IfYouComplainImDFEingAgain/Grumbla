@@ -123,10 +123,20 @@ class AudioEngine(
     private var playbackThread: Thread? = null
     @Volatile private var running = false
 
+    /** False while another app has the mic: playback keeps running, nothing is captured. */
+    @Volatile var captureEnabled: Boolean = true
+        private set
+
+    /** Audio session ids of every AudioRecord we've opened, so mic-contention checks can skip ours. */
+    private val ownSessionIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
+    fun isOwnSession(id: Int): Boolean = id in ownSessionIds
+
     fun start() {
         if (running) return
         running = true
-        captureThread = thread(name = "mumble-capture", priority = Thread.MAX_PRIORITY) { captureLoop() }
+        if (captureEnabled) {
+            captureThread = thread(name = "mumble-capture", priority = Thread.MAX_PRIORITY) { captureLoop() }
+        }
         playbackThread = thread(name = "mumble-playback", priority = Thread.MAX_PRIORITY) { playbackLoop() }
     }
 
@@ -149,8 +159,9 @@ class AudioEngine(
     fun setUserVolume(session: Int, gain: Float) = mixer.setUserGain(session, gain)
 
     /** Apply a new capture/playback route, restarting the audio threads if running. */
-    fun applyRoute(config: RouteConfig) {
+    fun applyRoute(config: RouteConfig, captureEnabled: Boolean = true) {
         routeConfig = config
+        this.captureEnabled = captureEnabled
         if (running) {
             stop()
             start()
@@ -356,11 +367,22 @@ class AudioEngine(
         }.distinct()
         for (src in sources) {
             val r = runCatching {
-                AudioRecord(
-                    src, AudioConstants.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT, minBuf,
-                )
+                AudioRecord.Builder()
+                    .setAudioSource(src)
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setSampleRate(AudioConstants.SAMPLE_RATE)
+                            .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .build(),
+                    )
+                    .setBufferSizeInBytes(minBuf)
+                    // VOICE_COMMUNICATION is privacy-sensitive by default, which silences every
+                    // other app's capture for as long as we hold the mic.
+                    .setPrivacySensitive(false)
+                    .build()
             }.getOrNull()
+            r?.let { ownSessionIds.add(it.audioSessionId) }
             if (r != null && r.state == AudioRecord.STATE_INITIALIZED) {
                 if (src != preferredSource) {
                     android.util.Log.w("notmumla-audio", "record source $preferredSource unavailable; using $src")

@@ -49,6 +49,8 @@ fun VoiceBar(
     muted: Boolean,
     deafened: Boolean,
     transmitting: Boolean,
+    /** Another app has the mic: nothing is captured until it's done, so the talk button is inert. */
+    micInUseElsewhere: Boolean,
     /** Name of the user we're whispering to, or null for normal talk. */
     whisperingTo: String?,
     onStopWhisper: () -> Unit,
@@ -96,7 +98,7 @@ fun VoiceBar(
             )
 
             // Big PTT / VAD button. `transmitting` reflects the engine's live state.
-            val active = transmitting || (mode == TransmissionMode.VAD)
+            val active = !micInUseElsewhere && (transmitting || mode == TransmissionMode.VAD)
             Box(
                 Modifier.weight(1f).height(56.dp).clip(RoundedCornerShape(28.dp))
                     .background(if (active) c.primary else c.surfHigh)
@@ -115,7 +117,9 @@ fun VoiceBar(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (mode == TransmissionMode.VAD) {
+                    if (micInUseElsewhere) {
+                        Icon(Icons.Filled.MicOff, null, tint = c.onSurfaceVar)
+                    } else if (mode == TransmissionMode.VAD) {
                         // Only animate while the VAD is actually sending; idle VAD shows still bars
                         // instead of running a frame-rate animation for the whole session.
                         SpeakingBars(color = c.onPrimary, maxHeight = 16.dp, barWidth = 4.dp,
@@ -126,6 +130,7 @@ fun VoiceBar(
                     }
                     Text(
                         when {
+                            micInUseElsewhere -> "Mic in use by another app"
                             mode == TransmissionMode.VAD -> "Voice Activated"
                             transmitting -> if (whisperingTo != null) "Whispering…" else "Transmitting…"
                             whisperingTo != null -> "Hold to Whisper"
