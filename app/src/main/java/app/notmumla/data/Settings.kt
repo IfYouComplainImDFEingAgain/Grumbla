@@ -42,6 +42,8 @@ data class AppSettings(
     val autoReconnect: Boolean = true,
     val ttsReadAloud: Boolean = false,
     val mentionSound: Boolean = true,
+    /** Chat composer with a formatting toolbar (WYSIWYG) instead of typed Markdown. */
+    val richComposer: Boolean = false,
     val debugOverlay: Boolean = false,
     /** Output routes in preference order; on connect the first one currently available is used. */
     val routePriority: List<OutputRoute> = DEFAULT_ROUTE_PRIORITY,
@@ -89,6 +91,7 @@ class SettingsRepository @Inject constructor(
         val AWAKE = booleanPreferencesKey("keep_awake")
         val RECONNECT = booleanPreferencesKey("auto_reconnect")
         val TTS = booleanPreferencesKey("tts_read_aloud")
+        val RICH_COMPOSER = booleanPreferencesKey("rich_composer")
         val MENTION = booleanPreferencesKey("mention_sound")
         val DEBUG = booleanPreferencesKey("debug_overlay")
         val ROUTE_PRIORITY = stringPreferencesKey("route_priority") // comma-separated OutputRoute names
@@ -144,6 +147,7 @@ class SettingsRepository @Inject constructor(
             autoReconnect = p[Keys.RECONNECT] ?: true,
             ttsReadAloud = p[Keys.TTS] ?: false,
             mentionSound = p[Keys.MENTION] ?: true,
+            richComposer = p[Keys.RICH_COMPOSER] ?: false,
             debugOverlay = p[Keys.DEBUG] ?: false,
             routePriority = decodeRoutePriority(p[Keys.ROUTE_PRIORITY]),
             rememberLastRoute = p[Keys.REMEMBER_ROUTE] ?: false,
@@ -171,6 +175,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setAutoReconnect(v: Boolean) = edit { it[Keys.RECONNECT] = v }
     suspend fun setTtsReadAloud(v: Boolean) = edit { it[Keys.TTS] = v }
     suspend fun setMentionSound(v: Boolean) = edit { it[Keys.MENTION] = v }
+    suspend fun setRichComposer(v: Boolean) = edit { it[Keys.RICH_COMPOSER] = v }
     suspend fun setDebugOverlay(v: Boolean) = edit { it[Keys.DEBUG] = v }
     suspend fun setRoutePriority(v: List<OutputRoute>) = edit { it[Keys.ROUTE_PRIORITY] = v.joinToString(",") { r -> r.name } }
     suspend fun setRememberLastRoute(v: Boolean) = edit { it[Keys.REMEMBER_ROUTE] = v }

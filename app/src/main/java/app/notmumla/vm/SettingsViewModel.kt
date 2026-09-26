@@ -104,6 +104,7 @@ class SettingsViewModel @Inject constructor(
     fun setAutoReconnect(v: Boolean) = update { repo.setAutoReconnect(v) }
     fun setTtsReadAloud(v: Boolean) = update { repo.setTtsReadAloud(v) }
     fun setMentionSound(v: Boolean) = update { repo.setMentionSound(v) }
+    fun setRichComposer(v: Boolean) = update { repo.setRichComposer(v) }
     fun setDebugOverlay(v: Boolean) = update { repo.setDebugOverlay(v) }
     fun setRoutePriority(v: List<app.notmumla.audio.routing.OutputRoute>) = update { repo.setRoutePriority(v) }
     fun setRememberLastRoute(v: Boolean) = update { repo.setRememberLastRoute(v) }

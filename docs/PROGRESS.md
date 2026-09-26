@@ -99,6 +99,10 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   code/pre, lists, links). Sender colors below 3:1 contrast on the bubble are dropped; font sizes and
   backgrounds ignored. Links: only http/https/mailto open, and a link whose text doesn't show its
   real host asks first. Long-press a message for Copy/Delete-for-me; long-press empty space to clear.
+- **WYSIWYG composer** (Settings → Chat → Formatting toolbar, default off): B/I/U/S/code/color
+  toolbar; toggles apply to the selection or to what's typed next. `RichDraft` keeps one style per
+  character (edits splice styles like text; the diff is anchored on the cursor) and serializes to
+  Mumble HTML itself. Markdown is not applied when it's on.
 - **Whisper**: user sheet → "Whisper to X" registers `VoiceTarget` 1 for that session; the target is
   locked per talk spurt and cleared when they leave or we reconnect. Verified by `WhisperIntegrationTest`.
 - **Private messages**: inbound `TextMessage` with `session` set and no `channel_id`/`tree_id` is

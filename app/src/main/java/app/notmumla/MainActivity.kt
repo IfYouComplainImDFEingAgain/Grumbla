@@ -303,7 +303,7 @@ private fun AppNav() {
                     // Deafening implies muting, per Mumble semantics.
                     vm.setMuted(muted = newDeaf || (s?.selfMute ?: false), deaf = newDeaf)
                 },
-                onSendText = { msg -> self?.channelId?.let { vm.sendText(it, msg) } },
+                onSendText = { msg, html -> self?.channelId?.let { vm.sendText(it, msg, html) } },
                 onSendImage = { uri -> self?.channelId?.let { vm.sendImage(it, uri) } },
                 onChatRead = vm::markChatRead,
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
@@ -317,6 +317,7 @@ private fun AppNav() {
                 onClosePrivateChat = vm::stopPrivateChat,
                 onDeleteMessage = { id -> vm.deleteChat(id.toLong()) },
                 onClearChat = vm::clearChat,
+                richComposer = appSettings.richComposer,
                 onDisconnect = {
                     vm.disconnect()
                     nav.popBackStack(Routes.CONNECT, inclusive = false)
@@ -379,6 +380,7 @@ private fun AppNav() {
                 onToggleAutoReconnect = settingsVm::setAutoReconnect,
                 onToggleTts = settingsVm::setTtsReadAloud,
                 onToggleMentionSound = settingsVm::setMentionSound,
+                onToggleRichComposer = settingsVm::setRichComposer,
                 onToggleDebugOverlay = settingsVm::setDebugOverlay,
                 onRegenerateIdentity = { settingsVm.regenerateIdentity() },
                 onExportIdentity = settingsVm::exportIdentity,
