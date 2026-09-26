@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -108,8 +109,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
             NotMumlaTheme(dark = dark) {
+                // Edge-to-edge windows aren't resized for the keyboard (adjustResize is ignored), so
+                // pad for it here. After systemBarsPadding, imePadding only adds what the nav bar
+                // doesn't already cover.
                 Surface(
-                    Modifier.fillMaxSize().systemBarsPadding(),
+                    Modifier.fillMaxSize().systemBarsPadding().imePadding(),
                     color = MumbleTheme.colors.surface,
                 ) {
                     AppNav()
