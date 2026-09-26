@@ -67,7 +67,10 @@ class SessionManager @Inject constructor(
     init {
         scope.launch {
             settingsRepo.settings.collect { s ->
+                val mediaChanged = router.mediaVolume != s.mediaVolume
                 settings = s
+                router.mediaVolume = s.mediaVolume
+                if (mediaChanged) scope.launch(Dispatchers.Main) { if (engine != null) applyRoute(router.current.value) }
                 applyAudioSettings(s)
                 updateMicSharing()
                 // Keep an active mic preview in sync with live setting changes (gain especially).

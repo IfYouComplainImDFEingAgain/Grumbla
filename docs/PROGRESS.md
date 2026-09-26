@@ -103,6 +103,11 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   toolbar; toggles apply to the selection or to what's typed next. `RichDraft` keeps one style per
   character (edits splice styles like text; the diff is anchored on the cursor) and serializes to
   Mumble HTML itself. Markdown is not applied when it's on.
+- **Media volume** (Settings → Audio output → Use media volume, default on): phone speaker and wired
+  play as `USAGE_MEDIA` in `MODE_NORMAL`, because in call mode AudioService sends the volume keys to
+  call volume whatever the app asks for. Capture keeps `VOICE_COMMUNICATION`. On a Pixel it still
+  opens a `VOIP_TX` input with the hardware AEC + NS, but that depends on the HAL, so the toggle
+  returns to call mode on phones that echo. The SCO headset always stays in call mode.
 - **Whisper**: user sheet → "Whisper to X" registers `VoiceTarget` 1 for that session; the target is
   locked per talk spurt and cleared when they leave or we reconnect. Verified by `WhisperIntegrationTest`.
 - **Private messages**: inbound `TextMessage` with `session` set and no `channel_id`/`tree_id` is

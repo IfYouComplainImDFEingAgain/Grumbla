@@ -121,6 +121,7 @@ fun SettingsScreen(
     onToggleRawMic: (Boolean) -> Unit,
     onToggleShareMic: (Boolean) -> Unit,
     onToggleAudioLeveling: (Boolean) -> Unit,
+    onToggleMediaVolume: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
     onToggleAvatars: (Boolean) -> Unit,
     onToggleKeepAwake: (Boolean) -> Unit,
@@ -369,6 +370,12 @@ fun SettingsScreen(
                 ToggleRow(Icons.AutoMirrored.Filled.VolumeUp, "Audio leveling",
                     "Even out quiet and loud talkers to a consistent volume",
                     settings.audioLeveling, onToggleAudioLeveling)
+                Divider()
+                ToggleRow(Icons.AutoMirrored.Filled.VolumeUp, "Use media volume",
+                    "Volume buttons set media volume, shared with music and videos. Turn off if " +
+                        "others hear an echo of themselves on speaker. Bluetooth headsets always " +
+                        "use call volume.",
+                    settings.mediaVolume, onToggleMediaVolume)
             }
 
             SectionLabel("CHAT")
