@@ -115,7 +115,8 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   comm device, `USAGE_MEDIA` pinned to the route's output), so the other app gets the mic and we
   keep playing the channel. When it stops, we retake the mic and call mode. The voice bar shows
   "Mic in use by another app". Debounced 300 ms (yield) / 1 s (resume); our own record session ids
-  are excluded. 🟡 Needs on-device verification.
+  are excluded. 🟡 Needs on-device verification. Suspect for intermittent send stutter: see
+  "Known issues / watch-outs".
 
 ### Fixes since M5 (user-reported)
 - **Dropped from busy servers after a few seconds** (silent EOF, no reason). The keep-alive idle
@@ -190,6 +191,19 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - The full integration suite makes >10 rapid connections and trips Mumble's brute-force auto-ban
   (default 10/120s). Run the docker test server with `-e MUMBLE_CONFIG_autobanAttempts=0`, or
   restart it between full runs.
+- **Sent audio stutters sometimes: suspect "Share microphone" first** (added 2026-09-26, commit
+  `5f70ca9`). Seen on the local server and by a test user, with only ~1 packet reported lost. Each
+  time `MicContentionMonitor` releases or retakes the mic, the engine restarts capture *and*
+  playback, which leaves a short gap in what we send. Frames never sent don't count as lost, which
+  fits the low loss figure. If something on the phone opens the mic briefly and repeatedly, we'd
+  cycle and stutter.
+  - **Check:** turn off Settings → Share microphone. If the stutter stops, this is the cause.
+  - **Evidence:** repeated `record source … initialized` lines in `adb logcat` mean capture is
+    restarting.
+  - **Rollback:** revert `5f70ca9`, or change the `shareMic` default in `Settings.kt` to false.
+  - **Other side effects:** while another app has the mic, playback moves to the media stream, so
+    its volume changes. An app that records all the time keeps us muted, and the voice bar shows
+    "Mic in use by another app".
 
 ## Verification quick-reference
 - Unit/integration: `./gradlew :core-protocol:test` (with the docker test server up).
