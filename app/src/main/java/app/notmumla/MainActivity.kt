@@ -378,6 +378,7 @@ private fun AppNav() {
                 onToggleRawMic = settingsVm::setRawMic,
                 onToggleShareMic = settingsVm::setShareMic,
                 onToggleAudioLeveling = settingsVm::setAudioLeveling,
+                onToggleMediaVolume = settingsVm::setMediaVolume,
                 onSetBitrate = settingsVm::setAudioBitrate,
                 onToggleAvatars = settingsVm::setShowAvatars,
                 onToggleKeepAwake = settingsVm::setKeepScreenAwake,

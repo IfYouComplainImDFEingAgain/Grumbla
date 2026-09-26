@@ -70,11 +70,39 @@ class AudioRouter(context: Context) {
     private fun commDevice(vararg types: Int): AudioDeviceInfo? =
         am.availableCommunicationDevices.firstOrNull { it.type in types }
 
+    /**
+     * Play phone-speaker and wired audio as media (MODE_NORMAL) instead of as a call. In call mode
+     * Android points the volume keys at call volume no matter what the app asks, so this is the only
+     * way to get media volume. Capture keeps the VOICE_COMMUNICATION source; whether that still gets
+     * the platform's echo canceller outside call mode is up to the device's audio HAL.
+     */
+    @Volatile var mediaVolume: Boolean = true
+
     private val builtinMicId: Int?
         get() = inputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)?.id
 
     /** Build the engine config for [route] using currently-connected devices. */
-    fun configFor(route: OutputRoute): RouteConfig = when (route) {
+    fun configFor(route: OutputRoute): RouteConfig {
+        val call = callConfigFor(route)
+        if (!mediaVolume || (route != OutputRoute.PHONE_SPEAKER && route != OutputRoute.WIRED)) return call
+        // SCO stays a call (HFP audio has its own headset volume); A2DP-HQ is already media.
+        return asMedia(call)
+    }
+
+    /** [config] without call mode: media usage pinned to the route's output, no communication device. */
+    private fun asMedia(config: RouteConfig): RouteConfig = config.copy(
+        audioMode = AudioManager.MODE_NORMAL,
+        communicationDeviceId = null,
+        trackUsage = AudioAttributes.USAGE_MEDIA,
+        trackDeviceId = when (config.route) {
+            OutputRoute.PHONE_SPEAKER -> outputDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)?.id
+            // Without SCO, the headset's A2DP profile (if it has one) is the way to reach it.
+            OutputRoute.BT_HEADSET_SCO -> outputDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)?.id
+            else -> config.trackDeviceId
+        },
+    )
+
+    private fun callConfigFor(route: OutputRoute): RouteConfig = when (route) {
         // MODE_IN_COMMUNICATION + VOICE_COMMUNICATION is the clean, hardware-leveled capture path that
         // Mumble/Mumla use. We explicitly route output to the built-in loudspeaker so voice doesn't
         // land on the earpiece (the reason we'd previously fallen back to the distortion-prone
@@ -136,18 +164,7 @@ class AudioRouter(context: Context) {
      */
     fun sharedConfigFor(route: OutputRoute): RouteConfig {
         val base = configFor(route)
-        if (base.audioMode == AudioManager.MODE_NORMAL) return base
-        return base.copy(
-            audioMode = AudioManager.MODE_NORMAL,
-            communicationDeviceId = null,
-            trackUsage = AudioAttributes.USAGE_MEDIA,
-            trackDeviceId = when (route) {
-                OutputRoute.PHONE_SPEAKER -> outputDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)?.id
-                // Without SCO, the headset's A2DP profile (if it has one) is the way to reach it.
-                OutputRoute.BT_HEADSET_SCO -> outputDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)?.id
-                else -> base.trackDeviceId
-            },
-        )
+        return if (base.audioMode == AudioManager.MODE_NORMAL) base else asMedia(base)
     }
 
     /**

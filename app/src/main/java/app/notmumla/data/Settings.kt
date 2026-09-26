@@ -36,6 +36,7 @@ data class AppSettings(
     val echoCancellation: Boolean = true,
     val shareMic: Boolean = true, // release the mic (and call mode) while another app records
     val audioLeveling: Boolean = false, // normalize incoming speakers to a consistent loudness
+    val mediaVolume: Boolean = true, // play phone/wired audio as media, not a call (volume keys = media)
     val audioBitrate: Int = 128_000,
     val showAvatars: Boolean = true,
     val keepScreenAwake: Boolean = false,
@@ -85,6 +86,7 @@ class SettingsRepository @Inject constructor(
         val RAW_MIC = booleanPreferencesKey("raw_mic")
         val AEC = booleanPreferencesKey("echo_cancellation")
         val SHARE_MIC = booleanPreferencesKey("share_mic")
+        val MEDIA_VOLUME = booleanPreferencesKey("media_volume")
         val LEVELING = booleanPreferencesKey("audio_leveling")
         val BITRATE = intPreferencesKey("audio_bitrate")
         val AVATARS = booleanPreferencesKey("show_avatars")
@@ -141,6 +143,7 @@ class SettingsRepository @Inject constructor(
             echoCancellation = p[Keys.AEC] ?: true,
             shareMic = p[Keys.SHARE_MIC] ?: true,
             audioLeveling = p[Keys.LEVELING] ?: false,
+            mediaVolume = p[Keys.MEDIA_VOLUME] ?: true,
             audioBitrate = p[Keys.BITRATE] ?: 128_000,
             showAvatars = p[Keys.AVATARS] ?: true,
             keepScreenAwake = p[Keys.AWAKE] ?: false,
@@ -169,6 +172,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setEchoCancellation(v: Boolean) = edit { it[Keys.AEC] = v }
     suspend fun setShareMic(v: Boolean) = edit { it[Keys.SHARE_MIC] = v }
     suspend fun setAudioLeveling(v: Boolean) = edit { it[Keys.LEVELING] = v }
+    suspend fun setMediaVolume(v: Boolean) = edit { it[Keys.MEDIA_VOLUME] = v }
     suspend fun setAudioBitrate(v: Int) = edit { it[Keys.BITRATE] = v }
     suspend fun setShowAvatars(v: Boolean) = edit { it[Keys.AVATARS] = v }
     suspend fun setKeepScreenAwake(v: Boolean) = edit { it[Keys.AWAKE] = v }
