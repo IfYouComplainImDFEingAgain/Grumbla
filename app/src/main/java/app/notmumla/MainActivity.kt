@@ -174,9 +174,11 @@ private fun AppNav() {
         composable(Routes.CONNECT) {
             val vm: ConnectViewModel = hiltViewModel()
             val servers by vm.savedServers.collectAsState()
+            val status by vm.serverStatus.collectAsState()
             val ctx = LocalContext.current
             ConnectScreen(
                 savedServers = servers,
+                serverStatus = status,
                 onConnectNew = { host, port, user, pass ->
                     ctx.requestUnrestrictedBackground()
                     vm.connectNew(host, port, user, pass)

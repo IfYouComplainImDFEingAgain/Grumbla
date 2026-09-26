@@ -46,10 +46,12 @@ import app.notmumla.protocol.Mumble
 import app.notmumla.ui.channels.avatarColorFor
 import app.notmumla.ui.channels.initialsFor
 import app.notmumla.ui.theme.MumbleTheme
+import app.notmumla.vm.ServerStatus
 
 @Composable
 fun ConnectScreen(
     savedServers: List<ServerEntity>,
+    serverStatus: Map<Pair<String, Int>, ServerStatus>,
     onConnectNew: (host: String, port: Int, username: String, password: String?) -> Unit,
     onConnectSaved: (ServerEntity) -> Unit,
     onDelete: (ServerEntity) -> Unit,
@@ -121,7 +123,7 @@ fun ConnectScreen(
                 fontSize = 12.sp, letterSpacing = 0.06.sp,
                 modifier = Modifier.padding(top = 24.dp, bottom = 8.dp, start = 4.dp))
             savedServers.forEach { server ->
-                ServerRow(server, onClick = { onConnectSaved(server) }, onLongPress = { onDelete(server) })
+                ServerRow(server, serverStatus[server.host to server.port], onClick = { onConnectSaved(server) }, onLongPress = { onDelete(server) })
                 Spacer(Modifier.height(8.dp))
             }
         }
@@ -166,7 +168,10 @@ private fun LabeledField(
 }
 
 @Composable
-private fun ServerRow(server: ServerEntity, onClick: () -> Unit, onLongPress: () -> Unit) {
+private fun ServerRow(
+    server: ServerEntity,
+    status: ServerStatus?,
+    onClick: () -> Unit, onLongPress: () -> Unit) {
     val c = MumbleTheme.colors
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.surfContainer)
@@ -185,10 +190,34 @@ private fun ServerRow(server: ServerEntity, onClick: () -> Unit, onLongPress: ()
             Text(server.label, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = c.onSurface)
             Text("${server.host}:${server.port} · ${server.username}",
                 fontSize = 13.sp, color = c.onSurfaceVar)
+            ServerStatusLine(status)
         }
         Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onLongPress),
             contentAlignment = Alignment.Center) {
             Text("✕", color = c.onSurfaceVar, fontSize = 14.sp)
         }
+    }
+}
+
+@Composable
+private fun ServerStatusLine(status: ServerStatus?) {
+    val c = MumbleTheme.colors
+    val (dot, text) = when (status) {
+        is ServerStatus.Online -> {
+            val i = status.info
+            val users = if (i.maxUsers > 0) "${i.users}/${i.maxUsers}" else "${i.users}"
+            val noun = if (i.users == 1 && i.maxUsers <= 0) "user" else "users"
+            c.speaking to "$users $noun · ${i.latencyMs} ms · v${i.version}"
+        }
+        ServerStatus.Unreachable -> c.onErrContainer to "No response"
+        ServerStatus.Pinging, null -> c.outline to "Checking…"
+    }
+    Row(
+        Modifier.padding(top = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(Modifier.size(7.dp).clip(CircleShape).background(dot))
+        Text(text, fontSize = 12.sp, color = c.onSurfaceVar)
     }
 }
