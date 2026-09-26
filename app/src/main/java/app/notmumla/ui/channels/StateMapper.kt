@@ -56,19 +56,20 @@ fun ServerState.toUiChannels(
 
     fun walk(parentId: Int?, depth: Int) {
         for (channel in childChannels(parentId)) {
-            val users = usersInChannel(channel.id).map {
-                it.toUiUser(
-                    isYou = it.session == selfSession,
-                    speaking = it.session in speakingSessions,
-                    gainDb = userVolumes[it.name]?.let { db -> Math.round(db) } ?: 0,
-                )
-            }
+            fun User.ui() = toUiUser(
+                isYou = session == selfSession,
+                speaking = session in speakingSessions,
+                gainDb = userVolumes[name]?.let { db -> Math.round(db) } ?: 0,
+            )
+            val users = usersInChannel(channel.id).map { it.ui() }
+            val listeners = listenersOf(channel.id).map { it.ui() }
             out += UiChannel(
                 id = channel.id,
                 name = channel.name,
                 depth = depth,
                 locked = false,
                 users = users,
+                listeners = listeners,
                 isCurrent = channel.id == currentChannel,
             )
             walk(channel.id, depth + 1)

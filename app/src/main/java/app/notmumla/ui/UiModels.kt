@@ -32,6 +32,8 @@ data class UiChannel(
     val depth: Int = 0,
     val locked: Boolean = false,
     val users: List<UiUser> = emptyList(),
+    /** Users listening in from another channel; shown above [users], not counted in them. */
+    val listeners: List<UiUser> = emptyList(),
     val isCurrent: Boolean = false,
     val expanded: Boolean = true,
 )

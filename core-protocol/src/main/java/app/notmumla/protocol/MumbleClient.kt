@@ -325,6 +325,9 @@ class MumbleClient(
                 prioritySpeaker = msg.priority_speaker ?: existing?.prioritySpeaker ?: false,
                 comment = msg.comment ?: existing?.comment,
                 certHash = msg.hash ?: existing?.certHash,
+                // Listener changes arrive as deltas, not a full set.
+                listeningChannels = (existing?.listeningChannels.orEmpty() +
+                    msg.listening_channel_add) - msg.listening_channel_remove.toSet(),
             )
             s.copy(users = s.users + (session to updated))
         }
