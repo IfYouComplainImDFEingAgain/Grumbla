@@ -64,6 +64,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.gestures.scrollBy
+import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -105,6 +108,8 @@ fun ChatPanel(
     var viewerImage by remember { mutableStateOf<ByteArray?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
     val pressClaim = remember { PressClaim() }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var lastListHeight by remember { mutableStateOf(0) }
     val context = LocalContext.current
     var confirmLink by remember { mutableStateOf<String?>(null) }
     val onLink: (String, String) -> Unit = { url, shown ->
@@ -134,6 +139,13 @@ fun ChatPanel(
         Box(Modifier.fillMaxWidth().size(1.dp).background(c.outlineVariant))
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth()
+                // Keep the bottom edge anchored when the list shrinks (keyboard opening), like
+                // messaging apps, instead of LazyColumn's default of pinning the top.
+                .onSizeChanged { size ->
+                    val shrunk = lastListHeight - size.height
+                    lastListHeight = size.height
+                    if (shrunk > 0) scope.launch { listState.scrollBy(shrunk.toFloat()) }
+                }
                 .pointerInput(Unit) { detectFreeSpaceLongPress(pressClaim) { confirmClear = true } }
                 .padding(14.dp),
             state = listState,
