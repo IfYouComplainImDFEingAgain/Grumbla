@@ -81,6 +81,7 @@ private fun app.notmumla.data.ChatLine.toUiMessage(): app.notmumla.ui.UiMessage 
     avatar = app.notmumla.ui.channels.avatarColorFor(senderName),
     time = chatTimeFmt.format(java.util.Date(timeMillis)),
     text = text,
+    html = html,
     imageBytes = imageBytes,
     privateWith = privatePeer?.name,
     privateSession = privatePeer?.session,

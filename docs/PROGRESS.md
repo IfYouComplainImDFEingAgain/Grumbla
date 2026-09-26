@@ -93,6 +93,12 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   and rendered in the bubble. Verified by `ImageMessageTest`. (Doesn't yet act on `allow_html=false`.)
   Thumbnails are aspect-bounded (240×300dp) so they never overflow; tap opens a full-screen viewer
   with pinch-zoom + pan.
+- **Rich text chat**: outgoing text is Markdown → HTML via `ChatMarkdown` (port of the desktop
+  client's `Markdown.cpp`; plain text is now HTML-escaped, which it wasn't before). Inbound HTML is
+  rendered by `ChatHtml` (Qt rich-text subset: b/i/u/s, Qt `<span style>`, font colors, headings,
+  code/pre, lists, links). Sender colors below 3:1 contrast on the bubble are dropped; font sizes and
+  backgrounds ignored. Links: only http/https/mailto open, and a link whose text doesn't show its
+  real host asks first. Long-press a message for Copy/Delete-for-me; long-press empty space to clear.
 - **Whisper**: user sheet → "Whisper to X" registers `VoiceTarget` 1 for that session; the target is
   locked per talk spurt and cleared when they leave or we reconnect. Verified by `WhisperIntegrationTest`.
 - **Private messages**: inbound `TextMessage` with `session` set and no `channel_id`/`tree_id` is

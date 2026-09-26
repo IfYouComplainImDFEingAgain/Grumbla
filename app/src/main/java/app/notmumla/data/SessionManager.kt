@@ -556,11 +556,13 @@ class SessionManager @Inject constructor(
     fun sendText(channelId: Int, message: String) {
         val mc = client ?: return
         val to = _privateChat.value
-        if (to != null) mc.sendPrivateText(to.session, message) else mc.sendText(channelId, message)
+        // Chat is HTML on the wire; like the desktop client, the composer's text is Markdown.
+        val html = ChatMarkdown.toHtml(message)
+        if (to != null) mc.sendPrivateText(to.session, html) else mc.sendText(channelId, html)
         // The server does not echo our own messages back, so add it locally.
         appendChat(
             ChatLine(chatId++, "You", message, System.currentTimeMillis(), isMe = true,
-                privatePeer = to),
+                html = html, privatePeer = to),
         )
         markChatRead()
     }
@@ -588,12 +590,14 @@ class SessionManager @Inject constructor(
         if (text.actorSession != null && text.actorSession == selfSession) return // our own echo, if any
         val name = text.actorSession?.let { _state.value.users[it]?.name } ?: "Server"
         val image = ImageUtil.extractImage(text.message)
-        val clean = stripHtml(if (image != null) ImageUtil.stripImageTags(text.message) else text.message)
+        val html = if (image != null) ImageUtil.stripImageTags(text.message) else text.message
+        val clean = HtmlText.strip(html)
         appendChat(
             ChatLine(
                 id = chatId++,
                 senderName = name,
                 text = clean,
+                html = html,
                 timeMillis = System.currentTimeMillis(),
                 isSystem = text.actorSession == null,
                 imageBytes = image,
@@ -633,14 +637,6 @@ class SessionManager @Inject constructor(
 
     /** Mark the chat as read (call when the Chat tab is shown). */
     fun markChatRead() { _unread.value = 0 }
-
-    /** Strip server-permitted HTML to plain text for display. */
-    private fun stripHtml(html: String): String =
-        html.replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-            .replace(Regex("<[^>]*>"), "")
-            .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-            .replace("&quot;", "\"").replace("&#39;", "'").replace("&nbsp;", " ")
-            .trim()
 
     /** User-initiated disconnect: tears down and suppresses auto-reconnect. */
     fun disconnect() {

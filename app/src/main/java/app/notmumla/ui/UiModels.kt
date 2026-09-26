@@ -61,6 +61,8 @@ data class UiMessage(
     val avatar: Color = Color.Gray,
     val time: String = "",
     val text: String = "",
+    /** Rich-text HTML to render instead of [text], when the message has it. */
+    val html: String? = null,
     val fileName: String = "",
     val fileSize: String = "",
     /** Inline image bytes (JPEG/PNG) when this message carries an image. */

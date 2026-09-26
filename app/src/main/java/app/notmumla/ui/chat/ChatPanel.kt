@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import app.notmumla.data.ChatMarkdown
 import app.notmumla.ui.Avatar
 import app.notmumla.ui.ChatKind
 import app.notmumla.ui.MockData
@@ -94,6 +95,11 @@ fun ChatPanel(
     var viewerImage by remember { mutableStateOf<ByteArray?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
     val pressClaim = remember { PressClaim() }
+    val context = LocalContext.current
+    var confirmLink by remember { mutableStateOf<String?>(null) }
+    val onLink: (String, String) -> Unit = { url, shown ->
+        if (ChatLinks.opensWhatItShows(url, shown)) ChatLinks.open(context, url) else confirmLink = url
+    }
 
     // The panel is recreated on every tab switch, so open at the newest message.
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = messages.lastIndex.coerceAtLeast(0))
@@ -130,6 +136,7 @@ fun ChatPanel(
                     onOpenPrivate = { s, n -> onReplyPrivately(s, n) },
                     onDelete = { onDeleteMessage(msg.id) },
                     pressClaim = pressClaim,
+                    onLink = onLink,
                 )
             }
         }
@@ -162,6 +169,23 @@ fun ChatPanel(
         )
     }
 
+    confirmLink?.let { url ->
+        AlertDialog(
+            onDismissRequest = { confirmLink = null },
+            containerColor = c.surfContainer,
+            title = { Text("Open link?", fontWeight = FontWeight.Bold, color = c.onSurface) },
+            text = {
+                // The link's text didn't match where it goes, so show the real destination.
+                Text(url, color = c.onSurfaceVar, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    fontSize = 13.sp)
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmLink = null; ChatLinks.open(context, url) }) { Text("Open") }
+            },
+            dismissButton = { TextButton(onClick = { confirmLink = null }) { Text("Cancel") } },
+        )
+    }
+
     viewerImage?.let { bytes ->
         FullScreenImageViewer(bytes) { viewerImage = null }
     }
@@ -174,6 +198,7 @@ private fun MessageRow(
     onOpenPrivate: (session: Int, name: String) -> Unit,
     onDelete: () -> Unit,
     pressClaim: PressClaim,
+    onLink: (url: String, shown: String) -> Unit,
 ) {
     val c = MumbleTheme.colors
     val isPrivate = msg.privateWith != null
@@ -203,7 +228,8 @@ private fun MessageRow(
                     Box(
                         privateMod(shape).clip(shape).then(hold)
                             .background(c.primaryContainer).padding(horizontal = 12.dp, vertical = 9.dp),
-                    ) { LinkedText(msg.text, color = c.onPrimaryContainer, linkColor = c.onPrimaryContainer) }
+                    ) { RichText(msg, color = c.onPrimaryContainer, linkColor = c.onPrimaryContainer,
+                        background = c.primaryContainer, onLink = onLink) }
                 }
             }
         }
@@ -228,7 +254,8 @@ private fun MessageRow(
                         Box(
                             Modifier.padding(top = 3.dp).then(privateMod(shape)).clip(shape).then(hold)
                                 .background(c.surfHigh).padding(horizontal = 12.dp, vertical = 9.dp),
-                        ) { LinkedText(msg.text, color = c.onSurface, linkColor = c.primary) }
+                        ) { RichText(msg, color = c.onSurface, linkColor = c.primary,
+                            background = c.surfHigh, onLink = onLink) }
                     }
                 }
             }
@@ -301,12 +328,20 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectFr
     if (!ended) onLongPress()
 }
 
-/** Message text with tappable URLs; a tap on a link doesn't reach the bubble's own tap/hold. */
+/** The message's rich text (Mumble HTML); a tap on a link doesn't reach the bubble's own tap/hold. */
 @Composable
-private fun LinkedText(text: String, color: Color, linkColor: Color) {
-    val context = LocalContext.current
-    val linked = remember(text, linkColor) { ChatLinks.linkify(context, text, linkColor) }
-    Text(linked, color = color, fontSize = 14.sp)
+private fun RichText(
+    msg: UiMessage,
+    color: Color,
+    linkColor: Color,
+    background: Color,
+    onLink: (url: String, shown: String) -> Unit,
+) {
+    val currentOnLink by androidx.compose.runtime.rememberUpdatedState(onLink)
+    val rendered = remember(msg.html, msg.text, linkColor, background) {
+        ChatHtml.render(msg.html ?: ChatMarkdown.escape(msg.text), linkColor, background) { u, t -> currentOnLink(u, t) }
+    }
+    Text(rendered, color = color, fontSize = 14.sp)
 }
 
 @Composable
