@@ -10,7 +10,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,11 +36,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,6 +71,7 @@ import app.notmumla.ui.ChatKind
 import app.notmumla.ui.MockData
 import app.notmumla.ui.UiMessage
 import app.notmumla.ui.theme.MumbleTheme
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun ChatPanel(
@@ -78,19 +84,24 @@ fun ChatPanel(
     onReplyPrivately: (session: Int, name: String) -> Unit = { _, _ -> },
     onClosePrivate: () -> Unit = {},
     onDeleteMessage: (id: Int) -> Unit = {},
+    onClearChat: () -> Unit = {},
 ) {
     val c = MumbleTheme.colors
     val pickImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri -> uri?.let(onSendImage) }
     var viewerImage by remember { mutableStateOf<ByteArray?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
+    val pressClaim = remember { PressClaim() }
 
     // The panel is recreated on every tab switch, so open at the newest message.
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = messages.lastIndex.coerceAtLeast(0))
     // Keyed on the newest id, not the count: the history is capped, so at the cap size stays flat.
     var lastSeenId by remember { mutableStateOf(messages.lastOrNull()?.id) }
     LaunchedEffect(messages.lastOrNull()?.id) {
-        val newest = messages.lastOrNull() ?: return@LaunchedEffect
+        // Forget the old newest once the history is cleared, or the next message looks like it
+        // arrived while scrolled up and wouldn't be followed.
+        val newest = messages.lastOrNull() ?: run { lastSeenId = null; return@LaunchedEffect }
         val prevId = lastSeenId
         lastSeenId = newest.id
         if (newest.id == prevId) return@LaunchedEffect
@@ -105,7 +116,9 @@ fun ChatPanel(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp))
         Box(Modifier.fillMaxWidth().size(1.dp).background(c.outlineVariant))
         LazyColumn(
-            Modifier.weight(1f).fillMaxWidth().padding(14.dp),
+            Modifier.weight(1f).fillMaxWidth()
+                .pointerInput(Unit) { detectFreeSpaceLongPress(pressClaim) { confirmClear = true } }
+                .padding(14.dp),
             state = listState,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -115,6 +128,7 @@ fun ChatPanel(
                     onImageClick = { viewerImage = it },
                     onOpenPrivate = { s, n -> onReplyPrivately(s, n) },
                     onDelete = { onDeleteMessage(msg.id) },
+                    pressClaim = pressClaim,
                 )
             }
         }
@@ -131,6 +145,22 @@ fun ChatPanel(
         )
     }
 
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            containerColor = c.surfContainer,
+            title = { Text("Clear chat history?", fontWeight = FontWeight.Bold, color = c.onSurface) },
+            text = {
+                Text("Removes every message from this device. Others in the channel still have them.",
+                    color = c.onSurfaceVar)
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmClear = false; onClearChat() }) { Text("Clear") }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } },
+        )
+    }
+
     viewerImage?.let { bytes ->
         FullScreenImageViewer(bytes) { viewerImage = null }
     }
@@ -142,6 +172,7 @@ private fun MessageRow(
     onImageClick: (ByteArray) -> Unit,
     onOpenPrivate: (session: Int, name: String) -> Unit,
     onDelete: () -> Unit,
+    pressClaim: PressClaim,
 ) {
     val c = MumbleTheme.colors
     val isPrivate = msg.privateWith != null
@@ -153,7 +184,7 @@ private fun MessageRow(
     fun privateMod(shape: androidx.compose.ui.graphics.Shape): Modifier =
         if (isPrivate) Modifier.clip(shape).border(1.5.dp, c.primary, shape) else Modifier
     when (msg.kind) {
-        ChatKind.SYSTEM -> MessageMenu(msg.text, onDelete, onTap = null) { hold ->
+        ChatKind.SYSTEM -> MessageMenu(msg.text, onDelete, pressClaim, onTap = null) { hold ->
             Text(
                 msg.text, fontSize = 12.sp, color = c.onSurfaceVar,
                 modifier = Modifier.fillMaxWidth().then(hold).padding(vertical = 2.dp),
@@ -162,12 +193,12 @@ private fun MessageRow(
         ChatKind.ME -> Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
             if (isPrivate) PrivateLabel("Private to ${msg.privateWith}")
             if (msg.imageBytes != null) {
-                MessageMenu(null, onDelete, onTap = { onImageClick(msg.imageBytes) }) { hold ->
+                MessageMenu(null, onDelete, pressClaim, onTap = { onImageClick(msg.imageBytes) }) { hold ->
                     InlineImage(msg, modifier = privateMod(RoundedCornerShape(14.dp)), hold = hold)
                 }
             } else {
                 val shape = RoundedCornerShape(14.dp, 14.dp, 4.dp, 14.dp)
-                MessageMenu(msg.text, onDelete, onTap = openPrivate) { hold ->
+                MessageMenu(msg.text, onDelete, pressClaim, onTap = openPrivate) { hold ->
                     Box(
                         privateMod(shape).clip(shape).then(hold)
                             .background(c.primaryContainer).padding(horizontal = 12.dp, vertical = 9.dp),
@@ -185,14 +216,14 @@ private fun MessageRow(
                     if (isPrivate) PrivateLabel("Private")
                 }
                 if (msg.imageBytes != null) {
-                    MessageMenu(null, onDelete, onTap = { onImageClick(msg.imageBytes) }) { hold ->
+                    MessageMenu(null, onDelete, pressClaim, onTap = { onImageClick(msg.imageBytes) }) { hold ->
                         InlineImage(msg, modifier = Modifier.padding(top = 3.dp).then(privateMod(RoundedCornerShape(14.dp))),
                             hold = hold)
                     }
                 }
                 if (msg.text.isNotBlank()) {
                     val shape = RoundedCornerShape(4.dp, 14.dp, 14.dp, 14.dp)
-                    MessageMenu(msg.text, onDelete, onTap = openPrivate) { hold ->
+                    MessageMenu(msg.text, onDelete, pressClaim, onTap = openPrivate) { hold ->
                         Box(
                             Modifier.padding(top = 3.dp).then(privateMod(shape)).clip(shape).then(hold)
                                 .background(c.surfHigh).padding(horizontal = 12.dp, vertical = 9.dp),
@@ -214,6 +245,7 @@ private fun MessageRow(
 private fun MessageMenu(
     copyText: String?,
     onDelete: () -> Unit,
+    pressClaim: PressClaim,
     onTap: (() -> Unit)?,
     content: @Composable (hold: Modifier) -> Unit,
 ) {
@@ -221,7 +253,7 @@ private fun MessageMenu(
     val clipboard = LocalClipboardManager.current
     var open by remember { mutableStateOf(false) }
     Box {
-        content(Modifier.combinedClickable(onClick = { onTap?.invoke() }, onLongClick = { open = true }))
+        content(Modifier.claimPress(pressClaim).combinedClickable(onClick = { onTap?.invoke() }, onLongClick = { open = true }))
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = c.surfContainer) {
             if (!copyText.isNullOrBlank()) {
                 DropdownMenuItem(
@@ -238,6 +270,34 @@ private fun MessageMenu(
             )
         }
     }
+}
+
+/**
+ * Lets the chat list tell a press on a message apart from one on empty space. Main-pass events
+ * reach children before parents, so a message marks the down as its own before the list sees it.
+ */
+private class PressClaim { var claimed = false }
+
+private fun Modifier.claimPress(claim: PressClaim): Modifier = pointerInput(claim) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        claim.claimed = true
+    }
+}
+
+/** Long-press on the list's empty space. Scrolling consumes the move, which cancels it. */
+private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectFreeSpaceLongPress(
+    claim: PressClaim,
+    onLongPress: () -> Unit,
+) = awaitEachGesture {
+    awaitFirstDown(requireUnconsumed = false)
+    if (claim.claimed) { claim.claimed = false; return@awaitEachGesture }
+    var ended = false
+    withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+        waitForUpOrCancellation()
+        ended = true
+    }
+    if (!ended) onLongPress()
 }
 
 @Composable

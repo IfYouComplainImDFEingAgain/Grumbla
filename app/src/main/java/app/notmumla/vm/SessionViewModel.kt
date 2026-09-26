@@ -48,6 +48,7 @@ class SessionViewModel @Inject constructor(
     fun selectRoute(route: OutputRoute) = sessionManager.selectRoute(route)
     fun markChatRead() = sessionManager.markChatRead()
     fun deleteChat(id: Long) = sessionManager.deleteChat(id)
+    fun clearChat() = sessionManager.clearChat()
 
     fun joinChannel(channelId: Int) = sessionManager.joinChannel(channelId)
     fun setListening(channelId: Int, listen: Boolean) = sessionManager.setListening(channelId, listen)

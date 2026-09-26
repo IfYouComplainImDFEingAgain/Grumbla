@@ -90,6 +90,7 @@ fun ChannelsScreen(
     onClosePrivateChat: () -> Unit,
     /** Remove a chat message from our local history (by [app.notmumla.ui.UiMessage.id]). */
     onDeleteMessage: (Int) -> Unit = {},
+    onClearChat: () -> Unit = {},
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -128,6 +129,7 @@ fun ChannelsScreen(
                         onReplyPrivately = onStartPrivateChat,
                         onClosePrivate = onClosePrivateChat,
                         onDeleteMessage = onDeleteMessage,
+                        onClearChat = onClearChat,
                     )
                 }
             }
