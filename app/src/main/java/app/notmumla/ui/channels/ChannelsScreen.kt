@@ -70,6 +70,7 @@ fun ChannelsScreen(
     transmissionMode: TransmissionMode,
     debugStats: kotlinx.coroutines.flow.StateFlow<app.notmumla.protocol.model.AudioDebugStats>?,
     onJoinChannel: (Int) -> Unit,
+    onSetListening: (channelId: Int, listen: Boolean) -> Unit,
     onPttHeld: (Boolean) -> Unit,
     onToggleMute: () -> Unit,
     onToggleDeafen: () -> Unit,
@@ -95,6 +96,8 @@ fun ChannelsScreen(
     var layout by remember { mutableStateOf(ChannelLayout.TREE) }
     var quickSettings by remember { mutableStateOf(false) }
     var volumeUser by remember { mutableStateOf<UiUser?>(null) }
+    // Id, not the UiChannel, so the sheet reflects listener changes while open.
+    var actionChannelId by remember { mutableStateOf<Int?>(null) }
 
     Box(Modifier.fillMaxSize().background(c.surface)) {
         Column(Modifier.fillMaxSize()) {
@@ -107,10 +110,11 @@ fun ChannelsScreen(
                 when (tab) {
                     0 -> {
                         val onUserLongPress: (UiUser) -> Unit = { if (!it.isYou) volumeUser = it }
+                        val onChannelLongPress: (Int) -> Unit = { actionChannelId = it }
                         when (layout) {
-                            ChannelLayout.TREE -> TreeLayout(channels, onJoinChannel, onUserLongPress)
+                            ChannelLayout.TREE -> TreeLayout(channels, onJoinChannel, onChannelLongPress, onUserLongPress)
                             ChannelLayout.SPEAKERS -> SpeakersLayout(channels, onJoinChannel, onUserLongPress)
-                            ChannelLayout.COMPACT -> CompactLayout(channels, onJoinChannel, onUserLongPress)
+                            ChannelLayout.COMPACT -> CompactLayout(channels, onJoinChannel, onChannelLongPress, onUserLongPress)
                         }
                     }
                     else -> ChatPanel(
@@ -148,6 +152,14 @@ fun ChannelsScreen(
                 onClose = { quickSettings = false },
             )
         }
+        actionChannelId?.let { id -> channels.firstOrNull { it.id == id } }?.let { ch ->
+            ChannelActionsSheet(
+                ch,
+                onJoin = { onJoinChannel(ch.id); actionChannelId = null },
+                onSetListening = { listen -> onSetListening(ch.id, listen); actionChannelId = null },
+                onDismiss = { actionChannelId = null },
+            )
+        }
         volumeUser?.let { u ->
             UserVolumeSheet(
                 u, onSetUserVolume,
@@ -157,6 +169,49 @@ fun ChannelsScreen(
             )
         }
     }
+}
+
+@Composable
+private fun ChannelActionsSheet(
+    channel: UiChannel,
+    onJoin: () -> Unit,
+    onSetListening: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val c = MumbleTheme.colors
+    val listening = channel.listeners.any { it.isYou }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = c.surfContainer,
+        title = { Text(channel.name, fontWeight = FontWeight.Bold, color = c.onSurface) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (!channel.isCurrent) {
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = onJoin,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Join channel") }
+                }
+                // Listening to the channel you're in adds nothing, but still allow stopping it.
+                if (listening || !channel.isCurrent) {
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = { onSetListening(!listening) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Filled.Hearing, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (listening) "Stop listening" else "Listen to channel")
+                    }
+                    Text("Hear this channel without leaving your own.", fontSize = 12.sp, color = c.onSurfaceVar)
+                } else {
+                    Text("You're in this channel.", fontSize = 13.sp, color = c.onSurfaceVar)
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
 }
 
 @Composable
@@ -312,7 +367,12 @@ private fun EmptyChannels() {
 /* ---------------- Tree layout ---------------- */
 
 @Composable
-private fun TreeLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onUserLongPress: (UiUser) -> Unit) {
+private fun TreeLayout(
+    channels: List<UiChannel>,
+    onJoin: (Int) -> Unit,
+    onChannelLongPress: (Int) -> Unit,
+    onUserLongPress: (UiUser) -> Unit,
+) {
     val c = MumbleTheme.colors
     if (channels.isEmpty()) { EmptyChannels(); return }
     LazyColumn(Modifier.fillMaxSize().padding(10.dp)) {
@@ -322,7 +382,7 @@ private fun TreeLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onUserL
                 modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 6.dp))
         }
         items(channels) { channel ->
-            ChannelHeaderRow(channel, onJoin)
+            ChannelHeaderRow(channel, onJoin, onChannelLongPress)
             channel.listeners.forEach { ListenerRow(it) { onUserLongPress(it) } }
             channel.users.forEach { user -> UserRow(user) { onUserLongPress(user) } }
         }
@@ -341,14 +401,14 @@ private fun GainBadge(gainDb: Int) {
 }
 
 @Composable
-private fun ChannelHeaderRow(channel: UiChannel, onJoin: (Int) -> Unit) {
+private fun ChannelHeaderRow(channel: UiChannel, onJoin: (Int) -> Unit, onLongPress: (Int) -> Unit) {
     val c = MumbleTheme.colors
     val bg = if (channel.isCurrent) c.primaryContainer else Color.Transparent
     val fg = if (channel.isCurrent) c.onPrimaryContainer else c.onSurface
     Row(
         Modifier.fillMaxWidth().padding(start = (channel.depth * 16).dp)
             .clip(RoundedCornerShape(14.dp)).background(bg)
-            .clickable { onJoin(channel.id) }
+            .combinedClickable(onClick = { onJoin(channel.id) }, onLongClick = { onLongPress(channel.id) })
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -504,7 +564,12 @@ private fun SpeakerBubble(user: UiUser, onLongPress: () -> Unit) {
 /* ---------------- Compact layout ---------------- */
 
 @Composable
-private fun CompactLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onUserLongPress: (UiUser) -> Unit) {
+private fun CompactLayout(
+    channels: List<UiChannel>,
+    onJoin: (Int) -> Unit,
+    onChannelLongPress: (Int) -> Unit,
+    onUserLongPress: (UiUser) -> Unit,
+) {
     val c = MumbleTheme.colors
     if (channels.isEmpty()) { EmptyChannels(); return }
     LazyColumn(Modifier.fillMaxSize().padding(vertical = 6.dp)) {
@@ -512,7 +577,7 @@ private fun CompactLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onUs
             Row(
                 Modifier.fillMaxWidth().padding(start = (channel.depth * 20).dp)
                     .background(if (channel.isCurrent) c.primaryContainer.copy(alpha = 0.4f) else Color.Transparent)
-                    .clickable { onJoin(channel.id) }
+                    .combinedClickable(onClick = { onJoin(channel.id) }, onLongClick = { onChannelLongPress(channel.id) })
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
