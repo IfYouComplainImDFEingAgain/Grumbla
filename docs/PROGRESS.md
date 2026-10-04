@@ -108,6 +108,11 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   call volume whatever the app asks for. Capture keeps `VOICE_COMMUNICATION`. On a Pixel it still
   opens a `VOIP_TX` input with the hardware AEC + NS, but that depends on the HAL, so the toggle
   returns to call mode on phones that echo. The SCO headset always stays in call mode.
+- **Ear speaker** (Settings → Audio output → "Phone speaker plays through", default Speakerphone):
+  the phone route's communication device becomes `TYPE_BUILTIN_EARPIECE`. Media streams can't
+  reach the earpiece, so this forces call mode (call volume) even with Media volume on; while
+  sharing the mic it plays `USAGE_VOICE_COMMUNICATION` pinned to the earpiece in `MODE_NORMAL`. A
+  `PROXIMITY_SCREEN_OFF_WAKE_LOCK` is held while it's in use. Hidden on devices with no earpiece.
 - **Whisper**: user sheet → "Whisper to X" registers `VoiceTarget` 1 for that session; the target is
   locked per talk spurt and cleared when they leave or we reconnect. Verified by `WhisperIntegrationTest`.
 - **Private messages**: inbound `TextMessage` with `session` set and no `channel_id`/`tree_id` is

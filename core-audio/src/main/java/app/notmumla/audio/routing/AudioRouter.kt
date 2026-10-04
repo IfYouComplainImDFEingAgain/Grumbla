@@ -78,13 +78,27 @@ class AudioRouter(context: Context) {
      */
     @Volatile var mediaVolume: Boolean = true
 
+    /**
+     * Phone route plays through the ear speaker instead of the loudspeaker. Android only reaches
+     * the earpiece as a call's communication device, so this overrides [mediaVolume] on that route.
+     */
+    @Volatile var earpiece: Boolean = false
+
+    /** Whether the phone has an ear speaker at all (tablets don't). */
+    val hasEarpiece: Boolean
+        get() = commDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) != null
+
+    private fun usesEarpiece(route: OutputRoute) =
+        route == OutputRoute.PHONE_SPEAKER && earpiece && hasEarpiece
+
     private val builtinMicId: Int?
         get() = inputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)?.id
 
     /** Build the engine config for [route] using currently-connected devices. */
     fun configFor(route: OutputRoute): RouteConfig {
         val call = callConfigFor(route)
-        if (!mediaVolume || (route != OutputRoute.PHONE_SPEAKER && route != OutputRoute.WIRED)) return call
+        if (!mediaVolume || usesEarpiece(route) ||
+            (route != OutputRoute.PHONE_SPEAKER && route != OutputRoute.WIRED)) return call
         // SCO stays a call (HFP audio has its own headset volume); A2DP-HQ is already media.
         return asMedia(call)
     }
@@ -114,7 +128,10 @@ class AudioRouter(context: Context) {
             recordDeviceId = null,
             trackUsage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
             trackDeviceId = null,
-            communicationDeviceId = commDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)?.id,
+            communicationDeviceId = commDevice(
+                if (usesEarpiece(route)) AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+                else AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+            )?.id,
         )
 
         OutputRoute.WIRED -> RouteConfig(
@@ -164,6 +181,15 @@ class AudioRouter(context: Context) {
      */
     fun sharedConfigFor(route: OutputRoute): RouteConfig {
         val base = configFor(route)
+        if (usesEarpiece(route)) {
+            // Media usage can't reach the earpiece; voice usage outside call mode is the one way
+            // there, pinned to it so the HAL doesn't pick the loudspeaker instead.
+            return base.copy(
+                audioMode = AudioManager.MODE_NORMAL,
+                communicationDeviceId = null,
+                trackDeviceId = outputDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)?.id,
+            )
+        }
         return if (base.audioMode == AudioManager.MODE_NORMAL) base else asMedia(base)
     }
 

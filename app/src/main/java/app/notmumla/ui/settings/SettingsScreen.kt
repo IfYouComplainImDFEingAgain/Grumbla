@@ -104,6 +104,7 @@ fun SettingsScreen(
     identity: IdentityInfo?,
     availableRoutes: List<OutputRoute>,
     currentRoute: OutputRoute,
+    hasEarpiece: Boolean,
     inCall: Boolean,
     onSelectRoute: (OutputRoute) -> Unit,
     onSetRoutePriority: (List<OutputRoute>) -> Unit,
@@ -122,6 +123,7 @@ fun SettingsScreen(
     onToggleShareMic: (Boolean) -> Unit,
     onToggleAudioLeveling: (Boolean) -> Unit,
     onToggleMediaVolume: (Boolean) -> Unit,
+    onSetPhoneEarpiece: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
     onToggleAvatars: (Boolean) -> Unit,
     onToggleKeepAwake: (Boolean) -> Unit,
@@ -347,6 +349,23 @@ fun SettingsScreen(
                             }
                             Spacer(Modifier.width(8.dp))
                             RadioDot(selected = route == currentRoute)
+                        }
+                    }
+                    if (hasEarpiece) {
+                        Text("Phone speaker plays through", fontSize = 13.sp, color = c.onSurfaceVar,
+                            modifier = Modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp))
+                        SegmentedToggle(
+                            options = listOf("Speakerphone", "Ear speaker"),
+                            selectedIndex = if (settings.phoneEarpiece) 1 else 0,
+                            onSelect = { onSetPhoneEarpiece(it == 1) },
+                        )
+                        if (settings.phoneEarpiece) {
+                            Text(
+                                "Hold the phone to your ear. Uses call volume, and the screen turns " +
+                                    "off near your face.",
+                                fontSize = 12.sp, color = c.onSurfaceVar,
+                                modifier = Modifier.padding(top = 4.dp, start = 4.dp),
+                            )
                         }
                     }
                     if (currentRoute == OutputRoute.BT_A2DP_HQ) {

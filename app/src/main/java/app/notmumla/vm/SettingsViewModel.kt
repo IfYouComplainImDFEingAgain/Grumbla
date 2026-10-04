@@ -99,6 +99,7 @@ class SettingsViewModel @Inject constructor(
     fun setShareMic(v: Boolean) = update { repo.setShareMic(v) }
     fun setAudioLeveling(v: Boolean) = update { repo.setAudioLeveling(v) }
     fun setMediaVolume(v: Boolean) = update { repo.setMediaVolume(v) }
+    fun setPhoneEarpiece(v: Boolean) = update { repo.setPhoneEarpiece(v) }
     fun setAudioBitrate(v: Int) = update { repo.setAudioBitrate(v) }
     fun setShowAvatars(v: Boolean) = update { repo.setShowAvatars(v) }
     fun setKeepScreenAwake(v: Boolean) = update { repo.setKeepScreenAwake(v) }

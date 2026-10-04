@@ -3,6 +3,7 @@ package app.notmumla.data
 import android.content.Context
 import android.media.AudioManager
 import android.os.Build
+import android.os.PowerManager
 import app.notmumla.audio.AudioEngine
 import app.notmumla.audio.MicLevelMonitor
 import app.notmumla.audio.MicTestState
@@ -72,10 +73,11 @@ class SessionManager @Inject constructor(
     init {
         scope.launch {
             settingsRepo.settings.collect { s ->
-                val mediaChanged = router.mediaVolume != s.mediaVolume
+                val routingChanged = router.mediaVolume != s.mediaVolume || router.earpiece != s.phoneEarpiece
                 settings = s
                 router.mediaVolume = s.mediaVolume
-                if (mediaChanged) scope.launch(Dispatchers.Main) { if (engine != null) applyRoute(router.current.value) }
+                router.earpiece = s.phoneEarpiece
+                if (routingChanged) scope.launch(Dispatchers.Main) { if (engine != null) applyRoute(router.current.value) }
                 applyAudioSettings(s)
                 updateMicSharing()
                 // Keep an active mic preview in sync with live setting changes (gain especially).
@@ -274,6 +276,26 @@ class SessionManager @Inject constructor(
         } else {
             val yielded = _micYielded.value
             eng.applyRoute(router.select(route, shareMic = yielded), captureEnabled = !yielded)
+        }
+        updateProximityLock()
+    }
+
+    /** Whether the phone has an ear speaker to offer as the phone route's output. */
+    val hasEarpiece: Boolean get() = router.hasEarpiece
+
+    private val proximityLock = (context.getSystemService(Context.POWER_SERVICE) as PowerManager)
+        .takeIf { it.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK) }
+        ?.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "notmumla:earpiece")
+        ?.apply { setReferenceCounted(false) }
+
+    /** Blank the screen against the user's ear while a call plays through the ear speaker. */
+    private fun updateProximityLock() {
+        val lock = proximityLock ?: return
+        val want = engine != null && router.current.value == OutputRoute.PHONE_SPEAKER &&
+            settings.phoneEarpiece && router.hasEarpiece
+        runCatching {
+            if (want && !lock.isHeld) lock.acquire()
+            else if (!want && lock.isHeld) lock.release()
         }
     }
 
@@ -666,6 +688,7 @@ class SessionManager @Inject constructor(
         micContention.stop()
         _micYielded.value = false
         router.reset()
+        updateProximityLock()
         client?.disconnect()
         client = null
         activeServerId = null
