@@ -118,7 +118,7 @@ fun ChannelsScreen(
     // An edge swipe to get back to channels is the system Back gesture, which on this screen
     // backgrounds the app. Make it return to channels first.
     BackHandler(enabled = pager.currentPage == 1) { showTab(0) }
-    var layout by remember { mutableStateOf(ChannelLayout.TREE) }
+    val layout = ChannelLayout.TREE
     var quickSettings by remember { mutableStateOf(false) }
     var volumeUser by remember { mutableStateOf<UiUser?>(null) }
     // Id, not the UiChannel, so the sheet reflects listener changes while open.
@@ -190,8 +190,6 @@ fun ChannelsScreen(
 
         if (quickSettings) {
             QuickSettingsSheet(
-                layout = layout,
-                onLayout = { layout = it },
                 earpiece = earpiece,
                 onSetEarpiece = onSetEarpiece,
                 onOpenAllSettings = { quickSettings = false; onOpenSettings() },

@@ -28,14 +28,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.notmumla.ui.ChannelLayout
 import app.notmumla.ui.SegmentedToggle
 import app.notmumla.ui.theme.MumbleTheme
 
 @Composable
 fun QuickSettingsSheet(
-    layout: ChannelLayout,
-    onLayout: (ChannelLayout) -> Unit,
     earpiece: Boolean?,
     onSetEarpiece: (Boolean) -> Unit,
     onOpenAllSettings: () -> Unit,
@@ -69,17 +66,7 @@ fun QuickSettingsSheet(
             }
             Spacer(Modifier.height(14.dp))
 
-            SheetCard {
-                Text("Channel layout", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                    color = c.onSurfaceVar, modifier = Modifier.padding(bottom = 10.dp))
-                SegmentedToggle(
-                    options = listOf("Tree", "Speakers", "Compact"),
-                    selectedIndex = layout.ordinal,
-                    onSelect = { onLayout(ChannelLayout.entries[it]) },
-                )
-            }
             if (earpiece != null) {
-                Spacer(Modifier.height(10.dp))
                 SheetCard {
                     Text("Phone audio", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                         color = c.onSurfaceVar, modifier = Modifier.padding(bottom = 10.dp))
@@ -89,8 +76,8 @@ fun QuickSettingsSheet(
                         onSelect = { onSetEarpiece(it == 1) },
                     )
                 }
+                Spacer(Modifier.height(10.dp))
             }
-            Spacer(Modifier.height(10.dp))
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.surface)
                     .clickable(onClick = onOpenAllSettings).padding(horizontal = 14.dp, vertical = 14.dp),
