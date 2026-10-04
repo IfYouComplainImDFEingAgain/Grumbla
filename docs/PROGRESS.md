@@ -120,6 +120,11 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   the server (or our advertised version) predates 1.5.0, so voice works on 1.3.x/1.4.x servers;
   inbound format is auto-detected by header byte. Verified by `LegacyVoiceTest`. The 1.5 protobuf
   path is unchanged.
+- **Swipe between Channels and Chat**: a `HorizontalPager` in `ChannelsScreen` replaces the tab
+  switch; the voice bar stays outside it so a swipe can't steal a PTT hold. Back on the chat page
+  returns to channels (an edge swipe is the system Back gesture, which on this screen backgrounds
+  the app). Paging is off while the keyboard is up. The chat page stays composed, keeping its scroll
+  position and draft; unread clears on the *settled* page, including messages arriving while shown.
 
 - **Share microphone** (Settings → Audio input, default on): other apps used to get silence from
   the mic for the whole session, because we hold `MODE_IN_COMMUNICATION` (Android silences every
