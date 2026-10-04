@@ -1,5 +1,7 @@
 # Grumbla
 
+![](/img/channel.jpg)
+
 A native Android client for [Mumble](https://www.mumble.info/) voice chat. Written from scratch in
 Kotlin and Jetpack Compose. It is not a fork of Mumla or Plumble.
 
@@ -31,6 +33,8 @@ mic instead. If you do want the headset mic, a normal **HFP/SCO** headset mode i
   voice to just them.
 - Channel tree, speakers, and compact views. Text chat with images (swipe between channels and
   chat). Saved servers. Mute / Deafen / Disconnect in the notification. Light and dark themes.
+
+![](/img/chat.jpg) ![](/img/settings-1.jpg) ![](/img/settings-2.jpg)
 
 ## How to install
 
