@@ -45,10 +45,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # The action's default `packages` includes the legacy `tools`, which Google removed from the
+      # SDK repo (sdkmanager: "Failed to find package 'tools'"), so name the packages explicitly.
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
-
-      - name: Install NDK + CMake
-        run: sdkmanager "ndk;$NDK_VERSION" "cmake;$CMAKE_VERSION" "platforms;android-35" "build-tools;35.0.0"
+        with:
+          packages: >-
+            platform-tools
+            ndk;${{ env.NDK_VERSION }}
+            cmake;${{ env.CMAKE_VERSION }}
+            platforms;android-35
+            build-tools;35.0.0
 
       - name: Fetch vendored native sources
         run: |
