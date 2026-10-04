@@ -1,8 +1,11 @@
+@file:OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+
 package app.notmumla.ui.connect
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,8 +41,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -58,10 +65,12 @@ fun ConnectScreen(
     onConnectNew: (host: String, port: Int, username: String, password: String?) -> Unit,
     onConnectSaved: (ServerEntity) -> Unit,
     onDelete: (ServerEntity) -> Unit,
+    onSaveEdit: (ServerEntity) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val c = MumbleTheme.colors
     var showAdd by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<ServerEntity?>(null) }
 
     Column(
         Modifier.fillMaxSize().background(c.surface).verticalScroll(rememberScrollState())
@@ -95,7 +104,8 @@ fun ConnectScreen(
                 modifier = Modifier.padding(bottom = 8.dp, start = 4.dp))
             savedServers.forEach { server ->
                 ServerRow(server, serverStatus[server.host to server.port],
-                    onClick = { onConnectSaved(server) }, onLongPress = { onDelete(server) })
+                    onClick = { onConnectSaved(server) }, onLongPress = { editing = server },
+                    onDelete = { onDelete(server) })
                 Spacer(Modifier.height(8.dp))
             }
             Row(
@@ -127,6 +137,98 @@ fun ConnectScreen(
                     onCancel = { showAdd = false },
                 )
             }
+        }
+    }
+
+    editing?.let { server ->
+        Dialog(
+            onDismissRequest = { editing = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Column(Modifier.padding(horizontal = 20.dp)) {
+                EditServerForm(
+                    server = server,
+                    onSave = { editing = null; onSaveEdit(it) },
+                    onDelete = { editing = null; onDelete(server) },
+                    onCancel = { editing = null },
+                )
+            }
+        }
+    }
+}
+
+/** Long-press editor for a saved server: name, address, port, username and password. */
+@Composable
+private fun EditServerForm(
+    server: ServerEntity,
+    onSave: (ServerEntity) -> Unit,
+    onDelete: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val c = MumbleTheme.colors
+    var label by remember(server.id) { mutableStateOf(server.label) }
+    var host by remember(server.id) { mutableStateOf(server.host) }
+    var port by remember(server.id) { mutableStateOf(server.port.toString()) }
+    var username by remember(server.id) { mutableStateOf(server.username) }
+    var password by remember(server.id) { mutableStateOf(server.password.orEmpty()) }
+
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(c.surfContainer)
+            .verticalScroll(rememberScrollState()).padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Text("Edit Server", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = c.onSurface,
+            modifier = Modifier.padding(start = 4.dp))
+        LabeledField("Name", label, host.ifBlank { "example.com" }) { label = it }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.weight(1f)) {
+                LabeledField("Server address", host, "example.com") { host = it }
+            }
+            Box(Modifier.width(110.dp)) {
+                LabeledField("Port", port, "64738", numeric = true) {
+                    port = it.filter(Char::isDigit).take(5)
+                }
+            }
+        }
+        LabeledField("Username", username, "user") { username = it }
+        LabeledField("Password", password, "Optional", password = true) { password = it }
+        val canSave = host.isNotBlank() && username.isNotBlank()
+        Box(
+            Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(16.dp))
+                .background(if (canSave) c.primary else c.surfHighest)
+                .clickable(enabled = canSave) {
+                    val newHost = host.trim()
+                    val newPort = port.toIntOrNull()?.takeIf { it in 1..65535 } ?: Mumble.DEFAULT_PORT
+                    // The TOFU pin belongs to the old address; keeping it would make the first
+                    // connect to a new host fail as a certificate mismatch.
+                    val moved = !newHost.equals(server.host, ignoreCase = true) || newPort != server.port
+                    onSave(server.copy(
+                        label = label.trim().ifBlank { newHost },
+                        host = newHost,
+                        port = newPort,
+                        username = username.trim(),
+                        password = password.ifBlank { null },
+                        pinnedSha256 = if (moved) null else server.pinnedSha256,
+                        lastChannelId = if (moved) null else server.lastChannelId,
+                    ))
+                }
+                .padding(15.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("Save", color = if (canSave) c.onPrimary else c.onSurfaceVar,
+                fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable(onClick = onDelete)
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text("Delete", color = c.onErrContainer, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
+            Box(
+                Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable(onClick = onCancel)
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center,
+            ) { Text("Cancel", color = c.onSurfaceVar, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) }
         }
     }
 }
@@ -193,6 +295,7 @@ private fun LabeledField(
     value: String,
     placeholder: String,
     numeric: Boolean = false,
+    password: Boolean = false,
     onChange: (String) -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -209,8 +312,14 @@ private fun LabeledField(
                 onValueChange = onChange,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
-                    keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text,
+                    keyboardType = when {
+                        numeric -> KeyboardType.Number
+                        password -> KeyboardType.Password
+                        else -> KeyboardType.Text
+                    },
                 ),
+                visualTransformation =
+                    if (password) PasswordVisualTransformation() else VisualTransformation.None,
                 textStyle = LocalTextStyle.current.copy(color = c.onSurface, fontSize = 15.sp,
                     fontWeight = FontWeight.Medium),
                 cursorBrush = SolidColor(c.primary),
@@ -228,11 +337,18 @@ private fun LabeledField(
 private fun ServerRow(
     server: ServerEntity,
     status: ServerStatus?,
-    onClick: () -> Unit, onLongPress: () -> Unit) {
+    onClick: () -> Unit,
+    onLongPress: () -> Unit,
+    onDelete: () -> Unit,
+) {
     val c = MumbleTheme.colors
+    val haptics = LocalHapticFeedback.current
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.surfContainer)
-            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 12.dp),
+            .combinedClickable(onClick = onClick, onLongClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onLongPress()
+            }).padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -249,7 +365,7 @@ private fun ServerRow(
                 fontSize = 13.sp, color = c.onSurfaceVar)
             ServerStatusLine(status)
         }
-        Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onLongPress),
+        Box(Modifier.size(36.dp).clip(CircleShape).clickable(onClick = onDelete),
             contentAlignment = Alignment.Center) {
             Text("✕", color = c.onSurfaceVar, fontSize = 14.sp)
         }
