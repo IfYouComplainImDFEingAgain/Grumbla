@@ -36,6 +36,8 @@ import app.notmumla.ui.theme.MumbleTheme
 fun QuickSettingsSheet(
     layout: ChannelLayout,
     onLayout: (ChannelLayout) -> Unit,
+    earpiece: Boolean?,
+    onSetEarpiece: (Boolean) -> Unit,
     onOpenAllSettings: () -> Unit,
     onDisconnect: () -> Unit,
     onClose: () -> Unit,
@@ -75,6 +77,18 @@ fun QuickSettingsSheet(
                     selectedIndex = layout.ordinal,
                     onSelect = { onLayout(ChannelLayout.entries[it]) },
                 )
+            }
+            if (earpiece != null) {
+                Spacer(Modifier.height(10.dp))
+                SheetCard {
+                    Text("Phone audio", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        color = c.onSurfaceVar, modifier = Modifier.padding(bottom = 10.dp))
+                    SegmentedToggle(
+                        options = listOf("Speakerphone", "Ear speaker"),
+                        selectedIndex = if (earpiece) 1 else 0,
+                        onSelect = { onSetEarpiece(it == 1) },
+                    )
+                }
             }
             Spacer(Modifier.height(10.dp))
             Row(

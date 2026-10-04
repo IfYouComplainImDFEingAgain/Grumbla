@@ -101,6 +101,9 @@ fun ChannelsScreen(
     onDeleteMessage: (Int) -> Unit = {},
     onClearChat: () -> Unit = {},
     richComposer: Boolean = false,
+    /** Phone output plays through the ear speaker; null hides the choice (not on the phone route). */
+    earpiece: Boolean? = null,
+    onSetEarpiece: (Boolean) -> Unit = {},
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -189,6 +192,8 @@ fun ChannelsScreen(
             QuickSettingsSheet(
                 layout = layout,
                 onLayout = { layout = it },
+                earpiece = earpiece,
+                onSetEarpiece = onSetEarpiece,
                 onOpenAllSettings = { quickSettings = false; onOpenSettings() },
                 onDisconnect = onDisconnect,
                 onClose = { quickSettings = false },
