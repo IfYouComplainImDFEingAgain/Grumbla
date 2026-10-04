@@ -195,6 +195,7 @@ private fun AppNav() {
                     nav.navigate(Routes.CHANNELS)
                 },
                 onDelete = vm::delete,
+                onSaveEdit = vm::update,
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
             )
         }

@@ -83,6 +83,10 @@ class ConnectViewModel @Inject constructor(
         sessionManager.connect(server)
     }
 
+    fun update(server: ServerEntity) {
+        viewModelScope.launch { serverDao.update(server) }
+    }
+
     fun delete(server: ServerEntity) {
         viewModelScope.launch { serverDao.delete(server) }
     }
