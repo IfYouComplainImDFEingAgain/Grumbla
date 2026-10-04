@@ -2,10 +2,12 @@
 
 package app.notmumla.ui.channels
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +24,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -33,10 +37,12 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,8 +104,17 @@ fun ChannelsScreen(
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
-    var tab by remember { mutableStateOf(0) } // 0 = channels, 1 = chat
-    androidx.compose.runtime.LaunchedEffect(tab) { if (tab == 1) onChatRead() }
+    val pager = rememberPagerState(pageCount = { 2 }) // 0 = channels, 1 = chat
+    val scope = rememberCoroutineScope()
+    val showTab: (Int) -> Unit = { scope.launch { pager.animateScrollToPage(it) } }
+    // Settled, not current: a half-finished swipe toward chat hasn't shown it yet. Keyed on the
+    // count too, since the chat page now stays composed and messages arrive while it's on screen.
+    LaunchedEffect(pager.settledPage, unreadCount) {
+        if (pager.settledPage == 1 && unreadCount > 0) onChatRead()
+    }
+    // An edge swipe to get back to channels is the system Back gesture, which on this screen
+    // backgrounds the app. Make it return to channels first.
+    BackHandler(enabled = pager.currentPage == 1) { showTab(0) }
     var layout by remember { mutableStateOf(ChannelLayout.TREE) }
     var quickSettings by remember { mutableStateOf(false) }
     var volumeUser by remember { mutableStateOf<UiUser?>(null) }
@@ -110,11 +125,24 @@ fun ChannelsScreen(
         Column(Modifier.fillMaxSize()) {
             // The header overflow button opens quick settings (per the design mockup).
             ServerHeader(serverName, serverInitial, connectionLabel, onOpenQuickSettings = { quickSettings = true })
-            TabStrip(tab, unread = unreadCount, onSelect = { tab = it })
+            TabStrip(pager.currentPage, unread = unreadCount, onSelect = showTab)
             debugStats?.let { DebugOverlay(it) }
 
-            Box(Modifier.weight(1f)) {
-                when (tab) {
+            // While typing, the keyboard takes half this (square) screen; the voice bar would leave
+            // the chat a sliver. PTT can't be held while typing anyway.
+            @OptIn(ExperimentalLayoutApi::class)
+            val typing = WindowInsets.isImeVisible
+
+            HorizontalPager(
+                state = pager,
+                modifier = Modifier.weight(1f),
+                // Keep the off-screen page alive so chat keeps its scroll position and draft.
+                beyondViewportPageCount = 1,
+                // A drag to select composer text shouldn't flip the page.
+                userScrollEnabled = !typing,
+                key = { it },
+            ) { page ->
+                when (page) {
                     0 -> {
                         val onUserLongPress: (UiUser) -> Unit = { if (!it.isYou) volumeUser = it }
                         val onChannelLongPress: (Int) -> Unit = { actionChannelId = it }
@@ -139,10 +167,6 @@ fun ChannelsScreen(
                 }
             }
 
-            // While typing, the keyboard takes half this (square) screen; the voice bar would leave
-            // the chat a sliver. PTT can't be held while typing anyway.
-            @OptIn(ExperimentalLayoutApi::class)
-            val typing = WindowInsets.isImeVisible
             // Removing the bar mid-press would lose its release, leaving us transmitting.
             androidx.compose.runtime.LaunchedEffect(typing) { if (typing) onPttHeld(false) }
             if (!typing) {
@@ -182,7 +206,7 @@ fun ChannelsScreen(
             UserVolumeSheet(
                 u, onSetUserVolume,
                 onWhisper = { onWhisper(u); volumeUser = null },
-                onMessage = { onStartPrivateChat(u.id, u.name); volumeUser = null; tab = 1 },
+                onMessage = { onStartPrivateChat(u.id, u.name); volumeUser = null; showTab(1) },
                 onDismiss = { volumeUser = null },
             )
         }

@@ -116,7 +116,7 @@ fun ChatPanel(
         if (ChatLinks.opensWhatItShows(url, shown)) ChatLinks.open(context, url) else confirmLink = url
     }
 
-    // The panel is recreated on every tab switch, so open at the newest message.
+    // Open at the newest message; the pager keeps the panel composed after that.
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = messages.lastIndex.coerceAtLeast(0))
     // Keyed on the newest id, not the count: the history is capped, so at the cap size stays flat.
     var lastSeenId by remember { mutableStateOf(messages.lastOrNull()?.id) }
