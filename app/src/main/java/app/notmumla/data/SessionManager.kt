@@ -47,6 +47,11 @@ class SessionManager @Inject constructor(
 
     @Volatile private var settings: AppSettings = AppSettings()
 
+    // Declared before the settings collector's init below: it runs on a background dispatcher and
+    // can emit before the constructor finishes, so anything it touches must already be initialized.
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val router = AudioRouter(context).also { it.startObserving() }
+
     private val micMonitor = MicLevelMonitor()
     private var previewJob: Job? = null
     private var inSettingsAudio = false
@@ -208,8 +213,6 @@ class SessionManager @Inject constructor(
         }
     }
 
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private val router = AudioRouter(context).also { it.startObserving() }
 
     /** Output routes selectable given current hardware (incl. the two Bluetooth modes). */
     val availableRoutes: StateFlow<List<OutputRoute>> = router.available
