@@ -16,7 +16,7 @@ Kotlin and Jetpack Compose (not a fork of Mumla/Plumble).
   import/export as PKCS#12. Trust-on-first-use server certificate pinning.
 - **Private messages and whisper**: send a user a private text/image message (shown inline in the
   chat, marked 🔒, always notifies), or whisper — route your voice to just one user.
-- Channel tree / speakers / compact views, text chat with images, saved servers, foreground service
+- Channel tree / speakers / compact views, text chat with images (swipe between channels and chat), saved servers, foreground service
   with Mute / Deafen / Disconnect in the notification, light and dark themes.
 
 Requires Android 12 (API 31) or newer.
