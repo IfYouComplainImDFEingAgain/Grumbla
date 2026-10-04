@@ -89,8 +89,19 @@ adb reverse tcp:64738 tcp:64738
 # in the app, connect to host 127.0.0.1 port 64738
 ```
 
-## Notes
-- **Unihertz Titan 2** (and similar aggressive OEMs): for the connection to survive backgrounding,
-  set the app to **Battery → Unrestricted**, allow autostart/background in the device's app-launch
-  manager, and lock it in Recents. The app also prompts for battery-optimization exemption on connect.
-- The first native build is slow (compiles libopus for arm64-v8a + x86_64); later builds are cached.
+
+## CI release (GitHub Actions)
+`.github/workflows/release.yml` builds, signs, verifies and publishes a GitHub release when a `v*`
+tag is pushed. It refuses tags that aren't on `master` or don't match `versionName` (tag `v0.4.0` ↔
+`versionName = "0.4.0"`), and fails if the APK isn't signed with the cert digest above.
+
+Repository secrets (Settings → Secrets and variables → Actions):
+| Secret | Value |
+|---|---|
+| `KEYSTORE_BASE64` | `base64 -w0 grumbla-release.jks` |
+| `KEYSTORE_PASSWORD` | store password |
+| `KEY_ALIAS` | `grumbla` |
+| `KEY_PASSWORD` | key password |
+
+Release: bump `versionCode`/`versionName`, commit to `master`, then
+`git tag v0.4.0 && git push origin v0.4.0`.
