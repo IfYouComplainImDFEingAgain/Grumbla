@@ -6,7 +6,7 @@ import android.media.MediaRecorder
 
 /** User-selectable audio output route. The two Bluetooth entries are the headline feature. */
 enum class OutputRoute {
-    /** Built-in earpiece/loudspeaker. */
+    /** Built-in loudspeaker, or the ear speaker when [AudioRouter.earpiece] is set. */
     PHONE_SPEAKER,
 
     /** Wired headset/headphones. */

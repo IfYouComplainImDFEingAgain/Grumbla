@@ -42,6 +42,7 @@ class SessionViewModel @Inject constructor(
     val canTestMic: Boolean get() = sessionManager.canTestMic
     fun testMic() = sessionManager.testMic()
     val currentRoute: StateFlow<OutputRoute> = sessionManager.currentRoute
+    val hasEarpiece: Boolean get() = sessionManager.hasEarpiece
     val chat: StateFlow<List<app.notmumla.data.ChatLine>> = sessionManager.chat
     val unreadChat: StateFlow<Int> = sessionManager.unreadChat
 

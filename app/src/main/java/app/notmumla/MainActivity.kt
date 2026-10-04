@@ -360,6 +360,7 @@ private fun AppNav() {
                 identity = identity,
                 availableRoutes = routes,
                 currentRoute = current,
+                hasEarpiece = session.hasEarpiece,
                 inCall = connection.connection == ConnectionState.CONNECTED ||
                     connection.connection == ConnectionState.CONNECTING,
                 onSelectRoute = session::selectRoute,
@@ -379,6 +380,7 @@ private fun AppNav() {
                 onToggleShareMic = settingsVm::setShareMic,
                 onToggleAudioLeveling = settingsVm::setAudioLeveling,
                 onToggleMediaVolume = settingsVm::setMediaVolume,
+                onSetPhoneEarpiece = settingsVm::setPhoneEarpiece,
                 onSetBitrate = settingsVm::setAudioBitrate,
                 onToggleAvatars = settingsVm::setShowAvatars,
                 onToggleKeepAwake = settingsVm::setKeepScreenAwake,
