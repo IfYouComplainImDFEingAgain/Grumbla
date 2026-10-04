@@ -113,6 +113,7 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   reach the earpiece, so this forces call mode (call volume) even with Media volume on; while
   sharing the mic it plays `USAGE_VOICE_COMMUNICATION` pinned to the earpiece in `MODE_NORMAL`. A
   `PROXIMITY_SCREEN_OFF_WAKE_LOCK` is held while it's in use. Hidden on devices with no earpiece.
+  Also toggled from the channel screen's quick settings (⋮), shown only while the phone route is active.
 - **Whisper**: user sheet → "Whisper to X" registers `VoiceTarget` 1 for that session; the target is
   locked per talk spurt and cleared when they leave or we reconnect. Verified by `WhisperIntegrationTest`.
 - **Private messages**: inbound `TextMessage` with `session` set and no `channel_id`/`tree_id` is

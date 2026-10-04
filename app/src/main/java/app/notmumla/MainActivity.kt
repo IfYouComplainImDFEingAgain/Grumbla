@@ -210,6 +210,7 @@ private fun AppNav() {
             val whisper by vm.whisper.collectAsState()
             val privateChat by vm.privateChat.collectAsState()
             val userVolumes by vm.userVolumes.collectAsState()
+            val sessionRoute by vm.currentRoute.collectAsState()
             val settingsVm: SettingsViewModel = hiltViewModel()
             val appSettings by settingsVm.settings.collectAsState()
 
@@ -322,6 +323,10 @@ private fun AppNav() {
                 onDeleteMessage = { id -> vm.deleteChat(id.toLong()) },
                 onClearChat = vm::clearChat,
                 richComposer = appSettings.richComposer,
+                // Only offered while the phone itself is the output; elsewhere it has no effect.
+                earpiece = if (vm.hasEarpiece && sessionRoute == app.notmumla.audio.routing.OutputRoute.PHONE_SPEAKER)
+                    appSettings.phoneEarpiece else null,
+                onSetEarpiece = settingsVm::setPhoneEarpiece,
                 onDisconnect = {
                     vm.disconnect()
                     nav.popBackStack(Routes.CONNECT, inclusive = false)
