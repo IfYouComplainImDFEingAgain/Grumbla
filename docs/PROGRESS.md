@@ -205,6 +205,12 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - **DNS SRV resolution** (`_mumble._tcp`) — connect is host:port only so far.
 - **PermissionDenied / CodecVersion / ServerConfig** handling in `MumbleClient` (currently ignored).
 - **Wired/SCO route audibility** — verify on hardware; earpiece-vs-loudspeaker toggle may be wanted.
+- **32-bit ARM (`armeabi-v7a`) native libs** — `core-audio` `abiFilters` builds only `arm64-v8a` +
+  `x86_64`, but AndroidX deps ship `armeabi-v7a` libs, so the APK still *installs* on 32-bit-userspace
+  phones (some budget Galaxy A models) and then crashes with `UnsatisfiedLinkError` on connect
+  (`libopusjni` missing; `librnnoisejni` failure is caught). Fix: add `"armeabi-v7a"` to `abiFilters`
+  (larger APK) and verify Opus/RNNoise build + run on a 32-bit device. Alternative: drop the stray
+  32-bit libs so such phones refuse the install instead of crashing.
 
 ## Known issues / watch-outs
 - On-device UI automation is unreliable on the test phone (auto-locks to PIN, multi-display). Live
