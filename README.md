@@ -42,8 +42,7 @@ To get updates automatically, install [Obtainium](https://github.com/ImranR98/Ob
 `https://github.com/IfYouComplainImDFEingAgain/Grumbla` as an app. It checks the releases and
 offers each new version as an update.
 
-
-Building the APK yourself is optional. All releases are compiled automatically via Github Actions.
+Building the APK yourself is optional. All releases are compiled automatically via GitHub Actions.
 
 ## Requirements
 
@@ -126,7 +125,7 @@ Mumble's brute-force auto-ban (10 per 120 s) partway through, and the remaining 
 
 ## Real-world notes
 
-- **Aggressive battery management** Some phones kill the connection in the background. 
+- **Aggressive battery management**: some phones kill the connection in the background.
   Set the app to Battery → Unrestricted, allow autostart in the phone's app manager, and
   lock it in Recents. The app asks for a battery-optimization exemption on connect.
 - **Debug and release builds use different signing keys.** Switching a phone from one to the other
@@ -140,7 +139,7 @@ Mumble's brute-force auto-ban (10 per 120 s) partway through, and the remaining 
   `record source … initialized` lines in `adb logcat` confirm capture is restarting.
 - **RNNoise doesn't cancel out sound**: RNNoise isn't designed for quick sounds like pops, bangs.
   Standard will use your phone's noise cancellation system which usually does a decent job.
-  Pop cancellation will need another processeing layer added.
+  Pop cancellation will need another processing layer added.
 - **Playback is quiet and coming from the earpiece**: Ear speaker is on. Toggle it off in quick
   settings.
 - **Phone can't reach a server running on your PC**: `adb reverse tcp:64738 tcp:64738`, then connect
