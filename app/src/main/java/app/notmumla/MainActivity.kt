@@ -207,6 +207,7 @@ private fun AppNav() {
             val transmitting by vm.localTransmitting.collectAsState()
             val micYielded by vm.micYielded.collectAsState()
             val gameState by vm.gameState.collectAsState()
+            val tanksActive by vm.tanksActive.collectAsState()
             val chat by vm.chat.collectAsState()
             val unread by vm.unreadChat.collectAsState()
             val whisper by vm.whisper.collectAsState()
@@ -339,11 +340,19 @@ private fun AppNav() {
                 onChallenge = if (appSettings.gamesUnlocked) { u -> vm.challenge(u.id, u.name) } else null,
                 gameState = gameState,
                 gameActions = vm.gameActions,
+                onPlayTanks = if (appSettings.gamesUnlocked) vm::joinTanks else null,
                 onDisconnect = {
                     vm.disconnect()
                     nav.popBackStack(Routes.CONNECT, inclusive = false)
                 },
             )
+            if (tanksActive) {
+                app.notmumla.ui.game.TankScreen(
+                    step = vm::stepTanks,
+                    onLeave = vm::leaveTanks,
+                    onPttHeld = if (appSettings.transmissionMode == AudioTransmissionMode.PTT) vm::setPttHeld else null,
+                )
+            }
         }
         composable(Routes.SETTINGS) {
             val session: SessionViewModel = hiltViewModel()

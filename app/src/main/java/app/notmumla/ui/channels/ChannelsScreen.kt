@@ -112,6 +112,8 @@ fun ChannelsScreen(
     onChallenge: ((UiUser) -> Unit)? = null,
     gameState: app.notmumla.game.GameState = app.notmumla.game.GameState.Idle,
     gameActions: app.notmumla.ui.game.GameActions? = null,
+    /** Open the tank arena in our channel: null until the easter egg is unlocked. */
+    onPlayTanks: (() -> Unit)? = null,
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -224,6 +226,7 @@ fun ChannelsScreen(
                 ch,
                 onJoin = { onJoinChannel(ch.id); actionChannelId = null },
                 onSetListening = { listen -> onSetListening(ch.id, listen); actionChannelId = null },
+                onPlayTanks = onPlayTanks?.takeIf { ch.isCurrent }?.let { { it(); actionChannelId = null } },
                 onDismiss = { actionChannelId = null },
             )
         }
@@ -246,6 +249,7 @@ private fun ChannelActionsSheet(
     channel: UiChannel,
     onJoin: () -> Unit,
     onSetListening: (Boolean) -> Unit,
+    onPlayTanks: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -275,6 +279,13 @@ private fun ChannelActionsSheet(
                     Text("Hear this channel without leaving your own.", fontSize = 12.sp, color = c.onSurfaceVar)
                 } else {
                     Text("You're in this channel.", fontSize = 13.sp, color = c.onSurfaceVar)
+                }
+                if (onPlayTanks != null) {
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = onPlayTanks,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Tank arena") }
+                    Text("Everyone here who opens it plays together.", fontSize = 12.sp, color = c.onSurfaceVar)
                 }
             }
         },
