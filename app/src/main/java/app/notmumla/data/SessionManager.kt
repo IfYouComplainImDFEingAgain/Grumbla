@@ -19,6 +19,8 @@ import app.notmumla.data.db.ServerEntity
 import app.notmumla.game.GameController
 import app.notmumla.game.GameMessage
 import app.notmumla.game.GameState
+import app.notmumla.game.tank.TankArena
+import app.notmumla.game.tank.TankMessage
 import app.notmumla.nudge.NudgeEffects
 import app.notmumla.nudge.NudgeLimiter
 import app.notmumla.nudge.NudgeMessage
@@ -367,6 +369,23 @@ class SessionManager @Inject constructor(
         enabled = { settings.gamesUnlocked },
     )
 
+    /** Free-for-all wireframe tank arena for everyone in the channel who opens it (easter egg). */
+    val tanks = TankArena(
+        send = { receivers, m -> client?.sendPluginData(receivers, TankMessage.DATA_ID, TankMessage.encode(m)) },
+        self = { _state.value.sessionId },
+        channelPeers = {
+            val s = _state.value
+            val mine = s.self?.channelId
+            if (mine == null) emptyMap()
+            else s.users.values.filter { it.channelId == mine && it.session != s.sessionId }.associate { it.session to it.name }
+        },
+        enabled = { settings.gamesUnlocked },
+        onInvite = { name ->
+            appendChat(ChatLine(chatId++, "", "$name opened the tank arena. Long-press this channel to join.",
+                System.currentTimeMillis(), isSystem = true))
+        },
+    )
+
     private val nudgeLimiter = NudgeLimiter()
     private val nudgeEffects = NudgeEffects(context)
     private var lastNudgeSent = 0L
@@ -502,7 +521,10 @@ class SessionManager @Inject constructor(
                     scheduleReconnect(server)
                 } else {
                     _state.value = s
-                    if (s.connection == ConnectionState.CONNECTED) game.onUsersPresent(s.users.keys)
+                    if (s.connection == ConnectionState.CONNECTED) {
+                        game.onUsersPresent(s.users.keys)
+                        tanks.onUsersPresent(s.self?.channelId)
+                    }
                     applyUserVolumes() // new/moved users pick up their saved volume
                     _whisper.value?.let { w -> if (w.session !in s.users) stopWhisper() }
                     _privateChat.value?.let { p ->
@@ -522,6 +544,7 @@ class SessionManager @Inject constructor(
                 if (event is MumbleClient.Event.PluginData) when (event.dataId) {
                     GameMessage.DATA_ID -> game.onData(event.sender, event.data)
                     NudgeMessage.DATA_ID -> onNudge(event.sender, event.data)
+                    TankMessage.DATA_ID -> tanks.onData(event.sender, event.data)
                 }
                 events.tryEmit(event)
             }
@@ -767,6 +790,7 @@ class SessionManager @Inject constructor(
         stopWhisper() // session ids don't survive a reconnect
         stopPrivateChat()
         game.reset()
+        tanks.reset()
         nudgeLimiter.reset()
         _localTransmitting.value = false
         _inputLevel.value = 0f
