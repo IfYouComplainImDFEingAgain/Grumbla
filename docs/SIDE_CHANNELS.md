@@ -137,6 +137,48 @@ pose, and everyone simulates it from there.
 **Code:** `app/.../game/tank/`: `TankWorld` (map, physics, `Pose.extrapolate`), `TankMessage`
 (codec), `TankArena` (simulation and networking); `ui/game/TankScreen.kt` (Canvas renderer and
 controls); wired in `SessionManager.tanks`. Tests: `app/src/test/.../game/tank/TankTest.kt`.
+Joining, invites, peer timeouts and the token bucket live in the shared base
+`game/arena/ChannelArena.kt`, which the dogfight uses too.
+
+## Dogfight
+
+A free-for-all in the style of early-90s console space shooters: flat-shaded polygon fighters,
+towers and rows of arches over a 700 m square field, chase camera behind your ship. Same channel
+rules as the tank arena (it's built on the same `ChannelArena` base); opening one game leaves the
+other.
+
+**Play:** long-press your current channel → **Dogfight**. The stick steers (yaw and pitch; the
+**Y** button toggles flight-style "pull back to climb" and arcade-style); **FIRE** holds for rapid
+twin lasers; **BOOST**/**BRAKE** share a meter; **ROLL** barrel-rolls, and bolts pass through you
+mid-roll. Shields take 8 per bolt, regenerate after 5 s untouched; scraping the floor hurts and
+hitting a building is fatal. Flying past 350 m hands control to an autopilot that turns you back.
+Enemies off screen show as arrows at the edge.
+
+**Wire protocol** — `dataID = notmumla/flight/1`:
+
+| Message | Meaning |
+| --- | --- |
+| `hi`, `bye` | As in the tank arena |
+| `s <seq> <alive> <x> <y> <z> <h> <p> <v> <w> <q> <fx> <shots> <kills> <deaths>` | My ship: position in dm, heading and pitch in 0.1°, speed in dm/s, yaw and pitch rates in 0.1°/s, `fx` bits 1 = trigger held, 2 = boosting, 4 = rolling |
+| `hit <shooter> <shot>` | Bolt `<shot>` from `<shooter>` finished me; `<shooter>` = my own session means I crashed with nobody to credit |
+
+**Lasers cost no messages.** At ~6 bolts/s, a message per shot would blow the 4/s budget. Instead
+the state carries "trigger held", sent the moment it changes, and every client fires that ship's
+bolts itself at the fixed rate from where it draws the ship. A tap that starts and ends between two
+states shows up as the shot counter moving, and is replayed then. Bolts fired for someone after they
+let go (we hear it up to ~333 ms late) can still kill, so a kill is credited for shot numbers up to
+8 past the shooter's own count.
+
+**Rules beyond the tank arena's:** the victim keeps its own shield and decides its own death, as
+before; a crash within 5 s of being hit credits whoever hit last. Dead reckoning integrates speed,
+yaw and pitch rate in 50 ms steps (the same code flies our own ship) and eases corrections over
+200 ms; hit spheres are a generous 3.6 m to absorb the prediction error. At most 12 live bolts per
+ship.
+
+**Code:** `app/.../game/flight/`: `FlightWorld` (map, `Pose3`, `Bolt`), `FlightMessage`,
+`FlightArena`; `ui/game/FlightScreen.kt` (flat-shaded Canvas renderer, HUD) and
+`ui/game/ArenaControls.kt` (stick and buttons, shared with the tanks); wired in
+`SessionManager.flights`. Tests: `app/src/test/.../game/flight/FlightTest.kt`.
 
 ## Nudge
 

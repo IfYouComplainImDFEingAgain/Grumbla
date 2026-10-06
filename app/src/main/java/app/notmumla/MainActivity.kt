@@ -208,6 +208,7 @@ private fun AppNav() {
             val micYielded by vm.micYielded.collectAsState()
             val gameState by vm.gameState.collectAsState()
             val tanksActive by vm.tanksActive.collectAsState()
+            val flightsActive by vm.flightsActive.collectAsState()
             val chat by vm.chat.collectAsState()
             val unread by vm.unreadChat.collectAsState()
             val whisper by vm.whisper.collectAsState()
@@ -281,7 +282,7 @@ private fun AppNav() {
             val serverName = serverLabel.ifBlank { "Mumble server" }
             val currentChannelName = self?.channelId?.let { state.channels[it]?.name } ?: "chat"
 
-            // A Box so the tank arena overlays the channels screen.
+            // A Box so the arena games overlay the channels screen.
             androidx.compose.foundation.layout.Box {
                 ChannelsScreen(
                     serverName = serverName,
@@ -343,17 +344,18 @@ private fun AppNav() {
                     gameState = gameState,
                     gameActions = vm.gameActions,
                     onPlayTanks = if (appSettings.gamesUnlocked) vm::joinTanks else null,
+                    onPlayFlights = if (appSettings.gamesUnlocked) vm::joinFlights else null,
                     onDisconnect = {
                         vm.disconnect()
                         nav.popBackStack(Routes.CONNECT, inclusive = false)
                     },
                 )
+                val gamePtt = if (appSettings.transmissionMode == AudioTransmissionMode.PTT) vm::setPttHeld else null
                 if (tanksActive) {
-                    app.notmumla.ui.game.TankScreen(
-                        step = vm::stepTanks,
-                        onLeave = vm::leaveTanks,
-                        onPttHeld = if (appSettings.transmissionMode == AudioTransmissionMode.PTT) vm::setPttHeld else null,
-                    )
+                    app.notmumla.ui.game.TankScreen(step = vm::stepTanks, onLeave = vm::leaveTanks, onPttHeld = gamePtt)
+                }
+                if (flightsActive) {
+                    app.notmumla.ui.game.FlightScreen(step = vm::stepFlights, onLeave = vm::leaveFlights, onPttHeld = gamePtt)
                 }
             }
         }

@@ -19,6 +19,8 @@ import app.notmumla.data.db.ServerEntity
 import app.notmumla.game.GameController
 import app.notmumla.game.GameMessage
 import app.notmumla.game.GameState
+import app.notmumla.game.flight.FlightArena
+import app.notmumla.game.flight.FlightMessage
 import app.notmumla.game.tank.TankArena
 import app.notmumla.game.tank.TankMessage
 import app.notmumla.nudge.NudgeEffects
@@ -369,21 +371,33 @@ class SessionManager @Inject constructor(
         enabled = { settings.gamesUnlocked },
     )
 
+    /** Users in our channel, minus us: who the channel games play with. */
+    private fun channelPeers(): Map<Int, String> {
+        val s = _state.value
+        val mine = s.self?.channelId ?: return emptyMap()
+        return s.users.values.filter { it.channelId == mine && it.session != s.sessionId }.associate { it.session to it.name }
+    }
+
+    private fun gameInvite(name: String, game: String) =
+        appendChat(ChatLine(chatId++, "", "$name opened the $game. Long-press this channel to join.",
+            System.currentTimeMillis(), isSystem = true))
+
     /** Free-for-all wireframe tank arena for everyone in the channel who opens it (easter egg). */
     val tanks = TankArena(
         send = { receivers, m -> client?.sendPluginData(receivers, TankMessage.DATA_ID, TankMessage.encode(m)) },
         self = { _state.value.sessionId },
-        channelPeers = {
-            val s = _state.value
-            val mine = s.self?.channelId
-            if (mine == null) emptyMap()
-            else s.users.values.filter { it.channelId == mine && it.session != s.sessionId }.associate { it.session to it.name }
-        },
+        channelPeers = ::channelPeers,
         enabled = { settings.gamesUnlocked },
-        onInvite = { name ->
-            appendChat(ChatLine(chatId++, "", "$name opened the tank arena. Long-press this channel to join.",
-                System.currentTimeMillis(), isSystem = true))
-        },
+        onInvite = { gameInvite(it, "tank arena") },
+    )
+
+    /** Free-for-all flat-shaded dogfight, the same way (easter egg). */
+    val flights = FlightArena(
+        send = { receivers, m -> client?.sendPluginData(receivers, FlightMessage.DATA_ID, FlightMessage.encode(m)) },
+        self = { _state.value.sessionId },
+        channelPeers = ::channelPeers,
+        enabled = { settings.gamesUnlocked },
+        onInvite = { gameInvite(it, "dogfight") },
     )
 
     private val nudgeLimiter = NudgeLimiter()
@@ -524,6 +538,7 @@ class SessionManager @Inject constructor(
                     if (s.connection == ConnectionState.CONNECTED) {
                         game.onUsersPresent(s.users.keys)
                         tanks.onUsersPresent(s.self?.channelId)
+                        flights.onUsersPresent(s.self?.channelId)
                     }
                     applyUserVolumes() // new/moved users pick up their saved volume
                     _whisper.value?.let { w -> if (w.session !in s.users) stopWhisper() }
@@ -545,6 +560,7 @@ class SessionManager @Inject constructor(
                     GameMessage.DATA_ID -> game.onData(event.sender, event.data)
                     NudgeMessage.DATA_ID -> onNudge(event.sender, event.data)
                     TankMessage.DATA_ID -> tanks.onData(event.sender, event.data)
+                    FlightMessage.DATA_ID -> flights.onData(event.sender, event.data)
                 }
                 events.tryEmit(event)
             }
@@ -791,6 +807,7 @@ class SessionManager @Inject constructor(
         stopPrivateChat()
         game.reset()
         tanks.reset()
+        flights.reset()
         nudgeLimiter.reset()
         _localTransmitting.value = false
         _inputLevel.value = 0f
