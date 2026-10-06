@@ -201,7 +201,7 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 ### Dogfight (multiplayer easter egg) 🧪
 - Flat-shaded polygon dogfight in the old console style, same channel model as the tank arena:
   long-press your channel → **Dogfight**. Chase camera, twin lasers, boost/brake meter, barrel roll,
-  shields, towers and arch rows, autopilot turn-back at the edge. Lasers ride on the state message's
+  shields (five hits, no regeneration), towers and arch rows, autopilot turn-back at the edge. Lasers ride on the state message's
   "trigger held" bit, so firing costs no extra messages. Details in
   [`SIDE_CHANNELS.md`](SIDE_CHANNELS.md#dogfight).
 - Shared plumbing pulled out of the tank arena into `game/arena/ChannelArena` (tank tests unchanged

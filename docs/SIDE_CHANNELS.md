@@ -150,7 +150,7 @@ other.
 **Play:** long-press your current channel → **Dogfight**. The stick steers (yaw and pitch; the
 **Y** button toggles flight-style "pull back to climb" and arcade-style); **FIRE** holds for rapid
 twin lasers; **BOOST**/**BRAKE** share a meter; **ROLL** barrel-rolls, and bolts pass through you
-mid-roll. Shields take 8 per bolt, regenerate after 5 s untouched; scraping the floor hurts and
+mid-roll. Shields take 20 per bolt (five hits) and only refill on respawn; scraping the floor hurts and
 hitting a building is fatal. Flying past 350 m hands control to an autopilot that turns you back.
 Enemies off screen show as arrows at the edge.
 
