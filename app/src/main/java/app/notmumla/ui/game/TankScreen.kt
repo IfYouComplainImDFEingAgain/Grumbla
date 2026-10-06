@@ -2,11 +2,6 @@ package app.notmumla.ui.game
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,9 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -30,17 +22,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.notmumla.game.tank.Pose
@@ -51,7 +39,6 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
-import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.tan
 
@@ -103,23 +90,14 @@ fun TankScreen(
 
     androidx.compose.foundation.layout.BoxWithConstraints(
         Modifier.fillMaxSize().background(Color.Black)
-            // Swallow every touch the controls don't take, or it reaches the channel list underneath.
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    do {
-                        val e = awaitPointerEvent()
-                        e.changes.forEach { it.consume() }
-                    } while (e.changes.any { it.pressed })
-                }
-            },
+            .swallowTouches(),
     ) {
-        // Thumbs rest above the bottom edge; well above it on a tall portrait screen.
-        val lift = 16.dp + maxHeight * (if (maxHeight > maxWidth * 1.3f) 0.12f else 0.04f)
+        val lift = controlLift(maxWidth, maxHeight)
         Canvas(Modifier.fillMaxSize()) { frame?.let { drawArena(it) } }
 
         Column(Modifier.safeDrawingPadding().padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                HudButton("✕ Leave", onClick = onLeave)
+                HudButton("✕ Leave", Vector, onClick = onLeave)
             }
             Column(Modifier.padding(top = 8.dp)) {
                 feed.forEach { Text(it, color = Vector.copy(alpha = 0.85f), fontSize = 12.sp, fontFamily = FontFamily.Monospace) }
@@ -149,84 +127,18 @@ fun TankScreen(
             )
         }
 
-        DriveStick(
+        Stick(
             Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = 20.dp, bottom = lift),
-            value = stick, onChange = { stick = it },
+            value = stick, color = Vector, onChange = { stick = it },
         )
         Row(
             Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(end = 20.dp, bottom = lift),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
-            if (onPttHeld != null) HoldButton("TALK", 72, onHeld = onPttHeld)
-            HoldButton("FIRE", 104, onHeld = { firing = it })
+            if (onPttHeld != null) HoldButton("TALK", 72, Vector, onHeld = onPttHeld)
+            HoldButton("FIRE", 104, Vector, onHeld = { firing = it })
         }
-    }
-}
-
-@Composable
-private fun HudButton(label: String, onClick: () -> Unit) {
-    Text(
-        label, color = Vector, fontSize = 14.sp, fontFamily = FontFamily.Monospace,
-        modifier = Modifier.clip(RoundedCornerShape(8.dp)).border(1.dp, Vector, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
-    )
-}
-
-/** Held = true from finger down to finger up; works alongside a finger on the stick. */
-@Composable
-private fun HoldButton(label: String, sizeDp: Int, onHeld: (Boolean) -> Unit) {
-    var held by remember { mutableStateOf(false) }
-    Box(
-        Modifier.size(sizeDp.dp).clip(CircleShape)
-            .background(if (held) Vector.copy(alpha = 0.35f) else Color.Transparent)
-            .border(2.dp, Vector, CircleShape)
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown().consume()
-                    held = true; onHeld(true)
-                    waitForUpOrCancellation()
-                    held = false; onHeld(false)
-                }
-            },
-        contentAlignment = Alignment.Center,
-    ) { Text(label, color = Vector, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
-}
-
-/** A virtual stick: up/down drives, left/right turns; it springs back to centre on release. */
-@Composable
-private fun DriveStick(modifier: Modifier, value: Offset, onChange: (Offset) -> Unit) {
-    val sizeDp = 150
-    Box(
-        modifier.size(sizeDp.dp).clip(CircleShape).border(2.dp, Vector.copy(alpha = 0.7f), CircleShape)
-            .pointerInput(Unit) {
-                val r = size.width / 2f
-                fun at(p: Offset): Offset {
-                    val d = (p - Offset(r, r)) / r
-                    val len = hypot(d.x, d.y)
-                    return if (len > 1f) d / len else d
-                }
-                awaitEachGesture {
-                    val down = awaitFirstDown()
-                    down.consume()
-                    onChange(at(down.position))
-                    while (true) {
-                        val e = awaitPointerEvent()
-                        val c = e.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!c.pressed) break
-                        if (c.positionChange() != Offset.Zero) c.consume()
-                        onChange(at(c.position))
-                    }
-                    onChange(Offset.Zero)
-                }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        val travel = sizeDp / 2 - 26
-        Box(
-            Modifier.offset { IntOffset((value.x * travel.dp.toPx()).roundToInt(), (value.y * travel.dp.toPx()).roundToInt()) }
-                .size(52.dp).clip(CircleShape).background(Vector.copy(alpha = 0.45f)),
-        )
     }
 }
 

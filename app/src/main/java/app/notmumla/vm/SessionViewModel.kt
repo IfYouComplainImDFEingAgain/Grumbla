@@ -98,9 +98,14 @@ class SessionViewModel @Inject constructor(
         rematch = ::challenge,
     )
 
-    // Tank arena (easter egg).
+    // Channel arena games (easter eggs); one open at a time.
     val tanksActive: StateFlow<Boolean> = sessionManager.tanks.active
-    fun joinTanks() = sessionManager.tanks.join()
+    fun joinTanks() { sessionManager.flights.leave(); sessionManager.tanks.join() }
     fun leaveTanks() = sessionManager.tanks.leave()
     fun stepTanks(input: app.notmumla.game.tank.TankInput) = sessionManager.tanks.step(input)
+
+    val flightsActive: StateFlow<Boolean> = sessionManager.flights.active
+    fun joinFlights() { sessionManager.tanks.leave(); sessionManager.flights.join() }
+    fun leaveFlights() = sessionManager.flights.leave()
+    fun stepFlights(input: app.notmumla.game.flight.FlightInput) = sessionManager.flights.step(input)
 }
