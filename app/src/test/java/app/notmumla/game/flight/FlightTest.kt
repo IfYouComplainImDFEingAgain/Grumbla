@@ -219,6 +219,16 @@ class FlightArenaTest {
         assertEquals(1f, v.shield, 0f)
     }
 
+    @Test fun soundsFollowTheAction() {
+        bobFiresAtUs()
+        val heard = (0 until 40).flatMap { tick(16, FlightInput(fire = it < 15)).sounds.map { s -> s.sound } }
+        assertTrue(FlightSound.MY_LASER in heard)
+        assertTrue(FlightSound.ENEMY_LASER in heard)
+        assertTrue(FlightSound.HURT in heard)
+        // Each sound is handed over once, not every frame after.
+        assertTrue(tick().sounds.none { it.sound == FlightSound.MY_LASER })
+    }
+
     @Test fun leavingSaysBye() {
         arena.join()
         arena.onData(2, state(1, Pose3(0.0, 50.0, 0.0, 0.0, 0.0)))

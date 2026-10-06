@@ -90,6 +90,7 @@ private const val CHASE_UP = 3.2
 
 /** Stick y grows downward; "flight" style pulls back (down) to climb, like the old console games. */
 private var flightStyle = true
+private var soundOn = true
 
 /**
  * The dogfight, full screen: a flat-shaded chase view behind our own ship, with a flight stick,
@@ -101,15 +102,21 @@ fun FlightScreen(
     onLeave: () -> Unit,
     /** Push-to-talk, when the user talks that way (the voice bar is hidden behind the game). */
     onPttHeld: ((Boolean) -> Unit)?,
+    /** Self-deafened: the game stays quiet too. */
+    deafened: Boolean,
 ) {
     // Drawn in the activity, not a dialog window, for the real cutout and system-bar insets
     // (see TankScreen).
     androidx.activity.compose.BackHandler(onBack = onLeave)
     val view = LocalView.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val sfx = remember { FlightSounds(context.applicationContext) }
     DisposableEffect(Unit) {
         view.keepScreenOn = true
-        onDispose { view.keepScreenOn = false; onPttHeld?.invoke(false) }
+        onDispose { view.keepScreenOn = false; onPttHeld?.invoke(false); sfx.release() }
     }
+    var sound by remember { mutableStateOf(soundOn) }
+    val quiet by androidx.compose.runtime.rememberUpdatedState(deafened || !sound)
     var stick by remember { mutableStateOf(Offset.Zero) }
     var firing by remember { mutableStateOf(false) }
     var boosting by remember { mutableStateOf(false) }
@@ -120,13 +127,15 @@ fun FlightScreen(
     LaunchedEffect(Unit) {
         while (true) {
             withFrameMillis {
-                frame = step(
+                val f = step(
                     FlightInput(
                         yaw = stick.x,
                         pitch = if (flight) stick.y else -stick.y,
                         fire = firing, boost = boosting, brake = braking, roll = rolling,
                     ),
                 )
+                if (f != null && !quiet) sfx.play(f.sounds)
+                frame = f
             }
         }
     }
@@ -157,6 +166,10 @@ fun FlightScreen(
                 HudButton(if (flight) "Y: flight" else "Y: arcade", Hud) {
                     flight = !flight
                     flightStyle = flight
+                }
+                HudButton(if (sound) "SFX" else "SFX off", if (sound) Hud else Hud.copy(alpha = 0.5f)) {
+                    sound = !sound
+                    soundOn = sound
                 }
             }
             Gauge("SHIELD", shield, if (shield < 0.3f) Danger else ShieldColor, Modifier.padding(top = 10.dp))

@@ -25,6 +25,12 @@ data class FlightInput(
     val roll: Boolean = false,
 )
 
+/** Sounds the game makes; the screen turns them into audio. */
+enum class FlightSound { MY_LASER, ENEMY_LASER, HIT, HURT, EXPLOSION }
+
+/** One sound to play this frame: [volume] 0..1 (already faded by distance), [pan] −1 left..1 right. */
+data class SoundEvent(val sound: FlightSound, val volume: Float, val pan: Float = 0f)
+
 /** Everything the renderer needs for one frame; immutable, so it can be drawn off the lock. */
 data class FlightView(
     val me: Pose3,
@@ -43,6 +49,8 @@ data class FlightView(
     val explosions: List<Explosion>,
     val scores: List<Score>,
     val feed: List<String>,
+    /** Sounds that started since the previous frame. */
+    val sounds: List<SoundEvent> = emptyList(),
 ) {
     data class Ship(val session: Int, val pose: Pose3, val bank: Double, val boosting: Boolean)
     data class BoltView(val x: Double, val y: Double, val z: Double, val dx: Double, val dy: Double, val dz: Double, val mine: Boolean)
@@ -110,6 +118,7 @@ class FlightArena(
     private val explosions = ArrayList<Pair<DoubleArray, Long>>()
     private val sparks = ArrayList<Pair<DoubleArray, Long>>()
     private val credited = ArrayDeque<Pair<Int, Int>>()
+    private val sounds = ArrayList<SoundEvent>()
 
     private var pose = Pose3(0.0, 60.0, 0.0, 0.0, 0.0)
     private var bank = 0.0
@@ -142,7 +151,7 @@ class FlightArena(
     }
 
     override fun end() {
-        bolts.clear(); explosions.clear(); sparks.clear(); credited.clear()
+        bolts.clear(); explosions.clear(); sparks.clear(); credited.clear(); sounds.clear()
         shots = 0; kills = 0; deaths = 0; seq = 0
         killedBy = null; sendNow = false; firing = false
     }
@@ -169,7 +178,7 @@ class FlightArena(
         p.lastSeq = m.seq
         p.lastHeard = now
         val before = p.display(now)
-        if (p.alive && !m.alive) before?.let { explosions += doubleArrayOf(it.x, it.y, it.z) to now }
+        if (p.alive && !m.alive) before?.let { explode(it.x, it.y, it.z, now) }
         // Blend from where we drew them, unless they respawned or jumped too far to be a correction.
         if (before != null && p.alive && m.alive &&
             hypot(hypot(before.x - m.pose.x, before.y - m.pose.y), before.z - m.pose.z) < 40
@@ -192,6 +201,7 @@ class FlightArena(
         if (m.alive && !nowFiring && p.shots >= 0) {
             repeat((m.shots - p.shotsSeen).coerceIn(0, 2)) { i ->
                 spawnBolt(sender, p.shotsSeen + i + 1, m.pose, now)
+                if (i == 0) heard(FlightSound.ENEMY_LASER, m.pose.x, m.pose.y, m.pose.z, ENEMY_LASER_RANGE)
             }
         }
         if (m.fx and ROLLING != 0 && p.fx and ROLLING == 0) p.rollStart = now
@@ -205,7 +215,7 @@ class FlightArena(
 
     private fun onHit(victim: Int, m: FlightMessage.Hit, now: Long) {
         val v = peers[victim] ?: return
-        if (v.alive) v.display(now)?.let { explosions += doubleArrayOf(it.x, it.y, it.z) to now }
+        if (v.alive) v.display(now)?.let { explode(it.x, it.y, it.z, now) }
         v.alive = false
         v.fx = 0
         bolts.removeAll { it.owner == m.shooter && it.shot == m.shot }
@@ -247,6 +257,7 @@ class FlightArena(
             lastFire = now
             shots++
             spawnBolt(self() ?: -1, shots, pose, now)
+            sounds += SoundEvent(FlightSound.MY_LASER, 0.55f)
         }
         // Others fire our bolts from the trigger state, so tell them as soon as it changes.
         if (trigger != firing) { firing = trigger; sendNow = true }
@@ -323,6 +334,7 @@ class FlightArena(
             p.lastBolt = maxOf(p.lastBolt + FlightWorld.FIRE_INTERVAL_MS, now - FlightWorld.FIRE_INTERVAL_MS)
             p.shotsSeen++
             spawnBolt(session, p.shotsSeen, at, now)
+            heard(FlightSound.ENEMY_LASER, at.x, at.y, at.z, ENEMY_LASER_RANGE)
         }
     }
 
@@ -344,6 +356,7 @@ class FlightArena(
                     lastAttacker = b.owner
                     lastAttackerShot = b.shot
                     hurt(FlightWorld.LASER_DAMAGE.toDouble(), now)
+                    sounds += SoundEvent(FlightSound.HURT, 1f)
                     if (shield <= 0) crash(now)
                     continue
                 }
@@ -355,10 +368,27 @@ class FlightArena(
             if (target != null) {
                 it.remove()
                 sparks += c to now
+                if (b.owner == me) sounds += SoundEvent(FlightSound.HIT, 0.6f)
                 continue
             }
             if (b.expired(now)) it.remove()
         }
+    }
+
+    private fun explode(x: Double, y: Double, z: Double, now: Long) {
+        explosions += doubleArrayOf(x, y, z) to now
+        heard(FlightSound.EXPLOSION, x, y, z, EXPLOSION_RANGE, floor = 0.15f)
+    }
+
+    /** A sound from a point in the world: fainter with distance, panned by where it is. */
+    private fun heard(sound: FlightSound, x: Double, y: Double, z: Double, range: Double, floor: Float = 0f) {
+        val dx = x - pose.x
+        val dz = z - pose.z
+        val d = hypot(hypot(dx, y - pose.y), dz)
+        val volume = maxOf(floor, (1 - d / range).toFloat())
+        if (volume <= 0.03f) return
+        val pan = if (d < 1) 0.0 else sin(angleDiff(atan2(dx, dz), pose.h)) * min(1.0, d / 20)
+        sounds += SoundEvent(sound, volume, pan.toFloat())
     }
 
     private fun hurt(amount: Double, now: Long) {
@@ -375,7 +405,7 @@ class FlightArena(
         val me = self()
         val attacker = lastAttacker.takeIf { now - lastHurt <= CREDIT_MS && it in peers }
         killedBy = attacker?.let { peers[it]?.name }
-        explosions += doubleArrayOf(pose.x, pose.y, pose.z) to now
+        explode(pose.x, pose.y, pose.z, now)
         pose = pose.copy(v = 0.0, w = 0.0, q = 0.0)
         firing = false
         boosting = false
@@ -468,6 +498,7 @@ class FlightArena(
                 sparks.map { (p, at) -> FlightView.Explosion(p[0], p[1], p[2], now - at, small = true) },
             scores = scores,
             feed = feedLines(),
+            sounds = sounds.toList().also { sounds.clear() },
         )
     }
 
@@ -479,6 +510,8 @@ class FlightArena(
         /** A crash within this long of being hit is credited to whoever hit us. */
         const val CREDIT_MS = 5_000L
         const val MAX_BOLTS_PER_SHIP = 12
+        private const val ENEMY_LASER_RANGE = 300.0
+        private const val EXPLOSION_RANGE = 600.0
         private const val PHANTOM_SHOTS = 8
         private const val BANK = 0.8
         private const val MAX_EXTRAPOLATE_MS = 1_000L
