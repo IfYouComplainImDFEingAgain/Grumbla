@@ -355,7 +355,10 @@ private fun AppNav() {
                     app.notmumla.ui.game.TankScreen(step = vm::stepTanks, onLeave = vm::leaveTanks, onPttHeld = gamePtt)
                 }
                 if (flightsActive) {
-                    app.notmumla.ui.game.FlightScreen(step = vm::stepFlights, onLeave = vm::leaveFlights, onPttHeld = gamePtt)
+                    app.notmumla.ui.game.FlightScreen(
+                        step = vm::stepFlights, onLeave = vm::leaveFlights, onPttHeld = gamePtt,
+                        deafened = self?.selfDeaf == true,
+                    )
                 }
             }
         }

@@ -154,6 +154,12 @@ mid-roll. Shields take 20 per bolt (five hits) and only refill on respawn; scrap
 hitting a building is fatal. Flying past 350 m hands control to an autopilot that turns you back.
 Enemies off screen show as arrows at the edge.
 
+**Sound:** lasers, hits, taking damage and explosions, synthesized at startup (`FlightSounds`, no
+audio assets) and played through a `SoundPool` with game usage. Other players' lasers and
+explosions fade with distance and pan by direction. Silent while self-deafened; the HUD **SFX**
+button mutes it. With voice activation on speakerphone the effects can reach the mic if the phone's
+echo cancellation misses them; PTT or a headset avoids that.
+
 **Wire protocol** — `dataID = notmumla/flight/1`:
 
 | Message | Meaning |
