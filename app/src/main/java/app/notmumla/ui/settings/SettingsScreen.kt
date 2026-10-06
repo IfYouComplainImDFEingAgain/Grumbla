@@ -131,6 +131,7 @@ fun SettingsScreen(
     onToggleAutoReconnect: (Boolean) -> Unit,
     onToggleTts: (Boolean) -> Unit,
     onToggleMentionSound: (Boolean) -> Unit,
+    onToggleAllowNudges: (Boolean) -> Unit,
     onToggleRichComposer: (Boolean) -> Unit,
     onToggleDebugOverlay: (Boolean) -> Unit,
     onSetGamesUnlocked: (Boolean) -> Unit,
@@ -413,6 +414,9 @@ fun SettingsScreen(
                     settings.ttsReadAloud, onToggleTts)
                 Divider()
                 ToggleRow(null, "Mention sound", null, settings.mentionSound, onToggleMentionSound)
+                Divider()
+                ToggleRow(null, "Allow nudges", "Other Grumbla users can shake your screen and buzz your phone",
+                    settings.allowNudges, onToggleAllowNudges)
             }
 
             PermissionsSection()

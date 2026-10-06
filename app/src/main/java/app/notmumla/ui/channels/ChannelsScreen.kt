@@ -47,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -104,6 +105,9 @@ fun ChannelsScreen(
     /** Phone output plays through the ear speaker; null hides the choice (not on the phone route). */
     earpiece: Boolean? = null,
     onSetEarpiece: (Boolean) -> Unit = {},
+    onNudge: (UiUser) -> Unit = {},
+    /** Emits the sender's name for each nudge we receive; the screen shakes. */
+    nudges: kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.emptyFlow(),
     /** Four in a Row: null until the easter egg is unlocked. */
     onChallenge: ((UiUser) -> Unit)? = null,
     gameState: app.notmumla.game.GameState = app.notmumla.game.GameState.Idle,
@@ -128,7 +132,21 @@ fun ChannelsScreen(
     // Id, not the UiChannel, so the sheet reflects listener changes while open.
     var actionChannelId by remember { mutableStateOf<Int?>(null) }
 
-    Box(Modifier.fillMaxSize().background(c.surface)) {
+    val shake = remember { androidx.compose.animation.core.Animatable(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    LaunchedEffect(nudges) {
+        nudges.collect {
+            val px = with(density) { 14.dp.toPx() }
+            shake.snapTo(0f)
+            shake.animateTo(0f, androidx.compose.animation.core.keyframes {
+                durationMillis = 420
+                px at 40; -px at 90; px * 0.8f at 140; -px * 0.8f at 190
+                px * 0.5f at 240; -px * 0.5f at 290; px * 0.2f at 340
+            })
+        }
+    }
+
+    Box(Modifier.fillMaxSize().graphicsLayer { translationX = shake.value }.background(c.surface)) {
         Column(Modifier.fillMaxSize()) {
             // The header overflow button opens quick settings (per the design mockup).
             ServerHeader(serverName, serverInitial, connectionLabel, onOpenQuickSettings = { quickSettings = true })
@@ -214,6 +232,7 @@ fun ChannelsScreen(
                 u, onSetUserVolume,
                 onWhisper = { onWhisper(u); volumeUser = null },
                 onMessage = { onStartPrivateChat(u.id, u.name); volumeUser = null; showTab(1) },
+                onNudge = { onNudge(u); volumeUser = null },
                 onChallenge = onChallenge?.let { { it(u); volumeUser = null } },
                 onDismiss = { volumeUser = null },
             )
@@ -271,6 +290,7 @@ private fun UserVolumeSheet(
     onSet: (String, Float) -> Unit,
     onWhisper: () -> Unit,
     onMessage: () -> Unit,
+    onNudge: () -> Unit,
     onChallenge: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
@@ -309,6 +329,12 @@ private fun UserVolumeSheet(
                     onClick = onMessage,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Message ${user.name} privately") }
+                Spacer(Modifier.height(12.dp))
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = onNudge,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Nudge ${user.name}") }
+                Text("Shakes their screen if they use Grumbla.", fontSize = 12.sp, color = c.onSurfaceVar)
                 if (onChallenge != null) {
                     Spacer(Modifier.height(12.dp))
                     androidx.compose.material3.FilledTonalButton(
