@@ -92,7 +92,7 @@ machine); `ui/game/FourInARowDialog.kt` (UI); wired in `SessionManager.game`. Te
 ## Tank arena
 
 A Battlezone-style free-for-all: green wireframe tanks, pyramids and cubes on a 200 m square plain,
-mountains on the horizon, a radar. Everyone in **your channel** who opens it is in the same arena, and
+mountains on the horizon. Everyone in **your channel** who opens it is in the same arena, and
 voice keeps working while you play.
 
 **Play:** with the games unlocked, long-press your current channel → **Tank arena**. The stick
