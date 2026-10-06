@@ -64,8 +64,8 @@ private const val FAR = 260.0
 private const val FOV = 70.0 * PI / 180
 
 /**
- * The tank arena, full screen: a Battlezone-style wireframe view from our own tank, with a radar,
- * a drive stick and a fire button. [step] advances the shared simulation once per frame.
+ * The tank arena, full screen: a Battlezone-style wireframe view from our own tank, with a drive
+ * stick and a fire button. [step] advances the shared simulation once per frame.
  */
 @Composable
 fun TankScreen(
@@ -420,7 +420,6 @@ private fun DrawScope.drawArena(f: TankView) {
     for ((_, draw) in items) draw()
 
     drawReticle(cam, f)
-    drawRadar(f)
     if (!f.alive) drawRect(Enemy.copy(alpha = 0.18f))
 }
 
@@ -471,26 +470,4 @@ private fun DrawScope.drawReticle(cam: Camera, f: TankView) {
     val w = 4 * g
     drawLine(Vector.copy(alpha = 0.25f), c + Offset(-w / 2, 2.4f * g), c + Offset(w / 2, 2.4f * g), 4f)
     drawLine(Vector, c + Offset(-w / 2, 2.4f * g), c + Offset(-w / 2 + w * f.reload, 2.4f * g), 4f)
-}
-
-/** Top-centre radar, heading up, 80 m range. */
-private fun DrawScope.drawRadar(f: TankView) {
-    val r = 46.dp.toPx()
-    val center = Offset(size.width / 2, r + 18.dp.toPx())
-    drawCircle(Vector.copy(alpha = 0.7f), r, center, style = Stroke(2f))
-    drawLine(Vector.copy(alpha = 0.3f), center - Offset(0f, r), center + Offset(0f, r), 1f)
-    drawLine(Vector.copy(alpha = 0.3f), center - Offset(r, 0f), center + Offset(r, 0f), 1f)
-    val range = 80.0
-    val c = cos(f.me.h)
-    val s = sin(f.me.h)
-    for (t in f.tanks) {
-        val dx = t.pose.x - f.me.x
-        val dz = t.pose.z - f.me.z
-        val rx = dx * c - dz * s
-        val rz = dx * s + dz * c
-        val d = hypot(rx, rz)
-        val k = if (d > range) range / d else 1.0
-        drawCircle(Enemy, if (d > range) 3f else 5f, center + Offset((rx * k / range * r).toFloat(), (-rz * k / range * r).toFloat()))
-    }
-    drawCircle(Vector, 3f, center)
 }
