@@ -1,7 +1,5 @@
 package app.notmumla.ui.game
 
-import android.graphics.Paint
-import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,7 +35,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalView
@@ -270,19 +267,33 @@ private fun clip(inside: DoubleArray, outside: DoubleArray): DoubleArray {
 
 private fun v(x: Double, y: Double, z: Double) = doubleArrayOf(x, y, z)
 
-/** Tank model in local space (x right, y up, z forward) as edge pairs. */
-private val TankEdges: List<Pair<DoubleArray, DoubleArray>> = run {
-    val bottom = listOf(v(-1.6, 0.0, -2.4), v(1.6, 0.0, -2.4), v(1.6, 0.0, 2.4), v(-1.6, 0.0, 2.4))
-    val deck = listOf(v(-1.9, 0.9, -2.6), v(1.9, 0.9, -2.6), v(1.9, 0.9, 2.9), v(-1.9, 0.9, 2.9))
-    val ring = listOf(v(-1.0, 0.9, -1.2), v(1.0, 0.9, -1.2), v(0.8, 0.9, 0.8), v(-0.8, 0.9, 0.8))
-    val top = listOf(v(-0.7, 1.7, -1.0), v(0.7, 1.7, -1.0), v(0.5, 1.6, 0.5), v(-0.5, 1.6, 0.5))
-    buildList {
-        for (loop in listOf(bottom, deck, ring, top)) for (i in 0..3) add(loop[i] to loop[(i + 1) % 4])
-        for (i in 0..3) { add(bottom[i] to deck[i]); add(ring[i] to top[i]) }
-        add(v(-0.12, 1.35, 0.6) to v(-0.12, 1.35, 3.7))
-        add(v(0.12, 1.35, 0.6) to v(0.12, 1.35, 3.7))
-    }
+/** A convex solid as outward faces (vertex loops). Convex, so its front faces never overlap. */
+private class Solid(val faces: List<List<DoubleArray>>) {
+    val center: DoubleArray = faces.flatten().let { vs -> DoubleArray(3) { i -> vs.sumOf { it[i] } / vs.size } }
 }
+
+/** Faces of the solid spanned by two stacked quads (bottom and top, same winding). */
+private fun prism(bottom: List<DoubleArray>, top: List<DoubleArray>) = Solid(
+    listOf(bottom, top) + (0..3).map { i -> listOf(bottom[i], bottom[(i + 1) % 4], top[(i + 1) % 4], top[i]) },
+)
+
+private fun box(x0: Double, x1: Double, y0: Double, y1: Double, z0: Double, z1: Double) = prism(
+    listOf(v(x0, y0, z0), v(x1, y0, z0), v(x1, y0, z1), v(x0, y0, z1)),
+    listOf(v(x0, y1, z0), v(x1, y1, z0), v(x1, y1, z1), v(x0, y1, z1)),
+)
+
+// Tank model in local space (x right, y up, z forward): hull, turret, barrel.
+private val Hull = prism(
+    listOf(v(-1.6, 0.0, -2.4), v(1.6, 0.0, -2.4), v(1.6, 0.0, 2.4), v(-1.6, 0.0, 2.4)),
+    listOf(v(-1.9, 0.9, -2.6), v(1.9, 0.9, -2.6), v(1.9, 0.9, 2.9), v(-1.9, 0.9, 2.9)),
+)
+private val Turret = prism(
+    listOf(v(-1.0, 0.9, -1.2), v(1.0, 0.9, -1.2), v(0.8, 0.9, 0.8), v(-0.8, 0.9, 0.8)),
+    listOf(v(-0.7, 1.7, -1.0), v(0.7, 1.7, -1.0), v(0.5, 1.6, 0.5), v(-0.5, 1.6, 0.5)),
+)
+private val Barrel = box(-0.14, 0.14, 1.25, 1.45, 0.6, 3.7)
+
+private fun Solid.placed(p: Pose) = Solid(faces.map { f -> f.map { local(p, it) } })
 
 private fun local(p: Pose, l: DoubleArray): DoubleArray {
     val c = cos(p.h)
@@ -290,11 +301,64 @@ private fun local(p: Pose, l: DoubleArray): DoubleArray {
     return v(p.x + l[0] * c + l[2] * s, l[1], p.z - l[0] * s + l[2] * c)
 }
 
-private val markPaint = Paint().apply {
-    isAntiAlias = true
-    typeface = Typeface.MONOSPACE
-    textAlign = Paint.Align.CENTER
+private fun blockSolid(b: TankWorld.Block): Solid {
+    val h = b.half
+    val base = listOf(v(b.x - h, 0.0, b.z - h), v(b.x + h, 0.0, b.z - h), v(b.x + h, 0.0, b.z + h), v(b.x - h, 0.0, b.z + h))
+    return when (b.shape) {
+        TankWorld.Shape.CUBE -> prism(base, base.map { v(it[0], b.height, it[2]) })
+        TankWorld.Shape.PYRAMID -> {
+            val apex = v(b.x, b.height, b.z)
+            Solid(listOf(base) + (0..3).map { i -> listOf(base[i], base[(i + 1) % 4], apex) })
+        }
+    }
 }
+
+private val BlockSolids = TankWorld.blocks.map(::blockSolid)
+
+/**
+ * Hidden-line drawing the way vector games faked it: each front-facing face is filled black, then
+ * outlined. Solids are drawn far to near, so nearer ones paint over whatever is behind them.
+ */
+private fun DrawScope.drawSolid(cam: Camera, solid: Solid, color: Color) {
+    val center = cam.toCam(solid.center[0], solid.center[1], solid.center[2])
+    for (face in solid.faces) {
+        val pts = face.map { cam.toCam(it[0], it[1], it[2]) }
+        if (pts.all { it[2] > FAR }) continue
+        // Outward normal (flipped to point away from the centre), then: does it face the eye at 0?
+        val (a, b, c) = pts
+        val n = cross(sub(b, a), sub(c, a))
+        val outward = if (dot(n, sub(a, center)) < 0) -1.0 else 1.0
+        if (outward * dot(n, a) >= 0) continue
+        val clipped = clipNear(pts)
+        if (clipped.size < 3) continue
+        val path = androidx.compose.ui.graphics.Path()
+        clipped.forEachIndexed { i, q -> cam.screen(q).let { if (i == 0) path.moveTo(it.x, it.y) else path.lineTo(it.x, it.y) } }
+        path.close()
+        val depth = clipped.sumOf { it[2] } / clipped.size
+        val fade = (1 - depth / FAR).coerceIn(0.25, 1.0).toFloat()
+        drawPath(path, Color.Black)
+        drawPath(path, color.copy(alpha = color.alpha * fade), style = Stroke(width = 2f))
+    }
+}
+
+/** Sutherland–Hodgman against the near plane only (x/y overflow is clipped by the canvas). */
+private fun clipNear(poly: List<DoubleArray>): List<DoubleArray> {
+    val out = ArrayList<DoubleArray>(poly.size + 2)
+    for (i in poly.indices) {
+        val p = poly[i]
+        val q = poly[(i + 1) % poly.size]
+        val pIn = p[2] >= NEAR
+        val qIn = q[2] >= NEAR
+        if (pIn) out += p
+        if (pIn != qIn) out += if (pIn) clip(p, q) else clip(q, p)
+    }
+    return out
+}
+
+private fun sub(a: DoubleArray, b: DoubleArray) = doubleArrayOf(a[0] - b[0], a[1] - b[1], a[2] - b[2])
+private fun dot(a: DoubleArray, b: DoubleArray) = a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+private fun cross(a: DoubleArray, b: DoubleArray) =
+    doubleArrayOf(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
 
 private fun DrawScope.drawArena(f: TankView) {
     val cam = Camera(f.me, size.width, size.height)
@@ -311,7 +375,7 @@ private fun DrawScope.drawArena(f: TankView) {
         line3(cam, v(x, 0.0, z - m), v(x, 0.0, z + m), Vector.copy(alpha = 0.6f), 1.5f)
     }
 
-    // Arena fence.
+    // Arena fence: we're always inside it, so it's behind everything else.
     val hw = TankWorld.HALF
     val corners = listOf(v(-hw, 0.0, -hw), v(hw, 0.0, -hw), v(hw, 0.0, hw), v(-hw, 0.0, hw))
     for (i in 0..3) {
@@ -322,46 +386,42 @@ private fun DrawScope.drawArena(f: TankView) {
         line3(cam, a, v(a[0], 1.5, a[2]), Vector)
     }
 
-    for (b in TankWorld.blocks) drawBlock(cam, b)
-
+    // Everything that can hide something, plus shells and explosions, painted far to near.
+    val items = ArrayList<Pair<Double, DrawScope.() -> Unit>>()
+    fun dist(x: Double, z: Double) = hypot(x - f.me.x, z - f.me.z)
+    for ((i, b) in TankWorld.blocks.withIndex()) {
+        items += dist(b.x, b.z) to { drawSolid(cam, BlockSolids[i], Vector) }
+    }
     for (t in f.tanks) {
-        for ((a, b) in TankEdges) line3(cam, local(t.pose, a), local(t.pose, b), Enemy)
-        val head = cam.toCam(t.pose.x, 3.2, t.pose.z)
-        if (head[2] > NEAR && head[2] < FAR) {
-            val at = cam.screen(head)
-            markPaint.color = android.graphics.Color.argb(230, 255, 90, 78)
-            markPaint.textSize = (14 + 600 / head[2]).coerceAtMost(40.0).toFloat()
-            drawContext.canvas.nativeCanvas.drawText(t.name.take(16), at.x, at.y, markPaint)
+        items += dist(t.pose.x, t.pose.z) to {
+            drawSolid(cam, Hull.placed(t.pose), Vector)
+            // Turret vs barrel: whichever is farther from us goes first.
+            val turret = Turret.placed(t.pose)
+            val barrel = Barrel.placed(t.pose)
+            val tc = turret.center
+            val bc = barrel.center
+            if (dist(bc[0], bc[2]) > dist(tc[0], tc[2])) {
+                drawSolid(cam, barrel, Vector); drawSolid(cam, turret, Vector)
+            } else {
+                drawSolid(cam, turret, Vector); drawSolid(cam, barrel, Vector)
+            }
         }
     }
-
     for (s in f.shells) {
-        val p = cam.toCam(s.x, TankWorld.SHELL_Y, s.z)
-        if (p[2] < NEAR || p[2] > FAR) continue
-        drawCircle(if (s.mine) ShellColor else Enemy, radius = (cam.focal * 0.3 / p[2]).toFloat().coerceIn(2f, 14f), center = cam.screen(p))
+        items += dist(s.x, s.z) to {
+            val p = cam.toCam(s.x, TankWorld.SHELL_Y, s.z)
+            if (p[2] >= NEAR && p[2] <= FAR) {
+                drawCircle(if (s.mine) ShellColor else Enemy, radius = (cam.focal * 0.3 / p[2]).toFloat().coerceIn(2f, 14f), center = cam.screen(p))
+            }
+        }
     }
-
-    for (e in f.explosions) drawExplosion(cam, e)
+    for (e in f.explosions) items += dist(e.x, e.z) to { drawExplosion(cam, e) }
+    items.sortByDescending { it.first }
+    for ((_, draw) in items) draw()
 
     drawReticle(cam, f)
     drawRadar(f)
     if (!f.alive) drawRect(Enemy.copy(alpha = 0.18f))
-}
-
-private fun DrawScope.drawBlock(cam: Camera, b: TankWorld.Block) {
-    val h = b.half
-    val base = listOf(v(b.x - h, 0.0, b.z - h), v(b.x + h, 0.0, b.z - h), v(b.x + h, 0.0, b.z + h), v(b.x - h, 0.0, b.z + h))
-    for (i in 0..3) line3(cam, base[i], base[(i + 1) % 4], Vector)
-    when (b.shape) {
-        TankWorld.Shape.PYRAMID -> {
-            val apex = v(b.x, b.height, b.z)
-            for (p in base) line3(cam, p, apex, Vector)
-        }
-        TankWorld.Shape.CUBE -> {
-            val top = base.map { v(it[0], b.height, it[2]) }
-            for (i in 0..3) { line3(cam, top[i], top[(i + 1) % 4], Vector); line3(cam, base[i], top[i], Vector) }
-        }
-    }
 }
 
 /** Distant peaks, drawn by bearing only, so they never get closer — the classic backdrop. */
