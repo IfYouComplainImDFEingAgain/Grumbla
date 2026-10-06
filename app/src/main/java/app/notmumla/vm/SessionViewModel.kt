@@ -83,6 +83,9 @@ class SessionViewModel @Inject constructor(
 
     fun disconnect() = sessionManager.disconnect()
 
+    val nudges: kotlinx.coroutines.flow.SharedFlow<String> = sessionManager.nudges
+    fun nudge(session: Int, name: String): Boolean = sessionManager.nudge(session, name)
+
     // Four in a Row (easter egg).
     val gameState: StateFlow<app.notmumla.game.GameState> = sessionManager.game.state
     fun challenge(session: Int, name: String) = sessionManager.game.challenge(app.notmumla.data.UserRef(session, name))

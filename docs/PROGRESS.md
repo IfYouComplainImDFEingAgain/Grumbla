@@ -190,6 +190,11 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - **Verified**: `UdpVoiceIntegrationTest` against the real 1.5 server — the encrypted ping echo
   round-trips (proving byte-exact OCB2 both directions) and audio loops back over UDP (target 31).
 
+### Nudge ✅
+- Long-press a user → Nudge: their screen shakes, 40 ms buzz, synthesized "boing". Throttled on
+  receive (10 s per sender, 3 s global), follows the ringer switch, opt-out in Settings.
+  Details in [`SIDE_CHANNELS.md`](SIDE_CHANNELS.md#nudge). Verified Titan 2 → Pixel 10.
+
 ### Client-to-client side channel + Four in a Row easter egg ✅
 - `PluginDataTransmission` (TCP type 26) send/receive in `MumbleClient`; strict, untrusted-input
   handling. Design, limits and caveats: [`SIDE_CHANNELS.md`](SIDE_CHANNELS.md).

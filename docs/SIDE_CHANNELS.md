@@ -89,6 +89,22 @@ not-mumla with the game unlocked). The challenger plays red and moves first. Tap
 machine); `ui/game/FourInARowDialog.kt` (UI); wired in `SessionManager.game`. Tests:
 `app/src/test/.../game/GameControllerTest.kt`.
 
+## Nudge
+
+Long-press a user → **Nudge**. If they run not-mumla with **Allow nudges** on (Settings, default
+on), their screen shakes, the phone buzzes for 40 ms and plays a short synthesized "boing", and a
+"<name> nudged you" line lands in chat.
+
+- **Wire:** `dataID = notmumla/nudge/1`, data is exactly `nudge`. Anything else is dropped.
+- **Receive throttle** (`NudgeLimiter`): one per sender per 10 s, and one from anyone per 3 s.
+  Extra nudges are dropped, not queued, so spam can't turn the phone into a siren.
+- **Send cooldown:** 3 s between our own nudges (the receiver would drop them anyway).
+- **Ringer switch:** silent = shake only; vibrate = shake + buzz; normal = all three. No sound
+  while self-deafened. The buzz uses notification vibration usage, so turning off touch haptics
+  doesn't silence it.
+- **Code:** `app/.../nudge/` (`NudgeMessage`, `NudgeLimiter`, `NudgeEffects`); wired in
+  `SessionManager.nudge` / `onNudge`; the shake is a `graphicsLayer` offset in `ChannelsScreen`.
+
 ## Security and privacy
 
 - **Not private from the server.** The client→server link is TLS, but the server decrypts and
