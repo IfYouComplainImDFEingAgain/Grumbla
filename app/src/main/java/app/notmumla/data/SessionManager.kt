@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioManager
 import android.os.Build
 import android.os.PowerManager
+import app.notmumla.BuildConfig
 import app.notmumla.audio.AudioEngine
 import app.notmumla.audio.MicLevelMonitor
 import app.notmumla.audio.MicTestState
@@ -400,6 +401,7 @@ class SessionManager @Inject constructor(
         val mc = MumbleClient(
             identity = identity,
             scope = scope,
+            clientName = "Grumbla ${BuildConfig.VERSION_NAME}",
             osVersion = Build.VERSION.RELEASE ?: "",
         )
         client = mc
