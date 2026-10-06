@@ -281,77 +281,80 @@ private fun AppNav() {
             val serverName = serverLabel.ifBlank { "Mumble server" }
             val currentChannelName = self?.channelId?.let { state.channels[it]?.name } ?: "chat"
 
-            ChannelsScreen(
-                serverName = serverName,
-                serverInitial = initialsFor(serverName).take(1),
-                connectionLabel = connectionLabel,
-                // Remembered so unrelated updates (e.g. `transmitting` flipping) hand the screen the
-                // same list instances and Compose can skip the channel tree / chat entirely.
-                channels = remember(state, speaking, userVolumes) { state.toUiChannels(speaking, userVolumes) },
-                chatMessages = remember(chat) { chat.map { it.toUiMessage() } },
-                selfMuted = self?.selfMute ?: false,
-                selfDeafened = self?.selfDeaf ?: false,
-                transmitting = transmitting,
-                unreadCount = unread,
-                currentChannelName = currentChannelName,
-                transmissionMode = appSettings.transmissionMode.toUiMode(),
-                // Pass the flow, not its value: stats tick every 500 ms, and reading them here would
-                // recompose the whole screen each tick. Only the overlay collects it.
-                debugStats = if (appSettings.debugOverlay) vm.debugStats else null,
-                onJoinChannel = vm::joinChannel,
-                onSetListening = vm::setListening,
-                onPttHeld = vm::setPttHeld,
-                onToggleMute = {
-                    val s = state.self
-                    vm.setMuted(muted = !(s?.selfMute ?: false), deaf = s?.selfDeaf ?: false)
-                },
-                onToggleDeafen = {
-                    val s = state.self
-                    val newDeaf = !(s?.selfDeaf ?: false)
-                    // Deafening implies muting, per Mumble semantics.
-                    vm.setMuted(muted = newDeaf || (s?.selfMute ?: false), deaf = newDeaf)
-                },
-                onSendText = { msg, html -> self?.channelId?.let { vm.sendText(it, msg, html) } },
-                onSendImage = { uri -> self?.channelId?.let { vm.sendImage(it, uri) } },
-                onChatRead = vm::markChatRead,
-                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
-                onSetUserVolume = vm::setUserVolume,
-                micInUseElsewhere = micYielded,
-                whisperingTo = whisper?.name,
-                onWhisper = { u -> vm.startWhisper(u.id, u.name) },
-                onStopWhisper = vm::stopWhisper,
-                privateChatWith = privateChat?.name,
-                onStartPrivateChat = vm::startPrivateChat,
-                onClosePrivateChat = vm::stopPrivateChat,
-                onDeleteMessage = { id -> vm.deleteChat(id.toLong()) },
-                onClearChat = vm::clearChat,
-                richComposer = appSettings.richComposer,
-                // Only offered while the phone itself is the output; elsewhere it has no effect.
-                earpiece = if (vm.hasEarpiece && sessionRoute == app.notmumla.audio.routing.OutputRoute.PHONE_SPEAKER)
-                    appSettings.phoneEarpiece else null,
-                onSetEarpiece = settingsVm::setPhoneEarpiece,
-                onNudge = { u ->
-                    if (!vm.nudge(u.id, u.name)) {
-                        android.widget.Toast.makeText(toastCtx, "Wait a moment before nudging again",
-                            android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                },
-                nudges = vm.nudges,
-                onChallenge = if (appSettings.gamesUnlocked) { u -> vm.challenge(u.id, u.name) } else null,
-                gameState = gameState,
-                gameActions = vm.gameActions,
-                onPlayTanks = if (appSettings.gamesUnlocked) vm::joinTanks else null,
-                onDisconnect = {
-                    vm.disconnect()
-                    nav.popBackStack(Routes.CONNECT, inclusive = false)
-                },
-            )
-            if (tanksActive) {
-                app.notmumla.ui.game.TankScreen(
-                    step = vm::stepTanks,
-                    onLeave = vm::leaveTanks,
-                    onPttHeld = if (appSettings.transmissionMode == AudioTransmissionMode.PTT) vm::setPttHeld else null,
+            // A Box so the tank arena overlays the channels screen.
+            androidx.compose.foundation.layout.Box {
+                ChannelsScreen(
+                    serverName = serverName,
+                    serverInitial = initialsFor(serverName).take(1),
+                    connectionLabel = connectionLabel,
+                    // Remembered so unrelated updates (e.g. `transmitting` flipping) hand the screen the
+                    // same list instances and Compose can skip the channel tree / chat entirely.
+                    channels = remember(state, speaking, userVolumes) { state.toUiChannels(speaking, userVolumes) },
+                    chatMessages = remember(chat) { chat.map { it.toUiMessage() } },
+                    selfMuted = self?.selfMute ?: false,
+                    selfDeafened = self?.selfDeaf ?: false,
+                    transmitting = transmitting,
+                    unreadCount = unread,
+                    currentChannelName = currentChannelName,
+                    transmissionMode = appSettings.transmissionMode.toUiMode(),
+                    // Pass the flow, not its value: stats tick every 500 ms, and reading them here would
+                    // recompose the whole screen each tick. Only the overlay collects it.
+                    debugStats = if (appSettings.debugOverlay) vm.debugStats else null,
+                    onJoinChannel = vm::joinChannel,
+                    onSetListening = vm::setListening,
+                    onPttHeld = vm::setPttHeld,
+                    onToggleMute = {
+                        val s = state.self
+                        vm.setMuted(muted = !(s?.selfMute ?: false), deaf = s?.selfDeaf ?: false)
+                    },
+                    onToggleDeafen = {
+                        val s = state.self
+                        val newDeaf = !(s?.selfDeaf ?: false)
+                        // Deafening implies muting, per Mumble semantics.
+                        vm.setMuted(muted = newDeaf || (s?.selfMute ?: false), deaf = newDeaf)
+                    },
+                    onSendText = { msg, html -> self?.channelId?.let { vm.sendText(it, msg, html) } },
+                    onSendImage = { uri -> self?.channelId?.let { vm.sendImage(it, uri) } },
+                    onChatRead = vm::markChatRead,
+                    onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                    onSetUserVolume = vm::setUserVolume,
+                    micInUseElsewhere = micYielded,
+                    whisperingTo = whisper?.name,
+                    onWhisper = { u -> vm.startWhisper(u.id, u.name) },
+                    onStopWhisper = vm::stopWhisper,
+                    privateChatWith = privateChat?.name,
+                    onStartPrivateChat = vm::startPrivateChat,
+                    onClosePrivateChat = vm::stopPrivateChat,
+                    onDeleteMessage = { id -> vm.deleteChat(id.toLong()) },
+                    onClearChat = vm::clearChat,
+                    richComposer = appSettings.richComposer,
+                    // Only offered while the phone itself is the output; elsewhere it has no effect.
+                    earpiece = if (vm.hasEarpiece && sessionRoute == app.notmumla.audio.routing.OutputRoute.PHONE_SPEAKER)
+                        appSettings.phoneEarpiece else null,
+                    onSetEarpiece = settingsVm::setPhoneEarpiece,
+                    onNudge = { u ->
+                        if (!vm.nudge(u.id, u.name)) {
+                            android.widget.Toast.makeText(toastCtx, "Wait a moment before nudging again",
+                                android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    nudges = vm.nudges,
+                    onChallenge = if (appSettings.gamesUnlocked) { u -> vm.challenge(u.id, u.name) } else null,
+                    gameState = gameState,
+                    gameActions = vm.gameActions,
+                    onPlayTanks = if (appSettings.gamesUnlocked) vm::joinTanks else null,
+                    onDisconnect = {
+                        vm.disconnect()
+                        nav.popBackStack(Routes.CONNECT, inclusive = false)
+                    },
                 )
+                if (tanksActive) {
+                    app.notmumla.ui.game.TankScreen(
+                        step = vm::stepTanks,
+                        onLeave = vm::leaveTanks,
+                        onPttHeld = if (appSettings.transmissionMode == AudioTransmissionMode.PTT) vm::setPttHeld else null,
+                    )
+                }
             }
         }
         composable(Routes.SETTINGS) {
