@@ -81,7 +81,8 @@ fun TankScreen(
 ) {
     Dialog(
         onDismissRequest = onLeave,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        // Fit between the system bars: a dialog window drawn under them gets no insets to avoid them by.
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         val view = LocalView.current
         DisposableEffect(Unit) {
@@ -106,7 +107,9 @@ fun TankScreen(
             }
         }
 
-        Box(Modifier.fillMaxSize().background(Color.Black)) {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+            // Thumbs rest above the bottom edge, more so on tall screens.
+            val lift = 16.dp + maxHeight * 0.06f
             Canvas(Modifier.fillMaxSize()) { frame?.let { drawArena(it) } }
 
             Column(Modifier.safeDrawingPadding().padding(12.dp)) {
@@ -142,11 +145,11 @@ fun TankScreen(
             }
 
             DriveStick(
-                Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(20.dp),
+                Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = 20.dp, bottom = lift),
                 value = stick, onChange = { stick = it },
             )
             Row(
-                Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(20.dp),
+                Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(end = 20.dp, bottom = lift),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
