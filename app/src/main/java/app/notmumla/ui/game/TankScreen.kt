@@ -46,8 +46,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import app.notmumla.game.tank.Pose
 import app.notmumla.game.tank.TankInput
 import app.notmumla.game.tank.TankView
@@ -79,83 +77,92 @@ fun TankScreen(
     /** Push-to-talk, when the user talks that way (the voice bar is hidden behind the game). */
     onPttHeld: ((Boolean) -> Unit)?,
 ) {
-    Dialog(
-        onDismissRequest = onLeave,
-        // Fit between the system bars: a dialog window drawn under them gets no insets to avoid them by.
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+    // Drawn in the activity rather than a dialog window: the activity is edge-to-edge and gets the
+    // real system-bar and cutout insets, while a full-screen dialog window ignores the cutout and
+    // pushes its far edge under the navigation bar in landscape.
+    androidx.activity.compose.BackHandler(onBack = onLeave)
+    val view = LocalView.current
+    DisposableEffect(Unit) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false; onPttHeld?.invoke(false) }
+    }
+    var stick by remember { mutableStateOf(Offset.Zero) } // x = turn, y = -throttle, both −1..1
+    var firing by remember { mutableStateOf(false) }
+    var frame by remember { mutableStateOf<TankView?>(null) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            withFrameMillis {
+                frame = step(TankInput(throttle = -stick.y, turn = stick.x, fire = firing))
+            }
+        }
+    }
+    val scores by remember { derivedStateOf { frame?.scores.orEmpty() } }
+    val feed by remember { derivedStateOf { frame?.feed.orEmpty() } }
+    val deadText by remember {
+        derivedStateOf {
+            frame?.takeIf { !it.alive }?.let { "DESTROYED by ${it.killedBy}\nback in ${(it.respawnInMs + 999) / 1000}" }
+        }
+    }
+
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        Modifier.fillMaxSize().background(Color.Black)
+            // Swallow every touch the controls don't take, or it reaches the channel list underneath.
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    do {
+                        val e = awaitPointerEvent()
+                        e.changes.forEach { it.consume() }
+                    } while (e.changes.any { it.pressed })
+                }
+            },
     ) {
-        val view = LocalView.current
-        DisposableEffect(Unit) {
-            view.keepScreenOn = true
-            onDispose { view.keepScreenOn = false; onPttHeld?.invoke(false) }
-        }
-        var stick by remember { mutableStateOf(Offset.Zero) } // x = turn, y = -throttle, both −1..1
-        var firing by remember { mutableStateOf(false) }
-        var frame by remember { mutableStateOf<TankView?>(null) }
-        LaunchedEffect(Unit) {
-            while (true) {
-                withFrameMillis {
-                    frame = step(TankInput(throttle = -stick.y, turn = stick.x, fire = firing))
-                }
-            }
-        }
-        val scores by remember { derivedStateOf { frame?.scores.orEmpty() } }
-        val feed by remember { derivedStateOf { frame?.feed.orEmpty() } }
-        val deadText by remember {
-            derivedStateOf {
-                frame?.takeIf { !it.alive }?.let { "DESTROYED by ${it.killedBy}\nback in ${(it.respawnInMs + 999) / 1000}" }
-            }
-        }
+        // Thumbs rest above the bottom edge; well above it on a tall portrait screen.
+        val lift = 16.dp + maxHeight * (if (maxHeight > maxWidth * 1.3f) 0.12f else 0.04f)
+        Canvas(Modifier.fillMaxSize()) { frame?.let { drawArena(it) } }
 
-        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
-            // Thumbs rest above the bottom edge, more so on tall screens.
-            val lift = 16.dp + maxHeight * 0.06f
-            Canvas(Modifier.fillMaxSize()) { frame?.let { drawArena(it) } }
-
-            Column(Modifier.safeDrawingPadding().padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    HudButton("✕ Leave", onClick = onLeave)
-                }
-                Column(Modifier.padding(top = 8.dp)) {
-                    feed.forEach { Text(it, color = Vector.copy(alpha = 0.85f), fontSize = 12.sp, fontFamily = FontFamily.Monospace) }
-                }
+        Column(Modifier.safeDrawingPadding().padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                HudButton("✕ Leave", onClick = onLeave)
             }
-            Column(
-                Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(12.dp),
-                horizontalAlignment = Alignment.End,
-            ) {
-                scores.forEach { s ->
-                    Text(
-                        "${s.name.take(12)}  ${s.kills}/${s.deaths}",
-                        color = if (s.me) Vector else Enemy,
-                        fontSize = 13.sp, fontFamily = FontFamily.Monospace,
-                        fontWeight = if (s.me) FontWeight.Bold else FontWeight.Normal,
-                    )
-                }
-                if (scores.size == 1) {
-                    Text("waiting for players…", color = Vector.copy(alpha = 0.6f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                }
+            Column(Modifier.padding(top = 8.dp)) {
+                feed.forEach { Text(it, color = Vector.copy(alpha = 0.85f), fontSize = 12.sp, fontFamily = FontFamily.Monospace) }
             }
-            deadText?.let {
+        }
+        Column(
+            Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(12.dp),
+            horizontalAlignment = Alignment.End,
+        ) {
+            scores.forEach { s ->
                 Text(
-                    it, color = Enemy, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.align(Alignment.Center).offset(y = 60.dp),
+                    "${s.name.take(12)}  ${s.kills}/${s.deaths}",
+                    color = if (s.me) Vector else Enemy,
+                    fontSize = 13.sp, fontFamily = FontFamily.Monospace,
+                    fontWeight = if (s.me) FontWeight.Bold else FontWeight.Normal,
                 )
             }
-
-            DriveStick(
-                Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = 20.dp, bottom = lift),
-                value = stick, onChange = { stick = it },
-            )
-            Row(
-                Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(end = 20.dp, bottom = lift),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                if (onPttHeld != null) HoldButton("TALK", 72, onHeld = onPttHeld)
-                HoldButton("FIRE", 104, onHeld = { firing = it })
+            if (scores.size == 1) {
+                Text("waiting for players…", color = Vector.copy(alpha = 0.6f), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
             }
+        }
+        deadText?.let {
+            Text(
+                it, color = Enemy, fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center).offset(y = 60.dp),
+            )
+        }
+
+        DriveStick(
+            Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(start = 20.dp, bottom = lift),
+            value = stick, onChange = { stick = it },
+        )
+        Row(
+            Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(end = 20.dp, bottom = lift),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            if (onPttHeld != null) HoldButton("TALK", 72, onHeld = onPttHeld)
+            HoldButton("FIRE", 104, onHeld = { firing = it })
         }
     }
 }
