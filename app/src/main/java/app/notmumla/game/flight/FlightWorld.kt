@@ -32,10 +32,9 @@ object FlightWorld {
     const val LASER_SPEED = 240.0       // on top of the ship's own speed
     const val LASER_LIFE_MS = 1_100L
     const val FIRE_INTERVAL_MS = 160L
-    const val LASER_DAMAGE = 8
+    /** Five hits down a full shield, which only refills on respawn. */
+    const val LASER_DAMAGE = 20
     const val SHIELD = 100
-    const val REGEN_DELAY_MS = 5_000L
-    const val REGEN_PER_SEC = 6.0
     const val SCRAPE_PER_SEC = 30.0
     const val RESPAWN_MS = 3_000L
     const val ROLL_MS = 600L
