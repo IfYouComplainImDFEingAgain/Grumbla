@@ -206,6 +206,7 @@ private fun AppNav() {
             val speaking by vm.speakingSessions.collectAsState()
             val transmitting by vm.localTransmitting.collectAsState()
             val micYielded by vm.micYielded.collectAsState()
+            val gameState by vm.gameState.collectAsState()
             val chat by vm.chat.collectAsState()
             val unread by vm.unreadChat.collectAsState()
             val whisper by vm.whisper.collectAsState()
@@ -328,6 +329,9 @@ private fun AppNav() {
                 earpiece = if (vm.hasEarpiece && sessionRoute == app.notmumla.audio.routing.OutputRoute.PHONE_SPEAKER)
                     appSettings.phoneEarpiece else null,
                 onSetEarpiece = settingsVm::setPhoneEarpiece,
+                onChallenge = if (appSettings.gamesUnlocked) { u -> vm.challenge(u.id, u.name) } else null,
+                gameState = gameState,
+                gameActions = vm.gameActions,
                 onDisconnect = {
                     vm.disconnect()
                     nav.popBackStack(Routes.CONNECT, inclusive = false)
@@ -395,6 +399,7 @@ private fun AppNav() {
                 onToggleMentionSound = settingsVm::setMentionSound,
                 onToggleRichComposer = settingsVm::setRichComposer,
                 onToggleDebugOverlay = settingsVm::setDebugOverlay,
+                onSetGamesUnlocked = settingsVm::setGamesUnlocked,
                 onRegenerateIdentity = { settingsVm.regenerateIdentity() },
                 onExportIdentity = settingsVm::exportIdentity,
                 onImportIdentity = settingsVm::importIdentity,

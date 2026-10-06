@@ -190,6 +190,15 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - **Verified**: `UdpVoiceIntegrationTest` against the real 1.5 server — the encrypted ping echo
   round-trips (proving byte-exact OCB2 both directions) and audio loops back over UDP (target 31).
 
+### Client-to-client side channel + Four in a Row easter egg 🟡
+- `PluginDataTransmission` (TCP type 26) send/receive in `MumbleClient`; strict, untrusted-input
+  handling. Design, limits and caveats: [`SIDE_CHANNELS.md`](SIDE_CHANNELS.md).
+- Four in a Row (`app/.../game/`): unlock by tapping Settings → About → Version 7×; long-press a
+  user → Four in a Row.
+- **Verified**: `PluginDataIntegrationTest` (real server: delivery, sender stamping, receiver
+  filtering); `GameControllerTest` (rules, codec, forged/illegal moves, expiry, crossed invites).
+  Not yet played device-to-device.
+
 ## Output route priority
 - **Settings → Audio · Output** is a reorderable priority list (up/down arrows). A fresh connect uses
   the first route whose hardware is present (default: Wired → BT HQ → BT headset → Phone); if the

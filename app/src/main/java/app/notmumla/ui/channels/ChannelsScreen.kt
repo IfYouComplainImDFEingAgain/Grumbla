@@ -104,6 +104,10 @@ fun ChannelsScreen(
     /** Phone output plays through the ear speaker; null hides the choice (not on the phone route). */
     earpiece: Boolean? = null,
     onSetEarpiece: (Boolean) -> Unit = {},
+    /** Four in a Row: null until the easter egg is unlocked. */
+    onChallenge: ((UiUser) -> Unit)? = null,
+    gameState: app.notmumla.game.GameState = app.notmumla.game.GameState.Idle,
+    gameActions: app.notmumla.ui.game.GameActions? = null,
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -210,9 +214,11 @@ fun ChannelsScreen(
                 u, onSetUserVolume,
                 onWhisper = { onWhisper(u); volumeUser = null },
                 onMessage = { onStartPrivateChat(u.id, u.name); volumeUser = null; showTab(1) },
+                onChallenge = onChallenge?.let { { it(u); volumeUser = null } },
                 onDismiss = { volumeUser = null },
             )
         }
+        gameActions?.let { app.notmumla.ui.game.GameOverlay(gameState, it) }
     }
 }
 
@@ -265,6 +271,7 @@ private fun UserVolumeSheet(
     onSet: (String, Float) -> Unit,
     onWhisper: () -> Unit,
     onMessage: () -> Unit,
+    onChallenge: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -302,6 +309,13 @@ private fun UserVolumeSheet(
                     onClick = onMessage,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Message ${user.name} privately") }
+                if (onChallenge != null) {
+                    Spacer(Modifier.height(12.dp))
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = onChallenge,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Four in a Row") }
+                }
             }
         },
         confirmButton = {
