@@ -334,7 +334,6 @@ private fun UserVolumeSheet(
                     onClick = onNudge,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("Nudge ${user.name}") }
-                Text("Shakes their screen if they use Grumbla.", fontSize = 12.sp, color = c.onSurfaceVar)
                 if (onChallenge != null) {
                     Spacer(Modifier.height(12.dp))
                     androidx.compose.material3.FilledTonalButton(
