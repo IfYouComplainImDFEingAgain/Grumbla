@@ -89,6 +89,55 @@ not-mumla with the game unlocked). The challenger plays red and moves first. Tap
 machine); `ui/game/FourInARowDialog.kt` (UI); wired in `SessionManager.game`. Tests:
 `app/src/test/.../game/GameControllerTest.kt`.
 
+## Tank arena
+
+A Battlezone-style free-for-all: green wireframe tanks, pyramids and cubes on a 200 m square plain,
+mountains on the horizon, a radar. Everyone in **your channel** who opens it is in the same arena, and
+voice keeps working while you play.
+
+**Play:** with the games unlocked, long-press your current channel → **Tank arena**. The stick
+(bottom left) drives and turns; **FIRE** shoots (1 s reload); **TALK** appears if you use
+push-to-talk. Channel mates who have the games unlocked get a chat line when someone opens it.
+
+**Why it fits the relay.** The server's limit is per *message*, not per receiver: one state update
+listing every player as a receiver costs one token. So each client spends the same ~3 msg/s whether
+there are 2 players or 15. Between updates everyone dead-reckons the others (constant speed + turn
+rate along an arc) and eases out the correction when the next update lands. Over TCP at 3 Hz this
+looks smooth for tanks; it would not for a twitch shooter.
+
+**Wire protocol** — `dataID = notmumla/tank/1`, one line of ASCII, sent to all current players:
+
+| Message | Meaning |
+| --- | --- |
+| `hi` | I opened the arena (sent to everyone in the channel; repeated to non-players every 15 s) |
+| `bye` | I left |
+| `s <seq> <alive> <x> <z> <h> <v> <w> <shots> <kills> <deaths>` | My tank: position in dm, heading in 0.1°, speed in dm/s, turn rate in 0.1°/s |
+| `hit <shooter> <shot>` | Shell number `<shot>` from session `<shooter>` destroyed me |
+
+A shell is not a message of its own: when `shots` goes up, a shell left the muzzle at that state's
+pose, and everyone simulates it from there.
+
+**Rules:**
+
+- **No host; the victim decides.** Each client checks shells against its own tank only and
+  announces its death. A cheater can make itself invincible, but it can't kill anyone, and nothing
+  it sends does more than move a tank on our screen. The shooter counts a kill only for a shell it
+  actually fired, once per victim.
+- **Channel-scoped.** Messages count only from users in our current channel. Moving channels drops
+  every player and greets the new channel.
+- **Opt-in.** While the arena is closed, everything but `hi` is ignored, and a `hi` produces at
+  most one chat line per sender every 2 minutes (only with the games unlocked). Nothing is ever sent
+  back.
+- **Rate.** Our own token bucket (3.5/s, burst 8) sits under the server's (4/s, burst 15), because
+  the server drops excess messages silently. States go out every 333 ms while moving and every 1 s
+  while still; a shot uses the next token or doesn't fire. Peers silent for 6 s are dropped.
+- **Bounds.** At most 15 other players and 4 live shells per player; all numbers are range-checked
+  (positions inside the arena, speeds within a tank's limits).
+
+**Code:** `app/.../game/tank/`: `TankWorld` (map, physics, `Pose.extrapolate`), `TankMessage`
+(codec), `TankArena` (simulation and networking); `ui/game/TankScreen.kt` (Canvas renderer and
+controls); wired in `SessionManager.tanks`. Tests: `app/src/test/.../game/tank/TankTest.kt`.
+
 ## Nudge
 
 Long-press a user → **Nudge**. If they run not-mumla with **Allow nudges** on (Settings, default

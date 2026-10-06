@@ -190,6 +190,14 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - **Verified**: `UdpVoiceIntegrationTest` against the real 1.5 server — the encrypted ping echo
   round-trips (proving byte-exact OCB2 both directions) and audio loops back over UDP (target 31).
 
+### Tank arena (multiplayer easter egg) 🧪
+- Battlezone-style wireframe tanks for everyone in a channel who opens it: long-press your current
+  channel → **Tank arena** (needs the games unlock). Voice keeps running; a TALK button appears for
+  PTT users. No host: each client owns its tank, broadcasts state ~3×/s, the victim decides hits.
+  Details in [`SIDE_CHANNELS.md`](SIDE_CHANNELS.md#tank-arena).
+- **Verified**: `TankTest` (codec, dead reckoning, channel scoping, invite throttle, victim-decided
+  hits, kill crediting, ≤ 4 msg/s under load). Not yet played device-to-device.
+
 ### Nudge ✅
 - Long-press a user → Nudge: their screen shakes, 40 ms buzz, synthesized "boing". Throttled on
   receive (10 s per sender, 3 s global), follows the ringer switch, opt-out in Settings.
