@@ -305,9 +305,6 @@ class FlightArena(
             return
         }
         if (pose.y <= FlightWorld.FLOOR + 0.5) hurt(FlightWorld.SCRAPE_PER_SEC * dt, now)
-        else if (now - lastHurt >= FlightWorld.REGEN_DELAY_MS) {
-            shield = (shield + FlightWorld.REGEN_PER_SEC * dt).coerceAtMost(FlightWorld.SHIELD.toDouble())
-        }
         if (shield <= 0) crash(now)
     }
 
