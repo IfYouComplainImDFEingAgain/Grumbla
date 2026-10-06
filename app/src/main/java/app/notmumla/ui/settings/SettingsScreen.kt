@@ -70,6 +70,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.notmumla.BuildConfig
 import app.notmumla.audio.TransmissionMode
 import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.data.AppSettings
@@ -424,7 +425,8 @@ fun SettingsScreen(
 
             SectionLabel("ABOUT")
             SettingsGroup {
-                ValueRow(Icons.Filled.VerifiedUser, "Version", "0.1.0 (1)", showChevron = false)
+                ValueRow(Icons.Filled.VerifiedUser, "Version",
+                    "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", showChevron = false)
                 Divider()
                 NavRow(Icons.Filled.BarChart, "Open-source licenses", null, onClick = onOpenLicenses)
             }
