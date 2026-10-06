@@ -13,6 +13,7 @@ import MumbleProto.ContextActionModify
 import MumbleProto.CryptSetup
 import MumbleProto.PermissionDenied
 import MumbleProto.PermissionQuery
+import MumbleProto.PluginDataTransmission
 import MumbleProto.Ping
 import MumbleProto.QueryUsers
 import MumbleProto.Reject
@@ -59,7 +60,8 @@ enum class MessageType(val id: Int, val adapter: ProtoAdapter<out Message<*, *>>
     USER_STATS(22, UserStats.ADAPTER),
     REQUEST_BLOB(23, RequestBlob.ADAPTER),
     SERVER_CONFIG(24, ServerConfig.ADAPTER),
-    SUGGEST_CONFIG(25, SuggestConfig.ADAPTER);
+    SUGGEST_CONFIG(25, SuggestConfig.ADAPTER),
+    PLUGIN_DATA_TRANSMISSION(26, PluginDataTransmission.ADAPTER);
 
     companion object {
         private val byId = entries.associateBy { it.id }
@@ -78,6 +80,7 @@ enum class MessageType(val id: Int, val adapter: ProtoAdapter<out Message<*, *>>
             is VoiceTarget -> VOICE_TARGET.id
             is PermissionQuery -> PERMISSION_QUERY.id
             is RequestBlob -> REQUEST_BLOB.id
+            is PluginDataTransmission -> PLUGIN_DATA_TRANSMISSION.id
             else -> error("No outbound type id mapped for ${message::class.simpleName}")
         }
     }

@@ -82,4 +82,16 @@ class SessionViewModel @Inject constructor(
     fun trustNewCertificate() = sessionManager.trustNewCertificate()
 
     fun disconnect() = sessionManager.disconnect()
+
+    // Four in a Row (easter egg).
+    val gameState: StateFlow<app.notmumla.game.GameState> = sessionManager.game.state
+    fun challenge(session: Int, name: String) = sessionManager.game.challenge(app.notmumla.data.UserRef(session, name))
+    val gameActions = app.notmumla.ui.game.GameActions(
+        accept = sessionManager.game::accept,
+        decline = sessionManager.game::decline,
+        play = sessionManager.game::play,
+        quit = sessionManager.game::quit,
+        dismiss = sessionManager.game::dismiss,
+        rematch = ::challenge,
+    )
 }

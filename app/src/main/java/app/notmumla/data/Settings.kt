@@ -47,6 +47,8 @@ data class AppSettings(
     /** Chat composer with a formatting toolbar (WYSIWYG) instead of typed Markdown. */
     val richComposer: Boolean = false,
     val debugOverlay: Boolean = false,
+    /** Easter egg: tapping the version 7 times unlocks Four in a Row with other not-mumla users. */
+    val gamesUnlocked: Boolean = false,
     /** Output routes in preference order; on connect the first one currently available is used. */
     val routePriority: List<OutputRoute> = DEFAULT_ROUTE_PRIORITY,
     /** Start with the last manually chosen route instead of walking [routePriority]. */
@@ -98,6 +100,7 @@ class SettingsRepository @Inject constructor(
         val RICH_COMPOSER = booleanPreferencesKey("rich_composer")
         val MENTION = booleanPreferencesKey("mention_sound")
         val DEBUG = booleanPreferencesKey("debug_overlay")
+        val GAMES = booleanPreferencesKey("games_unlocked")
         val ROUTE_PRIORITY = stringPreferencesKey("route_priority") // comma-separated OutputRoute names
         val REMEMBER_ROUTE = booleanPreferencesKey("remember_last_route")
         val LAST_ROUTE = stringPreferencesKey("last_route")
@@ -155,6 +158,7 @@ class SettingsRepository @Inject constructor(
             mentionSound = p[Keys.MENTION] ?: true,
             richComposer = p[Keys.RICH_COMPOSER] ?: false,
             debugOverlay = p[Keys.DEBUG] ?: false,
+            gamesUnlocked = p[Keys.GAMES] ?: false,
             routePriority = decodeRoutePriority(p[Keys.ROUTE_PRIORITY]),
             rememberLastRoute = p[Keys.REMEMBER_ROUTE] ?: false,
             lastRoute = p[Keys.LAST_ROUTE]?.let { runCatching { OutputRoute.valueOf(it) }.getOrNull() },
@@ -185,6 +189,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setMentionSound(v: Boolean) = edit { it[Keys.MENTION] = v }
     suspend fun setRichComposer(v: Boolean) = edit { it[Keys.RICH_COMPOSER] = v }
     suspend fun setDebugOverlay(v: Boolean) = edit { it[Keys.DEBUG] = v }
+    suspend fun setGamesUnlocked(v: Boolean) = edit { it[Keys.GAMES] = v }
     suspend fun setRoutePriority(v: List<OutputRoute>) = edit { it[Keys.ROUTE_PRIORITY] = v.joinToString(",") { r -> r.name } }
     suspend fun setRememberLastRoute(v: Boolean) = edit { it[Keys.REMEMBER_ROUTE] = v }
     suspend fun setLastRoute(v: OutputRoute) = edit { it[Keys.LAST_ROUTE] = v.name }
