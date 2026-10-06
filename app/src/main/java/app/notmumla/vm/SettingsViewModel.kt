@@ -108,6 +108,7 @@ class SettingsViewModel @Inject constructor(
     fun setMentionSound(v: Boolean) = update { repo.setMentionSound(v) }
     fun setRichComposer(v: Boolean) = update { repo.setRichComposer(v) }
     fun setDebugOverlay(v: Boolean) = update { repo.setDebugOverlay(v) }
+    fun setGamesUnlocked(v: Boolean) = update { repo.setGamesUnlocked(v) }
     fun setRoutePriority(v: List<app.notmumla.audio.routing.OutputRoute>) = update { repo.setRoutePriority(v) }
     fun setRememberLastRoute(v: Boolean) = update { repo.setRememberLastRoute(v) }
     fun setAutoSwitchBluetooth(v: Boolean) = update { repo.setAutoSwitchBluetooth(v) }

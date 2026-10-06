@@ -133,6 +133,7 @@ fun SettingsScreen(
     onToggleMentionSound: (Boolean) -> Unit,
     onToggleRichComposer: (Boolean) -> Unit,
     onToggleDebugOverlay: (Boolean) -> Unit,
+    onSetGamesUnlocked: (Boolean) -> Unit,
     onRegenerateIdentity: () -> Unit,
     onExportIdentity: suspend (password: String) -> ByteArray?,
     onImportIdentity: suspend (bytes: ByteArray, password: String) -> Boolean,
@@ -425,8 +426,31 @@ fun SettingsScreen(
 
             SectionLabel("ABOUT")
             SettingsGroup {
+                // Easter egg, Android-style: seven taps on the version toggle Four in a Row.
+                val context = androidx.compose.ui.platform.LocalContext.current
+                var versionTaps by remember { mutableStateOf(0) }
+                var tapToast by remember { mutableStateOf<android.widget.Toast?>(null) }
                 ValueRow(Icons.Filled.VerifiedUser, "Version",
-                    "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", showChevron = false)
+                    "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", showChevron = false,
+                    onClick = {
+                        versionTaps++
+                        val left = 7 - versionTaps
+                        val text = when {
+                            left <= 0 -> {
+                                versionTaps = 0
+                                onSetGamesUnlocked(!settings.gamesUnlocked)
+                                if (settings.gamesUnlocked) "Four in a Row hidden"
+                                else "Four in a Row unlocked: long-press a user to challenge them"
+                            }
+                            left <= 3 -> "$left more…"
+                            else -> null
+                        }
+                        // Replace the previous toast so fast taps don't queue a backlog of them.
+                        tapToast?.cancel()
+                        tapToast = text?.let {
+                            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).also { t -> t.show() }
+                        }
+                    })
                 Divider()
                 NavRow(Icons.Filled.BarChart, "Open-source licenses", null, onClick = onOpenLicenses)
             }

@@ -16,6 +16,9 @@ import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.data.db.ServerDao
 import dagger.hilt.android.qualifiers.ApplicationContext
 import app.notmumla.data.db.ServerEntity
+import app.notmumla.game.GameController
+import app.notmumla.game.GameMessage
+import app.notmumla.game.GameState
 import app.notmumla.protocol.ConnectConfig
 import app.notmumla.protocol.MumbleClient
 import app.notmumla.protocol.model.ConnectionState
@@ -28,6 +31,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -350,6 +355,30 @@ class SessionManager @Inject constructor(
 
     val activeClient: MumbleClient? get() = client
 
+    /** Four in a Row with other not-mumla users over the plugin-data relay (easter egg). */
+    val game = GameController(
+        send = { session, m ->
+            client?.sendPluginData(listOf(session), GameMessage.DATA_ID, GameMessage.encode(m))
+        },
+        nameOf = { _state.value.users[it]?.name },
+        enabled = { settings.gamesUnlocked },
+    )
+
+    init {
+        // Expire a pending invite at its deadline; nothing runs while no invite is pending.
+        scope.launch {
+            game.state.collectLatest { g ->
+                val deadline = when (g) {
+                    is GameState.Inviting -> g.deadline
+                    is GameState.Invited -> g.deadline
+                    else -> return@collectLatest
+                }
+                delay((deadline - System.currentTimeMillis()).coerceAtLeast(0))
+                game.tick()
+            }
+        }
+    }
+
     /** Remote sessions currently transmitting (drives speaking indicators). */
     private val _speaking = MutableStateFlow<Set<Int>>(emptySet())
     val speakingSessions: StateFlow<Set<Int>> = _speaking.asStateFlow()
@@ -438,6 +467,7 @@ class SessionManager @Inject constructor(
                     scheduleReconnect(server)
                 } else {
                     _state.value = s
+                    if (s.connection == ConnectionState.CONNECTED) game.onUsersPresent(s.users.keys)
                     applyUserVolumes() // new/moved users pick up their saved volume
                     _whisper.value?.let { w -> if (w.session !in s.users) stopWhisper() }
                     _privateChat.value?.let { p ->
@@ -454,6 +484,9 @@ class SessionManager @Inject constructor(
         eventJob = scope.launch {
             mc.events.collect { event ->
                 if (event is MumbleClient.Event.Text) onIncomingText(event.text)
+                if (event is MumbleClient.Event.PluginData && event.dataId == GameMessage.DATA_ID) {
+                    game.onData(event.sender, event.data)
+                }
                 events.tryEmit(event)
             }
         }
@@ -697,6 +730,7 @@ class SessionManager @Inject constructor(
         _speaking.value = emptySet()
         stopWhisper() // session ids don't survive a reconnect
         stopPrivateChat()
+        game.reset()
         _localTransmitting.value = false
         _inputLevel.value = 0f
         _debugStats.value = app.notmumla.protocol.model.AudioDebugStats()

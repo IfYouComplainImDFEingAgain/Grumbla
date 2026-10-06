@@ -35,6 +35,7 @@ import MumbleProto.ChannelRemove
 import MumbleProto.CryptSetup
 import MumbleProto.ChannelState
 import MumbleProto.PermissionDenied
+import MumbleProto.PluginDataTransmission
 import MumbleProto.Ping
 import MumbleProto.Reject
 import MumbleProto.ServerConfig
@@ -98,6 +99,11 @@ class MumbleClient(
         data class Disconnected(val cause: String?) : Event
         /** The server refused an action (join, listen, …); [message] is user-presentable. */
         data class Denied(val message: String) : Event
+        /**
+         * Client-to-client data relayed by the server (`PluginDataTransmission`). [sender] is stamped
+         * by the server, so it can be trusted; [data] cannot — any user on the server may send it.
+         */
+        class PluginData(val sender: Int, val dataId: String, val data: ByteArray) : Event
     }
 
     private var channel: ControlChannel? = null
@@ -289,6 +295,7 @@ class MumbleClient(
             // The UDPTunnel message body is the raw UDP audio packet, not a protobuf wrapper.
             MessageType.UDP_TUNNEL -> onAudioPacket(frame.payload)
             MessageType.PERMISSION_DENIED -> onPermissionDenied(PermissionDenied.ADAPTER.decode(frame.payload))
+            MessageType.PLUGIN_DATA_TRANSMISSION -> onPluginData(PluginDataTransmission.ADAPTER.decode(frame.payload))
             MessageType.PING -> Unit
             else -> Unit // unhandled types (ACL, stats, codec) — wired up in later milestones
         }
@@ -382,6 +389,13 @@ class MumbleClient(
         // a message with user targets and no channel/tree targets is a private message.
         val toUsersOnly = msg.session.isNotEmpty() && msg.channel_id.isEmpty() && msg.tree_id.isEmpty()
         events.tryEmit(Event.Text(IncomingText(msg.actor, msg.message, isPrivate = toUsersOnly)))
+    }
+
+    private fun onPluginData(msg: PluginDataTransmission) {
+        val sender = msg.senderSession ?: return
+        val id = msg.dataID ?: return
+        val data = msg.data_ ?: return
+        events.tryEmit(Event.PluginData(sender, id, data.toByteArray()))
     }
 
     private fun onServerVersion(msg: PVersion) {
@@ -551,6 +565,18 @@ class MumbleClient(
         sendAsync(TextMessage(message = message, session = listOf(session)))
     }
 
+    /**
+     * Send [data] to [receivers] over the server's plugin-data relay. Only clients that recognise
+     * [dataId] act on it; others drop it. The server caps [data] at [MAX_PLUGIN_DATA] bytes and
+     * [dataId] at [MAX_PLUGIN_DATA_ID] bytes, and silently drops messages over its rate limit
+     * (`pluginmessagelimit`, 4/s with a burst of 15 by default).
+     */
+    fun sendPluginData(receivers: List<Int>, dataId: String, data: ByteArray) {
+        require(data.size <= MAX_PLUGIN_DATA) { "plugin data too large: ${data.size}" }
+        require(dataId.toByteArray().size <= MAX_PLUGIN_DATA_ID) { "plugin data id too long" }
+        sendAsync(PluginDataTransmission(receiverSessions = receivers, dataID = dataId, data_ = data.toByteString()))
+    }
+
     fun disconnect() {
         readJob?.cancel()
         pingJob?.cancel()
@@ -565,6 +591,10 @@ class MumbleClient(
     companion object {
         /** UDP message type prefix byte for the protobuf audio format (0 = Audio, 1 = Ping). */
         private const val UDP_TYPE_AUDIO = 0
+
+        /** Server limits on a PluginDataTransmission (reference src/MumbleConstants.h). */
+        const val MAX_PLUGIN_DATA = 1000
+        const val MAX_PLUGIN_DATA_ID = 100
 
         /** Send a keep-alive only after this much idle time on the control channel. */
         private const val IDLE_PING_MS = 6_000L
