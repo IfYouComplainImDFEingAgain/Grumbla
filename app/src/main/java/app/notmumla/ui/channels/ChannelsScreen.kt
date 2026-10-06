@@ -114,6 +114,8 @@ fun ChannelsScreen(
     gameActions: app.notmumla.ui.game.GameActions? = null,
     /** Open the tank arena in our channel: null until the easter egg is unlocked. */
     onPlayTanks: (() -> Unit)? = null,
+    /** Open the dogfight in our channel: null until the easter egg is unlocked. */
+    onPlayFlights: (() -> Unit)? = null,
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -227,6 +229,7 @@ fun ChannelsScreen(
                 onJoin = { onJoinChannel(ch.id); actionChannelId = null },
                 onSetListening = { listen -> onSetListening(ch.id, listen); actionChannelId = null },
                 onPlayTanks = onPlayTanks?.takeIf { ch.isCurrent }?.let { { it(); actionChannelId = null } },
+                onPlayFlights = onPlayFlights?.takeIf { ch.isCurrent }?.let { { it(); actionChannelId = null } },
                 onDismiss = { actionChannelId = null },
             )
         }
@@ -250,6 +253,7 @@ private fun ChannelActionsSheet(
     onJoin: () -> Unit,
     onSetListening: (Boolean) -> Unit,
     onPlayTanks: (() -> Unit)?,
+    onPlayFlights: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -285,7 +289,15 @@ private fun ChannelActionsSheet(
                         onClick = onPlayTanks,
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Tank arena") }
-                    Text("Everyone here who opens it plays together.", fontSize = 12.sp, color = c.onSurfaceVar)
+                }
+                if (onPlayFlights != null) {
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = onPlayFlights,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Dogfight") }
+                }
+                if (onPlayTanks != null || onPlayFlights != null) {
+                    Text("Everyone here who opens one plays together.", fontSize = 12.sp, color = c.onSurfaceVar)
                 }
             }
         },

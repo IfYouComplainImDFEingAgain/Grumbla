@@ -198,6 +198,18 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 - **Verified**: `TankTest` (codec, dead reckoning, channel scoping, invite throttle, victim-decided
   hits, kill crediting, ≤ 4 msg/s under load). Not yet played device-to-device.
 
+### Dogfight (multiplayer easter egg) 🧪
+- Flat-shaded polygon dogfight in the old console style, same channel model as the tank arena:
+  long-press your channel → **Dogfight**. Chase camera, twin lasers, boost/brake meter, barrel roll,
+  shields, towers and arch rows, autopilot turn-back at the edge. Lasers ride on the state message's
+  "trigger held" bit, so firing costs no extra messages. Details in
+  [`SIDE_CHANNELS.md`](SIDE_CHANNELS.md#dogfight).
+- Shared plumbing pulled out of the tank arena into `game/arena/ChannelArena` (tank tests unchanged
+  and passing).
+- **Verified**: `FlightTest` (codec bounds, dead reckoning, victim-decided damage and kills, crash
+  crediting, barrel roll, ≤ 4 msg/s under button mashing, airspace bounds); rendering checked on
+  the Pixel. Not yet played device-to-device.
+
 ### Nudge ✅
 - Long-press a user → Nudge: their screen shakes, 40 ms buzz, synthesized "boing". Throttled on
   receive (10 s per sender, 3 s global), follows the ringer switch, opt-out in Settings.
