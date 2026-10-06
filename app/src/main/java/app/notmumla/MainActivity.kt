@@ -329,6 +329,13 @@ private fun AppNav() {
                 earpiece = if (vm.hasEarpiece && sessionRoute == app.notmumla.audio.routing.OutputRoute.PHONE_SPEAKER)
                     appSettings.phoneEarpiece else null,
                 onSetEarpiece = settingsVm::setPhoneEarpiece,
+                onNudge = { u ->
+                    if (!vm.nudge(u.id, u.name)) {
+                        android.widget.Toast.makeText(toastCtx, "Wait a moment before nudging again",
+                            android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                },
+                nudges = vm.nudges,
                 onChallenge = if (appSettings.gamesUnlocked) { u -> vm.challenge(u.id, u.name) } else null,
                 gameState = gameState,
                 gameActions = vm.gameActions,
@@ -397,6 +404,7 @@ private fun AppNav() {
                 onToggleAutoReconnect = settingsVm::setAutoReconnect,
                 onToggleTts = settingsVm::setTtsReadAloud,
                 onToggleMentionSound = settingsVm::setMentionSound,
+                onToggleAllowNudges = settingsVm::setAllowNudges,
                 onToggleRichComposer = settingsVm::setRichComposer,
                 onToggleDebugOverlay = settingsVm::setDebugOverlay,
                 onSetGamesUnlocked = settingsVm::setGamesUnlocked,

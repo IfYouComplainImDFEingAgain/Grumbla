@@ -44,6 +44,8 @@ data class AppSettings(
     val autoReconnect: Boolean = true,
     val ttsReadAloud: Boolean = false,
     val mentionSound: Boolean = true,
+    /** Let other not-mumla users nudge us (screen shake, short buzz, sound). */
+    val allowNudges: Boolean = true,
     /** Chat composer with a formatting toolbar (WYSIWYG) instead of typed Markdown. */
     val richComposer: Boolean = false,
     val debugOverlay: Boolean = false,
@@ -99,6 +101,7 @@ class SettingsRepository @Inject constructor(
         val TTS = booleanPreferencesKey("tts_read_aloud")
         val RICH_COMPOSER = booleanPreferencesKey("rich_composer")
         val MENTION = booleanPreferencesKey("mention_sound")
+        val NUDGES = booleanPreferencesKey("allow_nudges")
         val DEBUG = booleanPreferencesKey("debug_overlay")
         val GAMES = booleanPreferencesKey("games_unlocked")
         val ROUTE_PRIORITY = stringPreferencesKey("route_priority") // comma-separated OutputRoute names
@@ -156,6 +159,7 @@ class SettingsRepository @Inject constructor(
             autoReconnect = p[Keys.RECONNECT] ?: true,
             ttsReadAloud = p[Keys.TTS] ?: false,
             mentionSound = p[Keys.MENTION] ?: true,
+            allowNudges = p[Keys.NUDGES] ?: true,
             richComposer = p[Keys.RICH_COMPOSER] ?: false,
             debugOverlay = p[Keys.DEBUG] ?: false,
             gamesUnlocked = p[Keys.GAMES] ?: false,
@@ -187,6 +191,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setAutoReconnect(v: Boolean) = edit { it[Keys.RECONNECT] = v }
     suspend fun setTtsReadAloud(v: Boolean) = edit { it[Keys.TTS] = v }
     suspend fun setMentionSound(v: Boolean) = edit { it[Keys.MENTION] = v }
+    suspend fun setAllowNudges(v: Boolean) = edit { it[Keys.NUDGES] = v }
     suspend fun setRichComposer(v: Boolean) = edit { it[Keys.RICH_COMPOSER] = v }
     suspend fun setDebugOverlay(v: Boolean) = edit { it[Keys.DEBUG] = v }
     suspend fun setGamesUnlocked(v: Boolean) = edit { it[Keys.GAMES] = v }

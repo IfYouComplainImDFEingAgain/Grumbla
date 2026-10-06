@@ -19,6 +19,9 @@ import app.notmumla.data.db.ServerEntity
 import app.notmumla.game.GameController
 import app.notmumla.game.GameMessage
 import app.notmumla.game.GameState
+import app.notmumla.nudge.NudgeEffects
+import app.notmumla.nudge.NudgeLimiter
+import app.notmumla.nudge.NudgeMessage
 import app.notmumla.protocol.ConnectConfig
 import app.notmumla.protocol.MumbleClient
 import app.notmumla.protocol.model.ConnectionState
@@ -364,6 +367,38 @@ class SessionManager @Inject constructor(
         enabled = { settings.gamesUnlocked },
     )
 
+    private val nudgeLimiter = NudgeLimiter()
+    private val nudgeEffects = NudgeEffects(context)
+    private var lastNudgeSent = 0L
+    private val _nudges = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    /** Name of each user whose nudge got through (drives the screen shake). */
+    val nudges: kotlinx.coroutines.flow.SharedFlow<String> = _nudges
+
+    /**
+     * Nudge [session]. Returns false if we nudged anyone in the last [NUDGE_SEND_COOLDOWN_MS]: the
+     * receiver would drop it anyway, and it keeps us well under the server's plugin-message limit.
+     */
+    fun nudge(session: Int, name: String): Boolean {
+        val mc = client ?: return false
+        val now = System.currentTimeMillis()
+        if (now - lastNudgeSent < NUDGE_SEND_COOLDOWN_MS) return false
+        lastNudgeSent = now
+        mc.sendPluginData(listOf(session), NudgeMessage.DATA_ID, NudgeMessage.encode())
+        appendChat(ChatLine(chatId++, "", "You nudged $name", now, isSystem = true))
+        return true
+    }
+
+    private fun onNudge(sender: Int, data: ByteArray) {
+        if (!settings.allowNudges || !NudgeMessage.isValid(data)) return
+        val s = _state.value
+        if (sender == s.sessionId) return
+        val name = s.users[sender]?.name ?: return
+        if (!nudgeLimiter.allow(sender)) return
+        nudgeEffects.play(deafened = s.self?.selfDeaf == true)
+        appendChat(ChatLine(chatId++, "", "$name nudged you", System.currentTimeMillis(), isSystem = true))
+        _nudges.tryEmit(name)
+    }
+
     init {
         // Expire a pending invite at its deadline; nothing runs while no invite is pending.
         scope.launch {
@@ -484,8 +519,9 @@ class SessionManager @Inject constructor(
         eventJob = scope.launch {
             mc.events.collect { event ->
                 if (event is MumbleClient.Event.Text) onIncomingText(event.text)
-                if (event is MumbleClient.Event.PluginData && event.dataId == GameMessage.DATA_ID) {
-                    game.onData(event.sender, event.data)
+                if (event is MumbleClient.Event.PluginData) when (event.dataId) {
+                    GameMessage.DATA_ID -> game.onData(event.sender, event.data)
+                    NudgeMessage.DATA_ID -> onNudge(event.sender, event.data)
                 }
                 events.tryEmit(event)
             }
@@ -731,6 +767,7 @@ class SessionManager @Inject constructor(
         stopWhisper() // session ids don't survive a reconnect
         stopPrivateChat()
         game.reset()
+        nudgeLimiter.reset()
         _localTransmitting.value = false
         _inputLevel.value = 0f
         _debugStats.value = app.notmumla.protocol.model.AudioDebugStats()
@@ -745,6 +782,7 @@ class SessionManager @Inject constructor(
         /** Voice target slot we register for whispers (0 = normal talk, 31 = server loopback). */
         const val WHISPER_TARGET_ID = 1
         const val CALIBRATION_MS = 5000L
+        const val NUDGE_SEND_COOLDOWN_MS = 3_000L
     }
 }
 
