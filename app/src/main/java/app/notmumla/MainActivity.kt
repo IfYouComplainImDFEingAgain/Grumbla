@@ -209,6 +209,7 @@ private fun AppNav() {
             val gameState by vm.gameState.collectAsState()
             val tanksActive by vm.tanksActive.collectAsState()
             val flightsActive by vm.flightsActive.collectAsState()
+            val houseActive by vm.houseActive.collectAsState()
             val chat by vm.chat.collectAsState()
             val unread by vm.unreadChat.collectAsState()
             val whisper by vm.whisper.collectAsState()
@@ -345,6 +346,7 @@ private fun AppNav() {
                     gameActions = vm.gameActions,
                     onPlayTanks = if (appSettings.gamesUnlocked) vm::joinTanks else null,
                     onPlayFlights = if (appSettings.gamesUnlocked) vm::joinFlights else null,
+                    onPlayHouse = if (appSettings.gamesUnlocked) vm::joinHouse else null,
                     onDisconnect = {
                         vm.disconnect()
                         nav.popBackStack(Routes.CONNECT, inclusive = false)
@@ -357,6 +359,13 @@ private fun AppNav() {
                 if (flightsActive) {
                     app.notmumla.ui.game.FlightScreen(
                         step = vm::stepFlights, onLeave = vm::leaveFlights, onPttHeld = gamePtt,
+                        deafened = self?.selfDeaf == true,
+                    )
+                }
+                if (houseActive) {
+                    app.notmumla.ui.game.HouseScreen(
+                        step = vm::stepHouse, onSlap = vm::houseSlap, onEmote = vm::houseEmote,
+                        onShirt = vm::houseShirt, onLeave = vm::leaveHouse, onPttHeld = gamePtt,
                         deafened = self?.selfDeaf == true,
                     )
                 }
