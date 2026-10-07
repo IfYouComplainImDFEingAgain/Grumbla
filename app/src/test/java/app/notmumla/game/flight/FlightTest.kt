@@ -85,6 +85,12 @@ class Pose3Test {
         assertEquals(FlightWorld.FLOOR, dive.y, 1e-9)
     }
 
+    @Test fun aFullShieldSurvivesThreeOfTheHardestGroundHits() {
+        val worstSink = FlightWorld.BOOST_SPEED * kotlin.math.sin(FlightWorld.MAX_PITCH) - FlightWorld.CUSHION
+        val worstHit = (worstSink - FlightWorld.SAFE_SINK) * FlightWorld.SLAM_DAMAGE
+        assertTrue("$worstHit", 3 * worstHit < FlightWorld.SHIELD)
+    }
+
     @Test fun pitchAndAltitudeStayInBounds() {
         val up = Pose3(0.0, 170.0, 0.0, 0.0, 0.0, 70.0, 0.0, 1.2).extrapolate(3.0)
         assertEquals(FlightWorld.MAX_PITCH, up.p, 1e-9)
