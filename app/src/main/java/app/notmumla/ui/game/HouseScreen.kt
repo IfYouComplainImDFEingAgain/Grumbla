@@ -75,6 +75,7 @@ private val Pants = Color(0xFF3B4A6B)
 private val WallInside = Color(0xFFEDE3CF)
 private val WallOutside = Color(0xFFAFC2D6)
 private val WallCap = Color(0xFF5E554C)
+private val WindowSill = Color(0xFFF1EEE6)
 private val RailColor = Color(0xFF8B5E3C)
 private val FenceColor = Color(0xFFF4F1EA)
 private val Terracotta = Color(0xFFC0603A)
@@ -430,6 +431,9 @@ private val sideNeighbour: Array<IntArray> by lazy {
     }
 }
 
+/** The bottom of a window opening (the lintel over it starts above the floor). */
+private fun sill(b: HouseWorld.Box) = b.y1 < (b.level + 1) * HouseWorld.STORY - 1e-6 && b.y0 < b.level * HouseWorld.STORY + 1e-6
+
 /** [tops] holds how tall each box is drawn this frame (−∞ if it isn't), so a cut-away wall chunk
  *  still shows the end of the full-height chunk beside it. */
 private fun DrawScope.drawBlock(cam: HouseCam, i: Int, tops: DoubleArray) {
@@ -449,7 +453,7 @@ private fun DrawScope.drawBlock(cam: HouseCam, i: Int, tops: DoubleArray) {
                     else -> false
                 }
                 when {
-                    k == 4 -> if (cut) WallCap else WallInside.shade(0.85)
+                    k == 4 -> if (cut) WallCap else if (sill(b)) WindowSill else WallInside.shade(0.85)
                     outer -> WallOutside
                     else -> WallInside
                 }
@@ -588,7 +592,9 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
                 abs(dot3(v3(b.cx - me.x, 0.0, b.cz - me.z), cam.right)) < 4
             ) continue
             if (active && (b.kind == HouseWorld.Kind.WALL || b.kind == HouseWorld.Kind.EXTERIOR) && d < myDepth - 0.3) {
-                top = b.y0 + CUT
+                // Cut at the same height above the floor everywhere: a lintel over a window goes.
+                top = min(b.y1, y + CUT)
+                if (top <= b.y0) continue
             }
             tops[i] = top
             items += Drawn(d, b.x0, b.x1, b.y0, top, b.z0, b.z1) { drawBlock(cam, i, tops) }

@@ -48,7 +48,8 @@ class Pot(
             steps++
             val p = at(steps * DT)
             if (hits(p)) { smashedAt = p; return true }
-            if (blocked(p) || steps * DT > MAX_FLIGHT_S) { smashedAt = at((steps - 1) * DT); return false }
+            val prev = at((steps - 1) * DT)
+            if (blocked(p, prev[1]) || steps * DT > MAX_FLIGHT_S) { smashedAt = prev; return false }
         }
         return false
     }
@@ -58,14 +59,16 @@ class Pot(
         if (smashedAt == null) smashedAt = position()
     }
 
-    private fun blocked(p: DoubleArray): Boolean {
+    /** Whether the pot at [p] has hit something, having been at height [prevY] a step ago. */
+    private fun blocked(p: DoubleArray, prevY: Double): Boolean {
         val (x, y, z) = Triple(p[0], p[1], p[2])
         if (!HouseWorld.inYard(x, z) || y < R) return true
         if (HouseWorld.inHouse(x, z)) {
             if (HouseWorld.onStairs(x, z)) {
                 if (y < HouseWorld.stairY(z) + R) return true
-            } else if (y0 < HouseWorld.STORY) {
-                // Thrown downstairs: the upstairs floor is a ceiling.
+            } else if (prevY < HouseWorld.STORY) {
+                // Coming from below (thrown downstairs, or in at a downstairs window, or up out of
+                // the stairwell): the upstairs floor is a ceiling.
                 if (y > HouseWorld.STORY - R) return true
             } else if (y < HouseWorld.STORY + R) {
                 return true

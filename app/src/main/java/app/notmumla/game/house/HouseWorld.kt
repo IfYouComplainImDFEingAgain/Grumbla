@@ -209,11 +209,34 @@ object HouseWorld {
 
     private const val CHUNK = 1.5
 
-    private fun MutableList<Box>.wallAlongX(level: Int, kind: Kind, z0: Double, z1: Double, x0: Double, x1: Double, height: Double, vararg gaps: ClosedRange<Double>) =
-        span(x0, x1, gaps) { a, b -> add(Box(a, b, level * STORY, level * STORY + height, z0, z1, kind, level)) }
+    /**
+     * Window openings, above the floor: low enough that a pot thrown from the hands clears the sill,
+     * and less than a figure's height, so nobody climbs out.
+     */
+    const val SILL = 1.0
+    const val LINTEL = 2.2
 
-    private fun MutableList<Box>.wallAlongZ(level: Int, kind: Kind, x0: Double, x1: Double, z0: Double, z1: Double, height: Double, vararg gaps: ClosedRange<Double>) =
-        span(z0, z1, gaps) { a, b -> add(Box(x0, x1, level * STORY, level * STORY + height, a, b, kind, level)) }
+    /**
+     * A wall from [x0] to [x1], open at the [gaps] (doors) and at the [windows], where only a sill
+     * below [SILL] and a lintel above [LINTEL] are left.
+     */
+    private fun MutableList<Box>.wallAlongX(level: Int, kind: Kind, z0: Double, z1: Double, x0: Double, x1: Double, height: Double, vararg gaps: ClosedRange<Double>, windows: List<ClosedRange<Double>> = emptyList()) {
+        val base = level * STORY
+        span(x0, x1, (gaps.toList() + windows).toTypedArray()) { a, b -> add(Box(a, b, base, base + height, z0, z1, kind, level)) }
+        for (w in windows) {
+            add(Box(w.start, w.endInclusive, base, base + SILL, z0, z1, kind, level))
+            add(Box(w.start, w.endInclusive, base + LINTEL, base + height, z0, z1, kind, level))
+        }
+    }
+
+    private fun MutableList<Box>.wallAlongZ(level: Int, kind: Kind, x0: Double, x1: Double, z0: Double, z1: Double, height: Double, vararg gaps: ClosedRange<Double>, windows: List<ClosedRange<Double>> = emptyList()) {
+        val base = level * STORY
+        span(z0, z1, (gaps.toList() + windows).toTypedArray()) { a, b -> add(Box(x0, x1, base, base + height, a, b, kind, level)) }
+        for (w in windows) {
+            add(Box(x0, x1, base, base + SILL, w.start, w.endInclusive, kind, level))
+            add(Box(x0, x1, base + LINTEL, base + height, w.start, w.endInclusive, kind, level))
+        }
+    }
 
     /** [from]..[to] minus the [gaps], cut into chunks no longer than [CHUNK] (short pieces sort better). */
     private fun span(from: Double, to: Double, gaps: Array<out ClosedRange<Double>>, emit: (Double, Double) -> Unit) {
@@ -238,15 +261,18 @@ object HouseWorld {
         val g = GARAGE_X
         for (level in 0..1) {
             // Outer walls. Downstairs: the front door, the garage door and a back door.
+            // Windows clear of the furniture that stands against the walls (all of it under the sill).
             if (level == 0) {
-                wallAlongX(0, Kind.EXTERIOR, HZ0, HZ0 + t, HX0, HX1, h, -0.6..0.6, 3.6..8.4)
-                wallAlongX(0, Kind.EXTERIOR, HZ1 - t, HZ1, HX0, HX1, h, -6.2..-5.0)
+                wallAlongX(0, Kind.EXTERIOR, HZ0, HZ0 + t, HX0, HX1, h, -0.6..0.6, 3.6..8.4, windows = listOf(-7.6..-6.2, -4.4..-3.0))
+                wallAlongX(0, Kind.EXTERIOR, HZ1 - t, HZ1, HX0, HX1, h, -6.2..-5.0, windows = listOf(-3.8..-2.4, 5.4..6.8))
+                wallAlongZ(0, Kind.EXTERIOR, HX0, HX0 + t, HZ0 + t, HZ1 - t, h, windows = listOf(-2.6..-1.2))
+                wallAlongZ(0, Kind.EXTERIOR, HX1 - t, HX1, HZ0 + t, HZ1 - t, h, windows = listOf(-3.2..-1.8))
             } else {
-                wallAlongX(1, Kind.EXTERIOR, HZ0, HZ0 + t, HX0, HX1, h)
-                wallAlongX(1, Kind.EXTERIOR, HZ1 - t, HZ1, HX0, HX1, h)
+                wallAlongX(1, Kind.EXTERIOR, HZ0, HZ0 + t, HX0, HX1, h, windows = listOf(-7.6..-6.2, -2.8..-1.4, -0.4..1.0, 4.9..6.3, 7.1..8.5))
+                wallAlongX(1, Kind.EXTERIOR, HZ1 - t, HZ1, HX0, HX1, h, windows = listOf(-7.6..-6.2, -4.1..-2.7, 5.4..6.8))
+                wallAlongZ(1, Kind.EXTERIOR, HX0, HX0 + t, HZ0 + t, HZ1 - t, h, windows = listOf(-1.8..-0.4, 0.9..2.3))
+                wallAlongZ(1, Kind.EXTERIOR, HX1 - t, HX1, HZ0 + t, HZ1 - t, h, windows = listOf(-3.8..-2.4))
             }
-            wallAlongZ(level, Kind.EXTERIOR, HX0, HX0 + t, HZ0 + t, HZ1 - t, h)
-            wallAlongZ(level, Kind.EXTERIOR, HX1 - t, HX1, HZ0 + t, HZ1 - t, h)
             // Hallway | garage (bonus room upstairs), with a door at the front end.
             wallAlongZ(level, Kind.WALL, g - t / 2, g + t / 2, HZ0 + t, HZ1 - t, h, -4.3..-3.1)
         }
