@@ -44,7 +44,8 @@ object HouseWorld {
     const val SZ1 = 3.6
     const val STEPS = 12
 
-    enum class Kind { EXTERIOR, WALL, RAIL, FENCE, STAIR, FURNITURE, TRUNK, LEAVES }
+    /** [GLASS] is a window pane: only drawn, never in anyone's (or any pot's) way. */
+    enum class Kind { EXTERIOR, WALL, RAIL, FENCE, STAIR, FURNITURE, TRUNK, LEAVES, GLASS }
 
     /** An axis-aligned block. [color]/[top] are ARGB, used for furniture; walls are coloured by kind. */
     class Box(
@@ -59,9 +60,9 @@ object HouseWorld {
         val cx get() = (x0 + x1) / 2
         val cz get() = (z0 + z1) / 2
         /** Inside the house's walls (exterior walls themselves count as outside). */
-        val inside: Boolean = kind != Kind.EXTERIOR && inHouse(cx, cz)
-        /** Walkers bump into it. Stairs are walked on; leaves are overhead. */
-        val solid: Boolean = kind != Kind.STAIR && kind != Kind.LEAVES
+        val inside: Boolean = kind != Kind.EXTERIOR && kind != Kind.GLASS && inHouse(cx, cz)
+        /** Walkers bump into it. Stairs are walked on; leaves are overhead; panes are just for show. */
+        val solid: Boolean = kind != Kind.STAIR && kind != Kind.LEAVES && kind != Kind.GLASS
     }
 
     /** A floor area; [checker] tiles it in two shades of [color]. */
@@ -215,6 +216,7 @@ object HouseWorld {
      */
     const val SILL = 1.0
     const val LINTEL = 2.2
+    private const val PANE = 0.02
 
     /**
      * A wall from [x0] to [x1], open at the [gaps] (doors) and at the [windows], where only a sill
@@ -226,6 +228,8 @@ object HouseWorld {
         for (w in windows) {
             add(Box(w.start, w.endInclusive, base, base + SILL, z0, z1, kind, level))
             add(Box(w.start, w.endInclusive, base + LINTEL, base + height, z0, z1, kind, level))
+            val m = (z0 + z1) / 2
+            add(Box(w.start, w.endInclusive, base + SILL, base + LINTEL, m - PANE / 2, m + PANE / 2, Kind.GLASS, level))
         }
     }
 
@@ -235,6 +239,8 @@ object HouseWorld {
         for (w in windows) {
             add(Box(x0, x1, base, base + SILL, w.start, w.endInclusive, kind, level))
             add(Box(x0, x1, base + LINTEL, base + height, w.start, w.endInclusive, kind, level))
+            val m = (x0 + x1) / 2
+            add(Box(m - PANE / 2, m + PANE / 2, base + SILL, base + LINTEL, w.start, w.endInclusive, Kind.GLASS, level))
         }
     }
 
