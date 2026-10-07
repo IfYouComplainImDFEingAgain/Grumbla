@@ -15,8 +15,13 @@ object HouseWorld {
     /** A character's footprint radius and height, for collisions. */
     const val RADIUS = 0.3
     const val HEIGHT = 1.9
-    /** Most a walker climbs or drops in one move: stairs yes, the stairwell's edge no. */
-    const val STEP = 0.5
+    /** Most a walker steps up without jumping: stairs yes, the couch no. */
+    const val STEP_UP = 0.3
+    /** Walking down this much or less sticks to the ground; more is a fall. */
+    const val SNAP = 0.35
+    const val GRAVITY = 14.0
+    /** Take-off speed: a hop a little under a metre. */
+    const val JUMP_SPEED = 5.0
     const val WALK_SPEED = 4.5
 
     // The yard, inside the fence.
@@ -69,7 +74,8 @@ object HouseWorld {
     /** Height of the stairs' walking surface: one smooth ramp (the steps are drawn, not walked). */
     fun stairY(z: Double) = ((z - SZ0) / (SZ1 - SZ0)).coerceIn(0.0, 1.0) * STORY
 
-    fun levelOf(y: Double) = if (y > STORY / 2) 1 else 0
+    /** Which storey (x, z) at height y belongs to, for drawing: anything below 2 m is downstairs. */
+    fun levelOf(y: Double) = if (y > 2.0) 1 else 0
 
     /** The floor under (x, z) for someone on [level]: the stairs belong to both floors. */
     fun floorHeight(x: Double, z: Double, level: Int): Double = when {
@@ -84,33 +90,120 @@ object HouseWorld {
     /** Whether a walker standing at height [y] fits at (x, z). */
     fun free(x: Double, z: Double, y: Double): Boolean {
         if (!inYard(x, z, RADIUS)) return false
+        // The stairs aren't solid blocks; from beside them, their high end is a wall.
+        if (onStairs(x, z) && stairY(z) > y + STEP_UP) return false
+        // Nor is the upstairs floor: no standing with your head through it.
+        if (inHouse(x, z) && !onStairs(x, z) && y < STORY - 0.05 && y + HEIGHT > STORY + 0.05) return false
         for (b in solids) {
             if (b.y0 >= y + HEIGHT || b.y1 <= y + 0.05) continue
-            if (x > b.x0 - RADIUS && x < b.x1 + RADIUS && z > b.z0 - RADIUS && z < b.z1 + RADIUS) return false
+            if (overlaps(b, x, z)) return false
         }
         return true
     }
 
-    /**
-     * Walk by (dx, dz) from (x, y, z), each axis on its own so walls are slid along. Returns the new
-     * (x, y, z). A move that would climb or drop more than [STEP] is refused, which keeps walkers
-     * off the stairs' sides and out of the stairwell.
-     */
-    fun move(x: Double, y: Double, z: Double, dx: Double, dz: Double): DoubleArray {
-        var cx = x
-        var cy = y
-        var cz = z
-        val level = levelOf(y)
-        floorFor(cx + dx, cz, cy, level)?.let { cx += dx; cy = it }
-        floorFor(cx, cz + dz, cy, level)?.let { cz += dz; cy = it }
-        return doubleArrayOf(cx, cy, cz)
+    private fun overlaps(b: Box, x: Double, z: Double) =
+        x > b.x0 - RADIUS && x < b.x1 + RADIUS && z > b.z0 - RADIUS && z < b.z1 + RADIUS
+
+    /** The roof over (x, z) for someone whose feet are at [y]: a floor above, or none outdoors. */
+    private fun roof(x: Double, z: Double, y: Double): Double = when {
+        !inHouse(x, z) -> Double.MAX_VALUE
+        onStairs(x, z) || y >= STORY - 0.5 -> 2 * STORY
+        else -> STORY
     }
 
-    private fun floorFor(x: Double, z: Double, y: Double, level: Int): Double? {
-        val ny = floorHeight(x, z, level)
-        if (abs(ny - y) > STEP || !free(x, z, ny)) return null
-        return ny
+    /**
+     * The highest surface a walker at (x, z) with feet at [feet] can stand on: the floors, the
+     * stairs, or the top of anything it overlaps that isn't more than [STEP_UP] above its feet (and
+     * leaves room for its head under the ceiling).
+     */
+    fun groundAt(x: Double, z: Double, feet: Double): Double {
+        val reach = feet + STEP_UP
+        var g = 0.0
+        if (inHouse(x, z)) {
+            if (onStairs(x, z)) stairY(z).let { if (it <= reach) g = it }
+            else if (STORY <= reach) g = STORY
+        }
+        for (b in solids) {
+            if (b.y1 <= g || b.y1 > reach || !overlaps(b, x, z)) continue
+            if (b.y1 + HEIGHT > roof(x, z, b.y1) + 1e-6) continue
+            g = b.y1
+        }
+        return g
     }
+
+    /** Highest the feet can rise at (x, z) before the head meets a ceiling or something overhead. */
+    private fun ceilingAt(x: Double, z: Double, feet: Double): Double {
+        var c = roof(x, z, feet) - HEIGHT
+        for (b in solids) {
+            if (b.y0 < feet + HEIGHT - 0.05 || !overlaps(b, x, z)) continue
+            c = minOf(c, b.y0 - HEIGHT)
+        }
+        return c
+    }
+
+    /**
+     * Run a walker [b] = (x, y, z, vy) for [seconds], walking at (vx, vz) all the while: sliding
+     * along walls, stepping up stairs and low things, falling off edges, jumping if vy > 0. In small
+     * fixed steps, so the same inputs give the same path on every client. Returns [b].
+     */
+    fun simulate(b: DoubleArray, vx: Double, vz: Double, seconds: Double): DoubleArray {
+        if (seconds <= 0) return b
+        val n = maxOf(kotlin.math.ceil(seconds / MAX_DT).toInt(), kotlin.math.ceil(kotlin.math.hypot(vx, vz) * seconds / MAX_STRIDE).toInt())
+        val dt = seconds / n
+        repeat(n) { stepBody(b, vx * dt, vz * dt, dt) }
+        return b
+    }
+
+    /** Whether a walker at (x, y, z) is standing on something, rather than in the air. */
+    fun grounded(x: Double, y: Double, z: Double) = y <= groundAt(x, z, y) + 1e-6
+
+    private fun stepBody(b: DoubleArray, dx: Double, dz: Double, dt: Double) {
+        var x = b[0]
+        var y = b[1]
+        var z = b[2]
+        var vy = b[3]
+        val air = vy > 0 || !grounded(x, y, z)
+        // Each axis on its own, so walls are slid along.
+        for (axis in 0..1) {
+            val nx = if (axis == 0) x + dx else x
+            val nz = if (axis == 0) z else z + dz
+            if (nx == x && nz == z) continue
+            if (!free(nx, nz, y)) continue
+            var ny = y
+            if (!air) {
+                val g = groundAt(nx, nz, y)
+                if (g > y) {
+                    if (!free(nx, nz, g)) continue
+                    ny = g
+                } else if (y - g <= SNAP) {
+                    ny = g
+                }
+            }
+            x = nx; z = nz; y = ny
+        }
+        val g = groundAt(x, z, y)
+        if (vy > 0 || y > g + 1e-6) {
+            val c = ceilingAt(x, z, y)
+            vy -= GRAVITY * dt
+            var ny = y + vy * dt
+            if (ny > c) { ny = maxOf(y, c); vy = minOf(vy, 0.0) }
+            if (ny <= g) { ny = g; vy = 0.0 }
+            y = ny
+        } else {
+            y = g
+            vy = 0.0
+        }
+        b[0] = x; b[1] = y; b[2] = z; b[3] = vy
+    }
+
+    /** Walk by (dx, dz) from standing at (x, y, z), in one go; returns the new (x, y, z). */
+    fun move(x: Double, y: Double, z: Double, dx: Double, dz: Double): DoubleArray {
+        val b = simulate(doubleArrayOf(x, y, z, 0.0), dx / MAX_DT, dz / MAX_DT, MAX_DT)
+        return doubleArrayOf(b[0], b[1], b[2])
+    }
+
+    private const val MAX_DT = 1.0 / 60
+    private const val MAX_STRIDE = 0.1
 
     // ---- The map ---------------------------------------------------------------------------
 
@@ -235,6 +328,22 @@ object HouseWorld {
         Floor(SX0, GARAGE_X, HZ0, SZ0, 1, 0xFFB7834E),
         Floor(SX0, GARAGE_X, SZ1, HZ1, 1, 0xFFB7834E),
         Floor(GARAGE_X, HX1, HZ0, HZ1, 1, 0xFF8DBF7A),
+    )
+
+    /** Where a weapon waits to be picked up; it's back [RESPAWN_MS] after someone takes it. */
+    class Spot(val x: Double, val y: Double, val z: Double, val weapon: Weapon)
+
+    const val RESPAWN_MS = 10_000L
+
+    val spots: List<Spot> = listOf(
+        Spot(7.0, 0.0, 3.6, Weapon.BAT),            // garage, by the workbench
+        Spot(4.0, 0.0, 8.0, Weapon.BAT),            // back yard
+        Spot(-5.0, STORY, -1.5, Weapon.BAT),        // front bedroom
+        Spot(-1.4, 0.0, -5.6, Weapon.PLANT),        // either side of the front door
+        Spot(1.4, 0.0, -5.6, Weapon.PLANT),
+        Spot(-1.7, 0.0, 0.3, Weapon.PLANT),         // living room corner
+        Spot(-4.0, 0.0, 7.0, Weapon.PLANT),         // back yard
+        Spot(5.0, STORY, -4.3, Weapon.PLANT),       // bonus room, by the door
     )
 
     /** Outdoor ground markings, drawn on the lawn: the driveway and the front path. */

@@ -10,6 +10,9 @@ import kotlin.math.sqrt
 /** Things a character can do on its own; [durationMs] 0 = until it moves or picks another. */
 enum class Emote(val durationMs: Long) { NONE(0), WAVE(2_600), CHEER(2_000), DANCE(0), SIT(0) }
 
+/** What a character holds: a bat swings harder and further than a hand; a plant gets thrown. */
+enum class Weapon { NONE, BAT, PLANT }
+
 /**
  * A blocky figure, six boxes in the old brick-game proportions: head, torso, two arms, two legs.
  * Both the animated pose and the ragdoll come out as the same eleven joints (world coordinates, x/y/z
@@ -52,12 +55,14 @@ object Blocky {
     /**
      * Joints for a standing figure at (x, y, z) facing [h], walking through [walk] (radians of
      * stride cycle) at [stride] (0 = still, 1 = full speed), doing [emote] for [emoteMs] and, if
-     * [swingMs] is in 0..[SWING_MS], swinging a slap.
+     * [swingMs] is in 0..[SWING_MS], swinging: a slap, a bat, or a throw, by what [swing] says was in
+     * hand. [held] sets the arms for carrying; [airborne] tucks the legs mid-jump.
      */
     fun pose(
         x: Double, y: Double, z: Double, h: Double,
         walk: Double = 0.0, stride: Double = 0.0,
         emote: Emote = Emote.NONE, emoteMs: Long = 0, swingMs: Long = -1,
+        held: Weapon = Weapon.NONE, swing: Weapon = Weapon.NONE, airborne: Boolean = false,
     ): DoubleArray {
         val t = emoteMs / 1000.0
         var lift = 0.0
@@ -97,12 +102,37 @@ object Blocky {
                 armR = arm(0.45, 0.15, 1)
             }
         }
+        when (held) {
+            Weapon.NONE -> {}
+            Weapon.BAT -> armR = arm(0.45, 0.05, 1)
+            // Hugged in front at chest height, hands together under it.
+            Weapon.PLANT -> {
+                armL = arm(1.15, -0.4, -1)
+                armR = arm(1.15, -0.4, 1)
+            }
+        }
+        if (airborne && emote == Emote.NONE) {
+            legL = 0.55
+            legR = -0.15
+            if (held == Weapon.NONE) {
+                armL = arm(0.2, 0.9, -1)
+                armR = arm(0.2, 0.9, 1)
+            }
+        }
         if (swingMs in 0..SWING_MS) {
-            // A wide forehand: the right arm comes round from out to the side to across the body.
             val u = swingMs.toDouble() / SWING_MS
-            val phi = 1.5 - 2.6 * u
-            armR = norm(sin(phi), 0.12, cos(phi))
-            yaw = h + 0.45 - 0.9 * u
+            if (swing == Weapon.PLANT) {
+                // Overarm: both hands from up behind the head to out in front.
+                val th = -2.7 + 3.9 * u
+                armL = norm(-0.12, -cos(th), sin(th))
+                armR = norm(0.12, -cos(th), sin(th))
+            } else {
+                // A wide forehand: the right arm comes round from out to the side to across the body.
+                val phi = 1.5 - 2.6 * u
+                armR = norm(sin(phi), 0.12, cos(phi))
+                val twist = if (swing == Weapon.BAT) 0.7 else 0.45
+                yaw = h + twist - 2 * twist * u
+            }
         }
 
         val local = DoubleArray(JOINTS * 3)
@@ -160,7 +190,7 @@ object Blocky {
  * the floors, walls and furniture of [HouseWorld]. Fixed time steps, so every client that starts
  * one from the same pose and push sees the same fall.
  */
-class Ragdoll(start: DoubleArray, pushHeading: Double, private val level: Int) {
+class Ragdoll(start: DoubleArray, pushHeading: Double, private val level: Int, power: Double = 1.0) {
     private val p = start.copyOf()
     private val q = start.copyOf()
     private val sticks: List<Triple<Int, Int, Double>>
@@ -188,9 +218,9 @@ class Ragdoll(start: DoubleArray, pushHeading: Double, private val level: Int) {
         val dz = cos(pushHeading)
         for (j in 0 until Blocky.JOINTS) {
             val (k, up) = PUSH[j]
-            q[j * 3] = p[j * 3] - dx * SPEED * k * DT
-            q[j * 3 + 1] = p[j * 3 + 1] - up * DT
-            q[j * 3 + 2] = p[j * 3 + 2] - dz * SPEED * k * DT
+            q[j * 3] = p[j * 3] - dx * SPEED * power * k * DT
+            q[j * 3 + 1] = p[j * 3 + 1] - up * kotlin.math.sqrt(power) * DT
+            q[j * 3 + 2] = p[j * 3 + 2] - dz * SPEED * power * k * DT
         }
     }
 
