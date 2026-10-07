@@ -15,7 +15,7 @@ import kotlin.random.Random
 /** Where the stick points, already turned into world space (x, z); length ≤ 1. */
 data class HouseInput(val mx: Double = 0.0, val mz: Double = 0.0)
 
-enum class HouseSound { SWISH, SLAP, BONK, SMASH, JUMP, PICKUP }
+enum class HouseSound { SWISH, SLAP, BONK, SMASH, JUMP, PICKUP, SHATTER }
 
 /** A sound at a spot in the world; the screen works out volume and pan from the camera. */
 data class HouseSoundEvent(val sound: HouseSound, val x: Double, val z: Double)
@@ -38,11 +38,13 @@ data class HouseView(
     val spots: List<Int>,
     val pots: List<FlyingPot>,
     val shards: List<Shards>,
+    /** Window panes that are broken just now: indexes into [HouseWorld.boxes]. */
+    val brokenPanes: Set<Int> = emptySet(),
 ) {
     class FlyingPot(val x: Double, val y: Double, val z: Double, val heading: Double, val spin: Double)
 
-    /** A pot breaking at (x, y, z), [ageMs] ago; [seed] varies the pieces. */
-    class Shards(val x: Double, val y: Double, val z: Double, val ageMs: Long, val seed: Int)
+    /** A pot (or, if [glass], a window) breaking at (x, y, z), [ageMs] ago; [seed] varies the pieces. */
+    class Shards(val x: Double, val y: Double, val z: Double, val ageMs: Long, val seed: Int, val glass: Boolean = false)
 
     /** A figure to draw: its [joints] (see [Blocky]) and where it stands, for sorting and floors. */
     class Figure(
@@ -186,6 +188,12 @@ class HouseArena(
     private val steppedOff = BooleanArray(HouseWorld.spots.size) { true }
     private val pots = ArrayList<Pot>()
     private val shards = ArrayList<Pair<DoubleArray, Long>>()
+    private val glassShards = ArrayList<Pair<DoubleArray, Long>>()
+    /**
+     * When each broken pane is whole again, by box index. Not sent: every client flies the same
+     * pots through the same windows, so they break the same glass.
+     */
+    private val paneBack = HashMap<Int, Long>()
 
     override fun newPeer(name: String) = Peer(name)
 
@@ -205,7 +213,7 @@ class HouseArena(
         sendNow = false; wasMoving = false; wasAir = false
         spotBack.fill(0)
         steppedOff.fill(true)
-        pots.clear(); shards.clear()
+        pots.clear(); shards.clear(); glassShards.clear(); paneBack.clear()
         sounds.clear()
     }
 
@@ -545,7 +553,13 @@ class HouseArena(
         for (pot in pots) {
             if (pot.smashedAt != null) continue
             var hitMe = false
-            pot.advance(dtMs) { pt ->
+            pot.advance(dtMs, glass = { k, pt ->
+                if ((paneBack[k] ?: 0L) <= now) {
+                    paneBack[k] = now + HouseWorld.PANE_RESPAWN_MS
+                    glassShards += pt to now
+                    sounds += HouseSoundEvent(HouseSound.SHATTER, pt[0], pt[2])
+                }
+            }) { pt ->
                 if (pot.owner != me && ragdoll == null && Pot.touches(pt, x, y, z)) {
                     hitMe = true
                     true
@@ -563,6 +577,8 @@ class HouseArena(
             true
         }
         shards.removeAll { now - it.second > Pot.SHARDS_MS }
+        glassShards.removeAll { now - it.second > Pot.SHARDS_MS }
+        paneBack.values.removeAll { it <= now }
     }
 
     private fun beaned(pot: Pot, now: Long) {
@@ -661,7 +677,9 @@ class HouseArena(
             sounds = out,
             spots = HouseWorld.spots.indices.filter { now >= spotBack[it] },
             pots = pots.map { val p = it.position(); HouseView.FlyingPot(p[0], p[1], p[2], it.heading, it.spin()) },
-            shards = shards.map { (at, t) -> HouseView.Shards(at[0], at[1], at[2], now - t, (at[0] * 1000 + at[2] * 37).toInt()) },
+            shards = shards.map { (at, t) -> HouseView.Shards(at[0], at[1], at[2], now - t, (at[0] * 1000 + at[2] * 37).toInt()) } +
+                glassShards.map { (at, t) -> HouseView.Shards(at[0], at[1], at[2], now - t, (at[0] * 1000 + at[2] * 37).toInt(), glass = true) },
+            brokenPanes = paneBack.keys.toSet(),
         )
     }
 

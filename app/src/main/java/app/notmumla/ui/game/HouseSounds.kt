@@ -16,7 +16,7 @@ import kotlin.random.Random
 /**
  * The block house's sounds, synthesized once like [FlightSounds]: a whoosh for a swing, a sharp
  * smack for a slap that lands, a hollow wooden bonk for a bat, a crash of pottery, a springy hop and
- * a pop for picking something up. Game usage, so it follows the media volume.
+ * a pop for picking something up, and a window shattering. Game usage, so it follows the media volume.
  */
 class HouseSounds(context: Context) {
     private val pool = SoundPool.Builder()
@@ -68,6 +68,7 @@ class HouseSounds(context: Context) {
             HouseSound.SMASH -> crash()
             HouseSound.JUMP -> hop()
             HouseSound.PICKUP -> pop()
+            HouseSound.SHATTER -> shatter()
         }
 
         private fun render(seconds: Double, sample: (t: Double) -> Double): ShortArray {
@@ -130,6 +131,22 @@ class HouseSounds(context: Context) {
                 var clink = 0.0
                 for ((at, f) in clinks) if (t >= at) clink += sin(2 * PI * f * (t - at)) * exp(-(t - at) / 0.012)
                 grit * 0.9 + thud * 0.5 + clink * 0.25
+            }
+        }
+
+        /** A window going: a sharp crack, a hiss of high grit and lots of tiny bright tinkles. */
+        private fun shatter(): ShortArray {
+            val rnd = Random(31)
+            val tinkles = List(22) { rnd.nextDouble(0.0, 0.6) to rnd.nextDouble(3000.0, 7500.0) }
+            var prev = 0.0
+            return render(0.75) { t ->
+                val n = rnd.nextDouble(-1.0, 1.0)
+                val hiss = (n - prev) * exp(-t / 0.09)
+                prev = n
+                val crack = n * exp(-t / 0.004)
+                var tink = 0.0
+                for ((at, f) in tinkles) if (t >= at) tink += sin(2 * PI * f * (t - at)) * exp(-(t - at) / 0.02)
+                crack * 0.8 + hiss * 0.6 + tink * 0.2
             }
         }
 

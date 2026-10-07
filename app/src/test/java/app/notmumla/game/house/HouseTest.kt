@@ -167,6 +167,14 @@ class HouseWorldTest {
         // From the bonus room, out of the front window: it comes down in the front yard.
         val out = throwFrom(5.6, HouseWorld.STORY, -4.3, PI)
         assertTrue(out[2] < HouseWorld.HZ0 - 3)
+        // It went through that window's pane, once.
+        val panes = ArrayList<Int>()
+        val pot = Pot(1, 1, 5.6, HouseWorld.STORY + 1.45, -4.75, PI, 2.5)
+        repeat(400) { pot.advance(10, glass = { k, _ -> panes += k }) { false } }
+        assertEquals(1, panes.size)
+        val pane = HouseWorld.boxes[panes[0]]
+        assertEquals(HouseWorld.Kind.GLASS, pane.kind)
+        assertTrue(pane.x0 < 5.6 && pane.x1 > 5.6 && pane.z1 < HouseWorld.HZ0 + HouseWorld.WALL_T)
         // A step to the side, it hits the wall between the windows.
         val wall = throwFrom(4.0, HouseWorld.STORY, -4.3, PI)
         assertTrue(wall[2] > HouseWorld.HZ0 && wall[1] > HouseWorld.STORY)
