@@ -219,10 +219,17 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   ragdoll (walls, furniture, stairs) for 3 s, then stand up where they landed. Victim decides, with
   a reach check and 1.5 s of immunity after getting up. Shirt colour picker, name tags, synthesized
   swish/smack. Details in [`SIDE_CHANNELS.md`](SIDE_CHANNELS.md#block-house).
+- **Jumping and weapons** (protocol v2): **JUMP** onto furniture, the car, the railing; walking
+  steps up only 0.3 m and falls off edges; the same walker physics drives dead reckoning. Bats
+  (longer reach, harder knock) and potted plants (thrown in an aimed arc, smash on whatever they
+  hit) wait at fixed spots that refill after 10 s. A thrown plant is judged by the client it hits,
+  against its own figure.
 - **Verified**: `HouseTest` (codec bounds, walking the stairs up to the bonus room, stairwell edge
   and walls, ragdoll falls flat / stays out of walls / is frame-rate independent, victim-decided
-  slaps with reach + replay + immunity checks, crediting, ≤ 4 msg/s under button mashing). Not yet
-  played device-to-device.
+  slaps with reach + replay + immunity checks, crediting, ≤ 4 msg/s under button mashing; jumping
+  onto the couch, ceiling cap, falling off the stairs' side; bat reach only when held; pickup and
+  refill; plants hitting the victim, ignored when thrown from afar, aimed and credited). Pickup,
+  carry, throw and jump pose checked on the Pixel alone; not yet played device-to-device.
 
 ### Nudge ✅
 - Long-press a user → Nudge: their screen shakes, 40 ms buzz, synthesized "boing". Throttled on

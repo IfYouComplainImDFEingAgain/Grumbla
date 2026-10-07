@@ -14,8 +14,9 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * The block house's sounds, synthesized once like [FlightSounds]: a whoosh for a swing and a sharp
- * smack for a slap that lands. Game usage, so it follows the media volume.
+ * The block house's sounds, synthesized once like [FlightSounds]: a whoosh for a swing, a sharp
+ * smack for a slap that lands, a hollow wooden bonk for a bat, a crash of pottery, a springy hop and
+ * a pop for picking something up. Game usage, so it follows the media volume.
  */
 class HouseSounds(context: Context) {
     private val pool = SoundPool.Builder()
@@ -43,9 +44,15 @@ class HouseSounds(context: Context) {
     fun play(sound: HouseSound, volume: Float, pan: Float) {
         val id = ids[sound] ?: return
         if (synchronized(loaded) { id !in loaded }) return
-        val v = volume.coerceIn(0f, 1f) * if (sound == HouseSound.SWISH) 0.5f else 1f
+        val v = volume.coerceIn(0f, 1f) * when (sound) {
+            HouseSound.SWISH -> 0.5f
+            HouseSound.JUMP -> 0.35f
+            HouseSound.PICKUP -> 0.6f
+            else -> 1f
+        }
         val p = pan.coerceIn(-1f, 1f)
-        pool.play(id, v * min(1f, 1 - p), v * min(1f, 1 + p), if (sound == HouseSound.SLAP) 1 else 0, 0, 1f)
+        val priority = if (sound == HouseSound.SWISH || sound == HouseSound.JUMP) 0 else 1
+        pool.play(id, v * min(1f, 1 - p), v * min(1f, 1 + p), priority, 0, 1f)
     }
 
     fun release() = pool.release()
@@ -57,6 +64,10 @@ class HouseSounds(context: Context) {
         private fun synth(s: HouseSound): ShortArray = when (s) {
             HouseSound.SWISH -> swish()
             HouseSound.SLAP -> smack()
+            HouseSound.BONK -> bonk()
+            HouseSound.SMASH -> crash()
+            HouseSound.JUMP -> hop()
+            HouseSound.PICKUP -> pop()
         }
 
         private fun render(seconds: Double, sample: (t: Double) -> Double): ShortArray {
@@ -92,6 +103,51 @@ class HouseSounds(context: Context) {
                 prev = n
                 val thump = sin(2 * PI * 140 * t * (1 - t * 2)) * exp(-t / 0.04)
                 crack * 1.1 + thump * 0.6
+            }
+        }
+
+        /** Bat on head: a knock and a short hollow wooden ring, a little detuned. */
+        private fun bonk(): ShortArray {
+            val rnd = Random(9)
+            return render(0.32) { t ->
+                val knock = rnd.nextDouble(-1.0, 1.0) * exp(-t / 0.006)
+                val ring = (sin(2 * PI * 420 * t) + 0.6 * sin(2 * PI * 637 * t) + 0.3 * sin(2 * PI * 1180 * t)) * exp(-t / 0.07)
+                val body = sin(2 * PI * 110 * t * (1 - t)) * exp(-t / 0.05)
+                knock * 0.7 + ring * 0.35 + body * 0.5
+            }
+        }
+
+        /** A pot breaking: a thud, a burst of grit, and a few clinks of pieces landing after. */
+        private fun crash(): ShortArray {
+            val rnd = Random(13)
+            val clinks = List(7) { rnd.nextDouble(0.03, 0.4) to rnd.nextDouble(1800.0, 4200.0) }
+            var lp = 0.0
+            return render(0.55) { t ->
+                val n = rnd.nextDouble(-1.0, 1.0)
+                lp += (n - lp) * 0.35
+                val grit = (n - lp) * exp(-t / 0.08)
+                val thud = sin(2 * PI * 90 * t) * exp(-t / 0.05)
+                var clink = 0.0
+                for ((at, f) in clinks) if (t >= at) clink += sin(2 * PI * f * (t - at)) * exp(-(t - at) / 0.012)
+                grit * 0.9 + thud * 0.5 + clink * 0.25
+            }
+        }
+
+        /** A cartoon hop: a quick upward pitch sweep. */
+        private fun hop(): ShortArray {
+            var ph = 0.0
+            return render(0.16) { t ->
+                ph += 2 * PI * (220 + 900 * t / 0.16) / RATE
+                sin(ph) * sin(PI * t / 0.16) * 0.6
+            }
+        }
+
+        /** Picking something up: a short bright pop. */
+        private fun pop(): ShortArray {
+            var ph = 0.0
+            return render(0.09) { t ->
+                ph += 2 * PI * (700 + 5000 * t) / RATE
+                sin(ph) * exp(-t / 0.025)
             }
         }
 

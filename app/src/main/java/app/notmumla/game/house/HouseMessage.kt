@@ -15,55 +15,75 @@ sealed interface HouseMessage {
     data object Bye : HouseMessage
 
     /**
-     * The sender's figure: position in cm, [level] 0/1, heading, velocity in cm/s. [swings] counts
-     * slaps swung (when it goes up, play one); [down] = lying slapped; [shirt] picks a colour.
+     * The sender's figure: feet at (x, y, z) in cm, heading, velocity in cm/s ([vy] up, while
+     * jumping or falling). [swings] counts swings of hand or bat (when it goes up, play one);
+     * [down] = lying knocked over; [shirt] picks a colour; [held] is what's in its hands.
      */
     data class State(
         val seq: Int,
         val x: Double,
+        val y: Double,
         val z: Double,
-        val level: Int,
         val h: Double,
         val vx: Double,
         val vz: Double,
+        val vy: Double,
         val emote: Emote,
         val down: Boolean,
         val swings: Int,
         val shirt: Int,
+        val held: Weapon,
     ) : HouseMessage
 
-    /** "My swing number [swing] hit [victim]": the victim decides whether it really did. */
-    data class Slap(val victim: Int, val swing: Int) : HouseMessage
+    /** "My swing number [swing], with [weapon], hit [victim]": the victim decides whether it really did. */
+    data class Slap(val victim: Int, val swing: Int, val weapon: Weapon) : HouseMessage
 
-    /** "[slapper]'s swing [swing] knocked me over, flying toward [dir]" — from the victim. */
-    data class Ow(val slapper: Int, val swing: Int, val dir: Double) : HouseMessage
+    /**
+     * "[slapper]'s [weapon] knocked me over, flying toward [dir]" — from the victim. [swing] is the
+     * swing number, or for a plant the throw number.
+     */
+    data class Ow(val slapper: Int, val swing: Int, val dir: Double, val weapon: Weapon) : HouseMessage
+
+    /** "I threw plant number [n] from (x, y, z), toward [h], rising at [vy]": everyone flies it the same. */
+    data class Toss(val n: Int, val x: Double, val y: Double, val z: Double, val h: Double, val vy: Double) : HouseMessage
+
+    /** "I picked up what was at [HouseWorld.spots] index [spot]." */
+    data class Got(val spot: Int) : HouseMessage
 
     companion object {
-        const val DATA_ID = "notmumla/house/1"
+        const val DATA_ID = "notmumla/house/2"
         const val SHIRTS = 8
         private const val MAX_LEN = 96
         private const val MAX_COUNT = 999_999_999
         private const val POS = 1_700               // cm: the yard is ±16 m
+        private const val HIGH = 700                // cm: a rail top upstairs, plus a jump
         private const val ANGLE = 3_600             // tenths of a degree
+        private const val RISE = 1_500              // cm/s up or down
         private val SPEED = (HouseWorld.WALK_SPEED * 100 * 1.2).roundToInt()
 
         fun encode(m: HouseMessage): ByteArray = when (m) {
             Hello -> "hi"
             Bye -> "bye"
-            is Slap -> "slap ${m.victim} ${m.swing}"
-            is Ow -> "ow ${m.slapper} ${m.swing} ${angle(m.dir)}"
+            is Slap -> "slap ${m.victim} ${m.swing} ${m.weapon.ordinal}"
+            is Ow -> "ow ${m.slapper} ${m.swing} ${angle(m.dir)} ${m.weapon.ordinal}"
+            is Got -> "got ${m.spot}"
+            is Toss -> "toss ${m.n} ${cm(m.x, -POS, POS)} ${cm(m.y, 0, HIGH)} ${cm(m.z, -POS, POS)} ${angle(m.h)} ${cm(m.vy, -RISE, RISE)}"
             is State -> buildString {
                 append("s ").append(m.seq).append(' ')
-                append((m.x * 100).roundToInt().coerceIn(-POS, POS)).append(' ')
-                append((m.z * 100).roundToInt().coerceIn(-POS, POS)).append(' ')
-                append(m.level.coerceIn(0, 1)).append(' ')
+                append(cm(m.x, -POS, POS)).append(' ')
+                append(cm(m.y, 0, HIGH)).append(' ')
+                append(cm(m.z, -POS, POS)).append(' ')
                 append(angle(m.h)).append(' ')
-                append((m.vx * 100).roundToInt().coerceIn(-SPEED, SPEED)).append(' ')
-                append((m.vz * 100).roundToInt().coerceIn(-SPEED, SPEED)).append(' ')
+                append(cm(m.vx, -SPEED, SPEED)).append(' ')
+                append(cm(m.vz, -SPEED, SPEED)).append(' ')
+                append(cm(m.vy, -RISE, RISE)).append(' ')
                 append(m.emote.ordinal).append(if (m.down) " 1 " else " 0 ")
-                append(m.swings).append(' ').append(m.shirt.coerceIn(0, SHIRTS - 1))
+                append(m.swings).append(' ').append(m.shirt.coerceIn(0, SHIRTS - 1)).append(' ')
+                append(m.held.ordinal)
             }
         }.toByteArray(Charsets.US_ASCII)
+
+        private fun cm(v: Double, lo: Int, hi: Int) = (v * 100).roundToInt().coerceIn(lo, hi)
 
         private fun angle(a: Double): Int {
             var r = a % (2 * PI)
@@ -78,35 +98,53 @@ sealed interface HouseMessage {
             return when (parts[0]) {
                 "hi" -> Hello.takeIf { parts.size == 1 }
                 "bye" -> Bye.takeIf { parts.size == 1 }
+                "got" -> {
+                    if (parts.size != 2) return null
+                    Got(parts[1].int(0, HouseWorld.spots.size - 1) ?: return null)
+                }
                 "slap" -> {
-                    if (parts.size != 3) return null
-                    Slap(parts[1].int(0, MAX_COUNT) ?: return null, parts[2].int(1, MAX_COUNT) ?: return null)
+                    if (parts.size != 4) return null
+                    Slap(
+                        parts[1].int(0, MAX_COUNT) ?: return null,
+                        parts[2].int(1, MAX_COUNT) ?: return null,
+                        weapon(parts[3]) ?: return null,
+                    )
                 }
                 "ow" -> {
-                    if (parts.size != 4) return null
+                    if (parts.size != 5) return null
                     Ow(
                         parts[1].int(0, MAX_COUNT) ?: return null,
                         parts[2].int(1, MAX_COUNT) ?: return null,
                         (parts[3].int(0, ANGLE - 1) ?: return null) * PI / 1800,
+                        weapon(parts[4]) ?: return null,
                     )
                 }
+                "toss" -> {
+                    if (parts.size != 7) return null
+                    val bounds = arrayOf(1..MAX_COUNT, -POS..POS, 0..HIGH, -POS..POS, 0 until ANGLE, -RISE..RISE)
+                    val n = IntArray(6)
+                    for (i in 0 until 6) n[i] = parts[i + 1].int(bounds[i].first, bounds[i].last) ?: return null
+                    Toss(n[0], n[1] / 100.0, n[2] / 100.0, n[3] / 100.0, n[4] * PI / 1800, n[5] / 100.0)
+                }
                 "s" -> {
-                    if (parts.size != 12) return null
+                    if (parts.size != 14) return null
                     val bounds = arrayOf(
-                        0..MAX_COUNT, -POS..POS, -POS..POS, 0..1, 0 until ANGLE, -SPEED..SPEED, -SPEED..SPEED,
-                        0 until Emote.entries.size, 0..1, 0..MAX_COUNT, 0 until SHIRTS,
+                        0..MAX_COUNT, -POS..POS, 0..HIGH, -POS..POS, 0 until ANGLE, -SPEED..SPEED, -SPEED..SPEED,
+                        -RISE..RISE, 0 until Emote.entries.size, 0..1, 0..MAX_COUNT, 0 until SHIRTS, 0 until Weapon.entries.size,
                     )
-                    val n = IntArray(11)
-                    for (i in 0 until 11) n[i] = parts[i + 1].int(bounds[i].first, bounds[i].last) ?: return null
+                    val n = IntArray(13)
+                    for (i in 0 until 13) n[i] = parts[i + 1].int(bounds[i].first, bounds[i].last) ?: return null
                     State(
-                        seq = n[0], x = n[1] / 100.0, z = n[2] / 100.0, level = n[3], h = n[4] * PI / 1800,
-                        vx = n[5] / 100.0, vz = n[6] / 100.0, emote = Emote.entries[n[7]], down = n[8] == 1,
-                        swings = n[9], shirt = n[10],
+                        seq = n[0], x = n[1] / 100.0, y = n[2] / 100.0, z = n[3] / 100.0, h = n[4] * PI / 1800,
+                        vx = n[5] / 100.0, vz = n[6] / 100.0, vy = n[7] / 100.0, emote = Emote.entries[n[8]],
+                        down = n[9] == 1, swings = n[10], shirt = n[11], held = Weapon.entries[n[12]],
                     )
                 }
                 else -> null
             }
         }
+
+        private fun weapon(s: String) = s.int(0, Weapon.entries.size - 1)?.let { Weapon.entries[it] }
 
         /** A plain decimal in [lo]..[hi]: optional leading '-', no '+', no leading zeros. */
         private fun String.int(lo: Int, hi: Int): Int? {

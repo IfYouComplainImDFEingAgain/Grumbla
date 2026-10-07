@@ -204,23 +204,36 @@ leaves the others.
 
 **Play:** long-press your current channel → **Block house**. The stick walks (relative to the
 camera; ⟲/⟳ turn the view, **Zoom** cycles distance). **WAVE**, **YAY**, **DANCE** and **SIT**
-toggle an emote; walking cancels it. **SLAP** swings at whoever is in front of you within arm's
-reach (1.5 m, ±75°), turning you to face them. They flop over as a ragdoll for 3 s and get up where
-they landed. The swatch top left changes your shirt colour.
+toggle an emote; walking cancels it. **JUMP** hops about 0.9 m: onto the couch, beds, tables,
+the car's bonnet, the railing upstairs (and off it into the stairwell). Walking climbs only 0.3 m
+(stairs, not furniture), walks off edges into a fall, and jumps stop at the ceiling. **SLAP** swings
+at whoever is in front of you within arm's reach (1.5 m, ±75°), turning you to face them. They flop
+over as a ragdoll for 3 s and get up where they landed. The swatch top left changes your shirt colour.
+
+**Weapons:** walk over one to pick it up (bats: the garage, the back yard, the front bedroom;
+potted plants: either side of the front door, the living room, the back yard, the bonus room). A
+spot refills 10 s after it's taken; after a throw or **DROP** you have to step off a spot before it
+gives you another. With a **bat** the big button is **BONK**: 2.2 m reach and a harder knock (×1.7).
+With a **plant** it's **THROW**: it flies a ballistic arc at 9 m/s, aimed (heading and loft) at the
+nearest player within 12 m and ±35° ahead, and breaks on the first wall, floor or figure it meets,
+knocking them over (×1.3). Getting knocked over drops whatever you held.
 
 **View:** a dollhouse camera above and behind you. Walls between the camera and you are cut down to
 0.7 m; while you're downstairs indoors, the upstairs isn't drawn; while you're upstairs, the
 downstairs rooms are skipped except around the stairwell. Within a floor, the painter's sort is by
 distance along the ground, which is right for things standing on one plane.
 
-**Wire protocol** — `dataID = notmumla/house/1`:
+**Wire protocol** — `dataID = notmumla/house/2` (v1, before jumping and weapons, is incompatible
+and ignored):
 
 | Message | Meaning |
 | --- | --- |
 | `hi`, `bye` | As in the tank arena |
-| `s <seq> <x> <z> <lvl> <h> <vx> <vz> <emote> <down> <swings> <shirt>` | My figure: position and velocity in cm and cm/s, floor 0/1, heading in 0.1°, emote 0–4 (none, wave, cheer, dance, sit), down = lying slapped, swings = slaps swung, shirt 0–7 |
-| `slap <victim> <swing>` | My swing number `<swing>` hit `<victim>` (to all players, so everyone plays the swing) |
-| `ow <slapper> <swing> <dir>` | That swing knocked me over, flying toward heading `<dir>` (0.1°) |
+| `s <seq> <x> <y> <z> <h> <vx> <vz> <vy> <emote> <down> <swings> <shirt> <held>` | My figure: feet position and velocity in cm and cm/s (`y` 0–700, `vy` ±1500 while jumping or falling), heading in 0.1°, emote 0–4 (none, wave, cheer, dance, sit), down = lying knocked over, swings = swings of hand or bat, shirt 0–7, held 0–2 (nothing, bat, plant) |
+| `slap <victim> <swing> <weapon>` | My swing number `<swing>`, with hand (0) or bat (1), hit `<victim>` (to all players, so everyone plays the swing) |
+| `ow <slapper> <n> <dir> <weapon>` | That swing (or for a plant, throw number `<n>`) knocked me over, flying toward heading `<dir>` (0.1°) |
+| `toss <n> <x> <y> <z> <h> <vy>` | I threw plant number `<n>` from (x, y, z) cm toward heading `<h>`, rising at `<vy>` cm/s |
+| `got <spot>` | I took the weapon at spot index `<spot>`: hide it for 10 s |
 
 **Rules:**
 
@@ -228,7 +241,16 @@ distance along the ground, which is right for things standing on one plane.
   on its own screen (reach plus slack for prediction error), on the same floor, not lying down;
   that it isn't down itself or in its 1.5 s of immunity after getting up; and that the swing number
   is new from that slapper. Then it falls and sends `ow`. A hostile client can refuse to fall, or
-  slap from up to 2.8 m, and no more.
+  slap from up to 2.8 m, and no more. A **bat** gets 3.5 m, but only if the swinger's last state
+  showed it holding one; otherwise the swing is judged as a hand.
+- **Plants name nobody.** Every client flies a `toss` the same way (closed form, world checks in
+  fixed 1/120 s steps), and each checks it only against **its own** figure; if it's hit (not
+  immune, throw number new from that thrower) it falls and sends `ow` with weapon 2. On other
+  screens the pot just breaks on whatever figure it meets, and the `ow` decides. A `toss` that
+  doesn't start within 3 m of where we see the thrower is ignored. Each toss spends a token even
+  into debt (one per plant picked up, so rare), because a lost throw would be invisible.
+- **Weapon spots are per client.** `got` hides a spot for its refill time; if it's lost, two
+  players can hold the same bat, which is harmless. Nobody checks a pickup.
 - **The ragdoll is cosmetic but repeatable.** Eleven Verlet particles at the joints (plus one at
   the chest so the torso has depth), stiff sticks, gravity, friction, and the house's floors, walls,
   furniture and stairs, in fixed 1/120 s steps counted from the start, so every client that starts
@@ -238,14 +260,18 @@ distance along the ground, which is right for things standing on one plane.
   like the tank's shell counter. A swing that hits uses one token for the `slap` (if none is left,
   it falls back to the counter, and the hit is lost).
 - **Rate and bounds** as in the tank arena: states every 333 ms while walking (and at once when
-  starting or stopping), every 1 s while still, under our 3.5/s bucket. Dead reckoning walks each
-  figure through the map (walls, stairs) for up to 600 ms and eases corrections over 150 ms.
+  starting or stopping, taking off or landing), every 1 s while still, under our 3.5/s bucket.
+  Dead reckoning runs each figure through the same walker physics as our own (`HouseWorld.simulate`:
+  walls, stairs, furniture tops, jumps, falls), walking for up to 600 ms and still falling for up
+  to 2 s, and eases corrections over 150 ms.
 
-**Sound:** a swish for every swing and a smack for every slap that lands, synthesized
+**Sound:** a swish for every swing or throw, a smack for a slap, a wooden bonk for a bat, a crash
+of pottery for a pot breaking, a hop for a jump and a pop for a pickup, synthesized
 (`HouseSounds`), by distance and pan. Silent while self-deafened; **SFX** mutes it.
 
-**Code:** `app/.../game/house/`: `HouseWorld` (map, floors, stairs, `move`), `Blocky` (skeleton,
-emote animations, `Ragdoll`), `HouseMessage`, `HouseArena`; `ui/game/HouseScreen.kt` (renderer and
+**Code:** `app/.../game/house/`: `HouseWorld` (map, floors, stairs, weapon spots, walker
+physics `simulate`), `Blocky` (skeleton, emote/carry/jump/swing/throw animations, `Ragdoll`), `Pot`
+(thrown plant), `HouseMessage`, `HouseArena`; `ui/game/HouseScreen.kt` (renderer and
 controls), `ui/game/HouseSounds.kt`; wired in `SessionManager.house`. Tests:
 `app/src/test/.../game/house/HouseTest.kt`.
 

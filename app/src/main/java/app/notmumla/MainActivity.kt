@@ -364,7 +364,8 @@ private fun AppNav() {
                 }
                 if (houseActive) {
                     app.notmumla.ui.game.HouseScreen(
-                        step = vm::stepHouse, onSlap = vm::houseSlap, onEmote = vm::houseEmote,
+                        step = vm::stepHouse, onAttack = vm::houseAttack, onJump = vm::houseJump, onDrop = vm::houseDrop,
+                        onEmote = vm::houseEmote,
                         onShirt = vm::houseShirt, onLeave = vm::leaveHouse, onPttHeld = gamePtt,
                         deafened = self?.selfDeaf == true,
                     )

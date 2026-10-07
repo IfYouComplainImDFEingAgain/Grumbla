@@ -54,6 +54,7 @@ import app.notmumla.game.house.Emote
 import app.notmumla.game.house.HouseInput
 import app.notmumla.game.house.HouseView
 import app.notmumla.game.house.HouseWorld
+import app.notmumla.game.house.Weapon
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -76,6 +77,11 @@ private val WallOutside = Color(0xFFAFC2D6)
 private val WallCap = Color(0xFF5E554C)
 private val RailColor = Color(0xFF8B5E3C)
 private val FenceColor = Color(0xFFF4F1EA)
+private val Terracotta = Color(0xFFC0603A)
+private val Foliage = Color(0xFF3FA34D)
+private val Dirt = Color(0xFF5B3A24)
+private val BatWood = Color(0xFFD9A866)
+private val BatGrip = Color(0xFF3A2A20)
 /** Shirt colours, indexed by the shirt number every client sends. */
 internal val Shirts = listOf(
     Color(0xFF2F6BFF), Color(0xFFE5383B), Color(0xFF2BB673), Color(0xFFFF8C1A),
@@ -97,12 +103,14 @@ private var houseSound = true
 /**
  * The block house, full screen: a dollhouse view that follows our figure from above, cutting away
  * walls in front of it and hiding the upstairs while we're downstairs. Stick to walk, buttons to
- * wave/cheer/dance/sit, SLAP to slap whoever's in front of us.
+ * wave/cheer/dance/sit and jump; the big button slaps, swings the bat or throws the plant in hand.
  */
 @Composable
 fun HouseScreen(
     step: (HouseInput) -> HouseView?,
-    onSlap: () -> Unit,
+    onAttack: () -> Unit,
+    onJump: () -> Unit,
+    onDrop: () -> Unit,
     onEmote: (Emote) -> Unit,
     onShirt: () -> Unit,
     onLeave: () -> Unit,
@@ -152,7 +160,19 @@ fun HouseScreen(
     val players by remember { derivedStateOf { frame?.players.orEmpty() } }
     val activeEmote by remember { derivedStateOf { frame?.emote ?: Emote.NONE } }
     val shirt by remember { derivedStateOf { frame?.shirt ?: 0 } }
-    val banner by remember { derivedStateOf { frame?.takeIf { it.down }?.let { "SLAPPED${it.slappedBy?.let { b -> " by $b" } ?: ""}!" } } }
+    val held by remember { derivedStateOf { frame?.held ?: Weapon.NONE } }
+    val banner by remember {
+        derivedStateOf {
+            frame?.takeIf { it.down }?.let {
+                val what = when (it.slappedWith) {
+                    Weapon.NONE -> "SLAPPED"
+                    Weapon.BAT -> "BONKED"
+                    Weapon.PLANT -> "BEANED"
+                }
+                "$what${it.slappedBy?.let { b -> " by $b" } ?: ""}!"
+            }
+        }
+    }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(Beyond).swallowTouches()) {
         val lift = controlLift(maxWidth, maxHeight)
@@ -215,13 +235,23 @@ fun HouseScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (held != Weapon.NONE) TapButton("DROP", 56, active = false, onTap = onDrop)
                 for ((e, label) in listOf(Emote.WAVE to "WAVE", Emote.CHEER to "YAY", Emote.DANCE to "DANCE", Emote.SIT to "SIT")) {
                     TapButton(label, 56, active = activeEmote == e) { onEmote(e) }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.Bottom) {
-                if (onPttHeld != null) HoldButton("TALK", 72, Hud, onHeld = onPttHeld)
-                TapButton("SLAP", 104, active = false, color = SlapColor, onTap = onSlap)
+                // TALK over JUMP, so the cluster stays clear of the stick on a narrow phone.
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (onPttHeld != null) HoldButton("TALK", 64, Hud, onHeld = onPttHeld)
+                    TapButton("JUMP", 80, active = false, onTap = onJump)
+                }
+                val action = when (held) {
+                    Weapon.NONE -> "SLAP"
+                    Weapon.BAT -> "BONK"
+                    Weapon.PLANT -> "THROW"
+                }
+                TapButton(action, 104, active = held != Weapon.NONE, color = SlapColor, onTap = onAttack)
             }
         }
     }
@@ -421,9 +451,12 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
     for (p in HouseWorld.paths) drawFloor(cam, p, 0.0)
 
     val figures = listOf(me) + f.others
-    fun hidden(fig: HouseView.Figure) =
-        (fig.level == 1 && !showUpper) ||
-            (fig.level == 0 && myLevel == 1 && HouseWorld.inHouse(fig.x, fig.z) && !nearStairwell(fig.x, fig.z))
+    fun hiddenAt(x: Double, y: Double, z: Double): Boolean {
+        val level = HouseWorld.levelOf(y)
+        return (level == 1 && !showUpper) ||
+            (level == 0 && myLevel == 1 && HouseWorld.inHouse(x, z) && !nearStairwell(x, z))
+    }
+    fun hidden(fig: HouseView.Figure) = hiddenAt(fig.x, fig.y, fig.z)
 
     for (level in 0..(if (showUpper) 1 else 0)) {
         val y = level * HouseWorld.STORY
@@ -449,6 +482,19 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
             if (fig.level != level || hidden(fig)) continue
             val shirt = Shirts[fig.shirt.coerceIn(0, Shirts.size - 1)]
             items += cam.depthH(fig.x, fig.z) to { drawFigure(cam, fig, shirt, 1f) }
+        }
+        for (k in f.spots) {
+            val sp = HouseWorld.spots[k]
+            if (HouseWorld.levelOf(sp.y) != level || hiddenAt(sp.x, sp.y, sp.z)) continue
+            items += cam.depthH(sp.x, sp.z) to { drawSpot(cam, sp) }
+        }
+        for (pot in f.pots) {
+            if (HouseWorld.levelOf(pot.y) != level || hiddenAt(pot.x, pot.y, pot.z)) continue
+            items += cam.depthH(pot.x, pot.z) to { drawFlyingPot(cam, pot) }
+        }
+        for (sh in f.shards) {
+            if (HouseWorld.levelOf(sh.y) != level || hiddenAt(sh.x, sh.y, sh.z)) continue
+            items += cam.depthH(sh.x, sh.z) to { drawShards(cam, sh) }
         }
         items.sortByDescending { it.first }
         for ((_, draw) in items) draw()
@@ -506,15 +552,95 @@ private fun DrawScope.drawFigure(cam: HouseCam, fig: HouseView.Figure, shirt: Co
         return OBox(center, arrayOf(r, a, f), doubleArrayOf(Blocky.LIMB, (len + above) / 2, Blocky.LIMB), color)
     }
 
-    val boxes = listOf(
+    val boxes = mutableListOf(
         OBox(add3(hip, sub3(neck, hip), 0.5), axes, doubleArrayOf(Blocky.TORSO_X, (Blocky.NECK_Y - Blocky.HIP_Y) / 2, Blocky.TORSO_Z), shirt),
         OBox(p(Blocky.HEAD), axes, doubleArrayOf(Blocky.HEAD_HALF, Blocky.HEAD_HALF, Blocky.HEAD_HALF), Skin, face = true),
         limb(p(Blocky.SHOULDER_L), p(Blocky.HAND_L), Blocky.ARM_ABOVE, Blocky.ARM, Skin),
         limb(p(Blocky.SHOULDER_R), p(Blocky.HAND_R), Blocky.ARM_ABOVE, Blocky.ARM, Skin),
         limb(p(Blocky.HIP_L), p(Blocky.FOOT_L), 0.0, Blocky.LEG, Pants),
         limb(p(Blocky.HIP_R), p(Blocky.FOOT_R), 0.0, Blocky.LEG, Pants),
-    ).sortedByDescending { cam.toCam(it.center)[2] }
+    )
+    when (fig.held) {
+        Weapon.NONE -> {}
+        Weapon.BAT -> {
+            // Out of the fist: upright while the arm hangs, along the arm as it swings.
+            val hand = p(Blocky.HAND_R)
+            val arm = norm3(sub3(hand, p(Blocky.SHOULDER_R)))
+            val dir = norm3(add3(arm, up, max(0.0, -dot3(arm, up)) * 1.5))
+            boxes += stick(add3(hand, dir, -0.1), dir, 0.4, 0.045, BatGrip, fwd)
+            boxes += stick(add3(hand, dir, 0.3), dir, 0.55, 0.08, BatWood, fwd)
+        }
+        Weapon.PLANT -> {
+            val mid = add3(p(Blocky.HAND_L), sub3(p(Blocky.HAND_R), p(Blocky.HAND_L)), 0.5)
+            boxes += plantBoxes(add3(add3(mid, up, 0.12), fwd, 0.05), axes)
+        }
+    }
+    boxes.sortByDescending { cam.toCam(it.center)[2] }
     for (b in boxes) drawOBox(cam, b, alpha, fig.down)
+}
+
+/** A square-section stick from [from] along [dir] for [len], [half] thick. */
+private fun stick(from: DoubleArray, dir: DoubleArray, len: Double, half: Double, color: Color, hint: DoubleArray): OBox {
+    var r = cross3(dir, hint)
+    if (dot3(r, r) < 1e-6) r = cross3(dir, v3(1.0, 0.0, 0.0))
+    r = norm3(r)
+    return OBox(add3(from, dir, len / 2), arrayOf(r, dir, cross3(r, dir)), doubleArrayOf(half, len / 2, half), color)
+}
+
+/** A potted plant whose pot's middle is at [c]: pot, soil-topped, and a leafy block on top. */
+private fun plantBoxes(c: DoubleArray, ax: Array<DoubleArray>) = listOf(
+    OBox(c, ax, doubleArrayOf(0.16, 0.15, 0.16), Terracotta),
+    OBox(add3(c, ax[1], 0.32), ax, doubleArrayOf(0.2, 0.17, 0.2), Foliage),
+)
+
+private val WorldAxes = arrayOf(v3(1.0, 0.0, 0.0), v3(0.0, 1.0, 0.0), v3(0.0, 0.0, 1.0))
+
+private fun DrawScope.drawBoxes(cam: HouseCam, boxes: List<OBox>, alpha: Float = 1f) {
+    for (b in boxes.sortedByDescending { cam.toCam(it.center)[2] }) drawOBox(cam, b, alpha, false)
+}
+
+/** A weapon waiting to be picked up: a plant standing on the floor, or a bat lying on it. */
+private fun DrawScope.drawSpot(cam: HouseCam, sp: HouseWorld.Spot) {
+    when (sp.weapon) {
+        Weapon.NONE -> {}
+        Weapon.PLANT -> drawBoxes(cam, plantBoxes(v3(sp.x, sp.y + 0.15, sp.z), WorldAxes))
+        Weapon.BAT -> {
+            val dir = norm3(v3(1.0, 0.0, 0.35))
+            val from = v3(sp.x - dir[0] * 0.48, sp.y + 0.08, sp.z - dir[2] * 0.48)
+            drawBoxes(cam, listOf(
+                stick(from, dir, 0.4, 0.045, BatGrip, v3(0.0, 1.0, 0.0)),
+                stick(add3(from, dir, 0.4), dir, 0.55, 0.08, BatWood, v3(0.0, 1.0, 0.0)),
+            ))
+        }
+    }
+}
+
+/** A plant in flight, tumbling end over end along its path. */
+private fun DrawScope.drawFlyingPot(cam: HouseCam, pot: HouseView.FlyingPot) {
+    val f = v3(sin(pot.heading), 0.0, cos(pot.heading))
+    val r = v3(cos(pot.heading), 0.0, -sin(pot.heading))
+    val up = v3(0.0, 1.0, 0.0)
+    val u = add3(DoubleArray(3) { up[it] * cos(pot.spin) }, f, sin(pot.spin))
+    val fw = add3(DoubleArray(3) { f[it] * cos(pot.spin) }, up, -sin(pot.spin))
+    drawBoxes(cam, plantBoxes(v3(pot.x, pot.y, pot.z), arrayOf(r, u, fw)))
+}
+
+/** A pot that just broke: bits of pot, soil and leaves flying apart and dropping. */
+private fun DrawScope.drawShards(cam: HouseCam, sh: HouseView.Shards) {
+    val t = sh.ageMs / 1000.0
+    val floor = HouseWorld.groundAt(sh.x, sh.z, sh.y)
+    val rnd = kotlin.random.Random(sh.seed)
+    val alpha = (1f - sh.ageMs.toFloat() / app.notmumla.game.house.Pot.SHARDS_MS).coerceIn(0f, 1f)
+    val bits = List(9) { i ->
+        val a = rnd.nextDouble(0.0, 2 * PI)
+        val sp = rnd.nextDouble(1.0, 3.0)
+        val vy = rnd.nextDouble(1.0, 4.0)
+        val y = max(floor + 0.05, sh.y + vy * t - HouseWorld.GRAVITY * t * t / 2)
+        val c = v3(sh.x + sin(a) * sp * t, y, sh.z + cos(a) * sp * t)
+        val color = when (i % 3) { 0 -> Terracotta; 1 -> Foliage; else -> Dirt }
+        OBox(c, WorldAxes, doubleArrayOf(0.06, 0.05, 0.06), color)
+    }
+    drawBoxes(cam, bits, alpha)
 }
 
 private fun DrawScope.drawOBox(cam: HouseCam, b: OBox, alpha: Float, dazed: Boolean) {
