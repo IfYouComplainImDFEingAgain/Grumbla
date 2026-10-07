@@ -145,20 +145,29 @@ object HouseWorld {
     /**
      * Run a walker [b] = (x, y, z, vy) for [seconds], walking at (vx, vz) all the while: sliding
      * along walls, stepping up stairs and low things, falling off edges, jumping if vy > 0. In small
-     * fixed steps, so the same inputs give the same path on every client. Returns [b].
+     * fixed steps, so the same inputs give the same path on every client. The [car] (x, z, h), if
+     * given, is in the way too. Returns [b].
      */
-    fun simulate(b: DoubleArray, vx: Double, vz: Double, seconds: Double): DoubleArray {
+    fun simulate(b: DoubleArray, vx: Double, vz: Double, seconds: Double, car: DoubleArray? = null): DoubleArray {
         if (seconds <= 0) return b
         val n = maxOf(kotlin.math.ceil(seconds / MAX_DT).toInt(), kotlin.math.ceil(kotlin.math.hypot(vx, vz) * seconds / MAX_STRIDE).toInt())
         val dt = seconds / n
-        repeat(n) { stepBody(b, vx * dt, vz * dt, dt) }
+        repeat(n) { stepBody(b, vx * dt, vz * dt, dt, car) }
         return b
     }
+
+    /**
+     * Whether a walker at height [y] moving from (x, z) to (nx, nz) runs into the [car] (x, z, h).
+     * Only moving in counts: someone the car rolled onto can still walk out of it.
+     */
+    fun intoCar(car: DoubleArray?, x: Double, z: Double, nx: Double, nz: Double, y: Double): Boolean =
+        car != null && y < Car.HEIGHT &&
+            Car.contains(car[0], car[1], car[2], nx, nz, RADIUS) && !Car.contains(car[0], car[1], car[2], x, z, RADIUS)
 
     /** Whether a walker at (x, y, z) is standing on something, rather than in the air. */
     fun grounded(x: Double, y: Double, z: Double) = y <= groundAt(x, z, y) + 1e-6
 
-    private fun stepBody(b: DoubleArray, dx: Double, dz: Double, dt: Double) {
+    private fun stepBody(b: DoubleArray, dx: Double, dz: Double, dt: Double, car: DoubleArray?) {
         var x = b[0]
         var y = b[1]
         var z = b[2]
@@ -169,7 +178,7 @@ object HouseWorld {
             val nx = if (axis == 0) x + dx else x
             val nz = if (axis == 0) z else z + dz
             if (nx == x && nz == z) continue
-            if (!free(nx, nz, y)) continue
+            if (!free(nx, nz, y) || intoCar(car, x, z, nx, nz, y)) continue
             var ny = y
             if (!air) {
                 val g = groundAt(nx, nz, y)
@@ -310,12 +319,7 @@ object HouseWorld {
         thing(0, -4.9, -1.2, 0.0, 0.95, 4.2, 4.8, 0xFFE8E2D4, 0xFF6E6A66)
         thing(0, -8.8, -8.0, 0.0, 2.0, 2.4, 3.2, 0xFFDCE3E8)
         thing(0, -5.2, -3.6, 0.0, 0.75, 2.0, 3.0, 0xFFC28F5B, 0xFFD3A06A)
-        // Garage: a blocky car, wheels and all, and a workbench.
-        thing(0, 4.8, 7.2, 0.3, 1.1, -2.6, 2.4, 0xFFD7263D)
-        thing(0, 5.0, 7.0, 1.1, 1.75, -1.2, 1.1, 0xFF9FD3F2, 0xFFC0392B)
-        for ((wx, wz) in listOf(4.65 to -1.6, 7.0 to -1.6, 4.65 to 1.4, 7.0 to 1.4)) {
-            thing(0, wx, wx + 0.35, 0.0, 0.6, wz - 0.35, wz + 0.35, 0xFF22222A)
-        }
+        // Garage: a workbench (the car that parks here is [Car], and moves).
         thing(0, 8.1, 8.8, 0.0, 0.95, 0.5, 4.2, 0xFF8A6A4A, 0xFF9E7C58)
 
         // Front bedroom: bed and dresser.

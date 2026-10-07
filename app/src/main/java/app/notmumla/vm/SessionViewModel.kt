@@ -116,6 +116,7 @@ class SessionViewModel @Inject constructor(
     fun houseAttack() = sessionManager.house.attack()
     fun houseJump() = sessionManager.house.jump()
     fun houseDrop() = sessionManager.house.drop()
+    fun houseCar() = sessionManager.house.car()
     fun houseEmote(e: app.notmumla.game.house.Emote) = sessionManager.house.emote(e)
     fun houseShirt() = sessionManager.house.cycleShirt()
 }

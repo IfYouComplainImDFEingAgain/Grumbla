@@ -365,6 +365,7 @@ private fun AppNav() {
                 if (houseActive) {
                     app.notmumla.ui.game.HouseScreen(
                         step = vm::stepHouse, onAttack = vm::houseAttack, onJump = vm::houseJump, onDrop = vm::houseDrop,
+                        onCar = vm::houseCar,
                         onEmote = vm::houseEmote,
                         onShirt = vm::houseShirt, onLeave = vm::leaveHouse, onPttHeld = gamePtt,
                         deafened = self?.selfDeaf == true,

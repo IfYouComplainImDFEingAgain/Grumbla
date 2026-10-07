@@ -205,7 +205,7 @@ leaves the others.
 **Play:** long-press your current channel → **Block house**. The stick walks (relative to the
 camera; ⟲/⟳ turn the view, **Zoom** cycles distance). **WAVE**, **YAY**, **DANCE** and **SIT**
 toggle an emote; walking cancels it. **JUMP** hops about 0.9 m: onto the couch, beds, tables,
-the car's bonnet, the railing upstairs (and off it into the stairwell). Walking climbs only 0.3 m
+the railing upstairs (and off it into the stairwell). Walking climbs only 0.3 m
 (stairs, not furniture), walks off edges into a fall, and jumps stop at the ceiling. **SLAP** swings
 at whoever is in front of you within arm's reach (1.5 m, ±75°), turning you to face them. They flop
 over as a ragdoll for 3 s and get up where they landed. The swatch top left changes your shirt colour.
@@ -218,20 +218,36 @@ With a **plant** it's **THROW**: it flies a ballistic arc at 9 m/s, aimed (headi
 nearest player within 12 m and ±35° ahead, and breaks on the first wall, floor or figure it meets,
 knocking them over (×1.3). Getting knocked over drops whatever you held.
 
+**The car:** an open-top car parks in the garage. Stand within 1.2 m of its side and **DRIVE**
+gets you in (anything you held is dropped). Then the stick points where
+to go: the car speeds up and steers toward it (up to 11 m/s, turning no tighter than a 4 m
+radius), pulling back while rolling brakes, and from (nearly) standing, a stick pointing behind
+backs it up. The big button is **HONK**, **EXIT** gets out by the driver's door (or the nearest
+gap round it) and the car stops dead. It's solid: walkers and pots stop at it, parked or driven.
+- **Health** 100. Hitting something at over 3 m/s costs 9 per m/s over (a glancing blow counts
+  only the speed into the wall, and only once per contact); a slap at the car costs 4, a bat 12, a
+  plant 15. Below 40 it smokes, below 15 it burns; at 0 it **blows up**: the driver is thrown out
+  dead (getting up back at the start), anyone within 4.5 m of its middle (plus its half-width) is
+  knocked flying, and the burnt-out shell burns for 8 s before a new car is back in the garage.
+- **Running people over:** anyone the car drives into at 2.5 m/s or more is knocked over (×2.2),
+  thrown the way it's going and out to their side.
+
 **View:** a dollhouse camera above and behind you. Walls between the camera and you are cut down to
 0.7 m; while you're downstairs indoors, the upstairs isn't drawn; while you're upstairs, the
 downstairs rooms are skipped except around the stairwell. Within a floor, the painter's sort is by
 distance along the ground, which is right for things standing on one plane.
 
-**Wire protocol** — `dataID = notmumla/house/2` (v1, before jumping and weapons, is incompatible
-and ignored):
+**Wire protocol** — `dataID = notmumla/house/3` (v2, before the car, and v1, before jumping and
+weapons, are incompatible and ignored):
 
 | Message | Meaning |
 | --- | --- |
 | `hi`, `bye` | As in the tank arena |
-| `s <seq> <x> <y> <z> <h> <vx> <vz> <vy> <emote> <down> <swings> <shirt> <held>` | My figure: feet position and velocity in cm and cm/s (`y` 0–700, `vy` ±1500 while jumping or falling), heading in 0.1°, emote 0–4 (none, wave, cheer, dance, sit), down = lying knocked over, swings = swings of hand or bat, shirt 0–7, held 0–2 (nothing, bat, plant) |
-| `slap <victim> <swing> <weapon>` | My swing number `<swing>`, with hand (0) or bat (1), hit `<victim>` (to all players, so everyone plays the swing) |
-| `ow <slapper> <n> <dir> <weapon>` | That swing (or for a plant, throw number `<n>`) knocked me over, flying toward heading `<dir>` (0.1°) |
+| `s <seq> <x> <y> <z> <h> <vx> <vz> <vy> <emote> <down> <swings> <shirt> <held> <car> <turn>` | My figure: feet position and velocity in cm and cm/s (`vx`, `vz` ±1210, `y` 0–700, `vy` ±1500 while jumping or falling), heading in 0.1°, emote 0–4 (none, wave, cheer, dance, sit), down = lying knocked over, swings = swings of hand or bat (honks, in the car), shirt 0–7, held 0–2 (nothing, bat, plant). While I drive, `car` is its health 0–100 (else −1), position, heading and velocity are the car's, and `turn` is how fast it's turning, 0.1°/s (±2000) |
+| `slap <victim> <swing> <weapon>` | My swing number `<swing>`, with hand (0) or bat (1), hit `<victim>` (to all players, so everyone plays the swing); if they're driving, it hit their car |
+| `ow <slapper> <n> <dir> <weapon>` | That swing (or for a plant, throw number `<n>`) knocked me over, flying toward heading `<dir>` (0.1°); weapon 3 = `<slapper>`'s car ran me over, 4 = its blast (`<n>` is then always 1) |
+| `car <x> <z> <h> <health>` | I got out and left the car at (x, z) cm facing `<h>` with `<health>` left (also re-sent when someone joins, by whoever parked it last) |
+| `boom <x> <z>` | The car I was driving blew up at (x, z) cm |
 | `toss <n> <x> <y> <z> <h> <vy>` | I threw plant number `<n>` from (x, y, z) cm toward heading `<h>`, rising at `<vy>` cm/s |
 | `got <spot>` | I took the weapon at spot index `<spot>`: hide it for 10 s |
 
@@ -259,6 +275,18 @@ and ignored):
 - **A swing without a hit costs nothing extra:** the `swings` counter in the next state replays it,
   like the tank's shell counter. A swing that hits uses one token for the `slap` (if none is left,
   it falls back to the counter, and the hit is lost).
+- **The driver owns the car.** It runs the physics and sends the car's pose in its states; everyone
+  else follows them along the curve (`Car.coast`, stopping at walls) for up to 600 ms. Getting in
+  needs the car free as far as you know; if two people get in at once, the lower session keeps it
+  on every client and the other is put out beside it. Parked, the car stays where its last driver
+  left it (`car` message); someone who joins after that driver has gone sees it back in the garage.
+- **The driver decides damage, victims decide falls.** Only the driver's client takes health off:
+  its own crashes, a `slap` at it from someone within 2.2 m of its side (2.9 m with a bat), a pot
+  that hits it there. Each walker checks itself against the car as it sees it, falls if it's
+  moving fast enough and sends `ow` (weapon 3). On `boom` from the player we think is driving,
+  near where we see the car, it's a wreck; each client checks its own figure against the blast
+  and sends `ow` (weapon 4). A hostile driver can blow up the car anywhere near where it is, and a
+  hostile walker can refuse to be run over, and no more.
 - **Rate and bounds** as in the tank arena: states every 333 ms while walking (and at once when
   starting or stopping, taking off or landing), every 1 s while still, under our 3.5/s bucket.
   Dead reckoning runs each figure through the same walker physics as our own (`HouseWorld.simulate`:
@@ -266,11 +294,12 @@ and ignored):
   to 2 s, and eases corrections over 150 ms.
 
 **Sound:** a swish for every swing or throw, a smack for a slap, a wooden bonk for a bat, a crash
-of pottery for a pot breaking, a hop for a jump and a pop for a pickup, synthesized
+of pottery for a pot breaking, a hop for a jump and a pop for a pickup, a two-tone horn, a metal
+crunch when the car hits something and an explosion, synthesized
 (`HouseSounds`), by distance and pan. Silent while self-deafened; **SFX** mutes it.
 
 **Code:** `app/.../game/house/`: `HouseWorld` (map, floors, stairs, weapon spots, walker
-physics `simulate`), `Blocky` (skeleton, emote/carry/jump/swing/throw animations, `Ragdoll`), `Pot`
+physics `simulate`), `Car` (driving, collisions, dead reckoning, the seat), `Blocky` (skeleton, emote/carry/jump/swing/throw animations, `Ragdoll`), `Pot`
 (thrown plant), `HouseMessage`, `HouseArena`; `ui/game/HouseScreen.kt` (renderer and
 controls), `ui/game/HouseSounds.kt`; wired in `SessionManager.house`. Tests:
 `app/src/test/.../game/house/HouseTest.kt`.

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.notmumla.game.house.Blocky
+import app.notmumla.game.house.Car
 import app.notmumla.game.house.Emote
 import app.notmumla.game.house.HouseInput
 import app.notmumla.game.house.HouseView
@@ -86,6 +87,18 @@ private val Foliage = Color(0xFF3FA34D)
 private val Dirt = Color(0xFF5B3A24)
 private val BatWood = Color(0xFFD9A866)
 private val BatGrip = Color(0xFF3A2A20)
+private val CarPaint = Color(0xFFD7263D)
+private val CarBurnt = Color(0xFF2B2624)
+private val Tyre = Color(0xFF22222A)
+private val Cockpit = Color(0xFF3A3236)
+private val Headlight = Color(0xFFFFF4C2)
+private val Taillight = Color(0xFFB0121E)
+private val Windscreen = Color(0x6E9FD3F2)
+private val Smoke = Color(0xFF8E8E8E)
+private val BlackSmoke = Color(0xFF2E2E2E)
+private val Flame = Color(0xFFFF8A1F)
+private val FlameCore = Color(0xFFFFE066)
+private val DriveColor = Color(0xFF7CE38B)
 /** Shirt colours, indexed by the shirt number every client sends. */
 internal val Shirts = listOf(
     Color(0xFF2F6BFF), Color(0xFFE5383B), Color(0xFF2BB673), Color(0xFFFF8C1A),
@@ -108,6 +121,8 @@ private var houseSound = true
  * The block house, full screen: a dollhouse view that follows our figure from above, cutting away
  * walls in front of it and hiding the upstairs while we're downstairs. Stick to walk, buttons to
  * wave/cheer/dance/sit and jump; the big button slaps, swings the bat or throws the plant in hand.
+ * Beside the car, DRIVE gets in: then the stick steers toward where it points, the big button honks
+ * and EXIT gets out.
  */
 @Composable
 fun HouseScreen(
@@ -115,6 +130,7 @@ fun HouseScreen(
     onAttack: () -> Unit,
     onJump: () -> Unit,
     onDrop: () -> Unit,
+    onCar: () -> Unit,
     onEmote: (Emote) -> Unit,
     onShirt: () -> Unit,
     onLeave: () -> Unit,
@@ -139,6 +155,8 @@ fun HouseScreen(
     var frame by remember { mutableStateOf<HouseView?>(null) }
     var camYaw by remember { mutableStateOf(0.0) }
     var camY by remember { mutableStateOf(Double.NaN) }
+    /** Pulled back while driving, to see what's coming. */
+    var drivingZoom by remember { mutableStateOf(1.0) }
     LaunchedEffect(Unit) {
         var last = 0L
         while (true) {
@@ -154,6 +172,7 @@ fun HouseScreen(
                 if (f != null) {
                     val ty = f.me.y
                     camY = if (camY.isNaN()) ty else camY + (ty - camY) * min(1.0, dt * 6)
+                    drivingZoom += ((if (f.driving) 1.35 else 1.0) - drivingZoom) * min(1.0, dt * 2.5)
                     if (!quiet) sfx.play(f.sounds, f.me.x, f.me.z, camYaw)
                 }
                 frame = f
@@ -165,6 +184,9 @@ fun HouseScreen(
     val activeEmote by remember { derivedStateOf { frame?.emote ?: Emote.NONE } }
     val shirt by remember { derivedStateOf { frame?.shirt ?: 0 } }
     val held by remember { derivedStateOf { frame?.held ?: Weapon.NONE } }
+    val driving by remember { derivedStateOf { frame?.driving == true } }
+    val canDrive by remember { derivedStateOf { frame?.canDrive == true } }
+    val carHealth by remember { derivedStateOf { frame?.car?.health?.toInt() ?: 0 } }
     val banner by remember {
         derivedStateOf {
             frame?.takeIf { it.down }?.let {
@@ -172,6 +194,8 @@ fun HouseScreen(
                     Weapon.NONE -> "SLAPPED"
                     Weapon.BAT -> "BONKED"
                     Weapon.PLANT -> "BEANED"
+                    Weapon.CAR -> "RUN OVER"
+                    Weapon.BLAST -> "BLOWN UP"
                 }
                 "$what${it.slappedBy?.let { b -> " by $b" } ?: ""}!"
             }
@@ -181,7 +205,7 @@ fun HouseScreen(
     BoxWithConstraints(Modifier.fillMaxSize().background(Beyond).swallowTouches()) {
         val lift = controlLift(maxWidth, maxHeight)
         Canvas(Modifier.fillMaxSize()) {
-            frame?.let { drawHouse(it, camYaw, if (camY.isNaN()) it.me.y else camY, Zooms[zoom]) }
+            frame?.let { drawHouse(it, camYaw, if (camY.isNaN()) it.me.y else camY, Zooms[zoom] * drivingZoom) }
         }
 
         Column(Modifier.safeDrawingPadding().padding(12.dp)) {
@@ -200,6 +224,13 @@ fun HouseScreen(
                     sound = !sound
                     houseSound = sound
                 }
+            }
+            if (driving) {
+                Text(
+                    "CAR ${carHealth.coerceIn(0, 100)}%", color = if (carHealth < Car.SMOKING) SlapColor else Hud,
+                    fontSize = 15.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(top = 8.dp).background(HudShade).padding(horizontal = 6.dp, vertical = 2.dp),
+                )
             }
             Column(Modifier.padding(top = 8.dp)) {
                 feed.forEach { Text(it, color = Hud, fontSize = 13.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.background(HudShade).padding(horizontal = 4.dp)) }
@@ -238,7 +269,8 @@ fun HouseScreen(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!driving) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (canDrive) TapButton("DRIVE", 56, active = true, color = DriveColor, onTap = onCar)
                 if (held != Weapon.NONE) TapButton("DROP", 56, active = false, onTap = onDrop)
                 for ((e, label) in listOf(Emote.WAVE to "WAVE", Emote.CHEER to "YAY", Emote.DANCE to "DANCE", Emote.SIT to "SIT")) {
                     TapButton(label, 56, active = activeEmote == e) { onEmote(e) }
@@ -248,14 +280,16 @@ fun HouseScreen(
                 // TALK over JUMP, so the cluster stays clear of the stick on a narrow phone.
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (onPttHeld != null) HoldButton("TALK", 64, Hud, onHeld = onPttHeld)
-                    TapButton("JUMP", 80, active = false, onTap = onJump)
+                    if (driving) TapButton("EXIT", 80, active = true, color = DriveColor, onTap = onCar)
+                    else TapButton("JUMP", 80, active = false, onTap = onJump)
                 }
-                val action = when (held) {
-                    Weapon.NONE -> "SLAP"
-                    Weapon.BAT -> "BONK"
-                    Weapon.PLANT -> "THROW"
+                val action = when {
+                    driving -> "HONK"
+                    held == Weapon.BAT -> "BONK"
+                    held == Weapon.PLANT -> "THROW"
+                    else -> "SLAP"
                 }
-                TapButton(action, 104, active = held != Weapon.NONE, color = SlapColor, onTap = onAttack)
+                TapButton(action, 104, active = held != Weapon.NONE || driving, color = SlapColor, onTap = onAttack)
             }
         }
     }
@@ -629,8 +663,15 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
             tops[i] = top
             items += Drawn(d, b.x0, b.x1, b.y0, top, b.z0, b.z1) { drawBlock(cam, i, tops) }
         }
+        val car = f.car
+        if (car != null && level == 0 && !hiddenAt(car.x, 0.0, car.z)) {
+            // The turned car's bounding box, for the painter's order.
+            val ex = abs(cos(car.h)) * Car.HALF_W + abs(sin(car.h)) * Car.HALF_L
+            val ez = abs(sin(car.h)) * Car.HALF_W + abs(cos(car.h)) * Car.HALF_L
+            items += Drawn(cam.depthH(car.x, car.z), car.x - ex, car.x + ex, 0.0, 1.9, car.z - ez, car.z + ez) { drawCar(cam, car) }
+        }
         for (fig in figures) {
-            if (fig.level != level || hidden(fig)) continue
+            if (fig.inCar || fig.level != level || hidden(fig)) continue
             val shirt = Shirts[fig.shirt.coerceIn(0, Shirts.size - 1)]
             // The body's own footprint, not its swinging limbs: those may poke through a wall,
             // and a box that overlaps everything around it can't be put in order.
@@ -656,7 +697,7 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
         for (d in paintersOrder(cam, items)) d.draw(this)
     }
     // A faint copy of us over everything, so a tree or a wall never loses us.
-    drawFigure(cam, me, Shirts[me.shirt.coerceIn(0, Shirts.size - 1)], 0.3f)
+    if (!me.inCar) drawFigure(cam, me, Shirts[me.shirt.coerceIn(0, Shirts.size - 1)], 0.3f)
 
     // Name tags on top of everything; players we can't see get a faded one.
     for (fig in f.others) {
@@ -687,7 +728,8 @@ private fun DrawScope.nameTag(at: Offset, name: String, alpha: Float) {
 /** A box with its own axes [ax] (three unit vectors) and half-sizes [half]. */
 private class OBox(val center: DoubleArray, val ax: Array<DoubleArray>, val half: DoubleArray, val color: Color, val face: Boolean = false)
 
-private fun DrawScope.drawFigure(cam: HouseCam, fig: HouseView.Figure, shirt: Color, alpha: Float) {
+/** [legs] false leaves them out: in the car they'd show through the floor of it. */
+private fun DrawScope.drawFigure(cam: HouseCam, fig: HouseView.Figure, shirt: Color, alpha: Float, legs: Boolean = true) {
     val j = fig.joints
     fun p(i: Int) = v3(j[i * 3], j[i * 3 + 1], j[i * 3 + 2])
     val hip = add3(p(Blocky.HIP_L), sub3(p(Blocky.HIP_R), p(Blocky.HIP_L)), 0.5)
@@ -713,11 +755,13 @@ private fun DrawScope.drawFigure(cam: HouseCam, fig: HouseView.Figure, shirt: Co
         OBox(p(Blocky.HEAD), axes, doubleArrayOf(Blocky.HEAD_HALF, Blocky.HEAD_HALF, Blocky.HEAD_HALF), Skin, face = true),
         limb(p(Blocky.SHOULDER_L), p(Blocky.HAND_L), Blocky.ARM_ABOVE, Blocky.ARM, Skin),
         limb(p(Blocky.SHOULDER_R), p(Blocky.HAND_R), Blocky.ARM_ABOVE, Blocky.ARM, Skin),
-        limb(p(Blocky.HIP_L), p(Blocky.FOOT_L), 0.0, Blocky.LEG, Pants),
-        limb(p(Blocky.HIP_R), p(Blocky.FOOT_R), 0.0, Blocky.LEG, Pants),
     )
+    if (legs) {
+        boxes += limb(p(Blocky.HIP_L), p(Blocky.FOOT_L), 0.0, Blocky.LEG, Pants)
+        boxes += limb(p(Blocky.HIP_R), p(Blocky.FOOT_R), 0.0, Blocky.LEG, Pants)
+    }
     when (fig.held) {
-        Weapon.NONE -> {}
+        Weapon.NONE, Weapon.CAR, Weapon.BLAST -> {}
         Weapon.BAT -> {
             // Out of the fist: upright while the arm hangs, along the arm as it swings.
             val hand = p(Blocky.HAND_R)
@@ -758,7 +802,7 @@ private fun DrawScope.drawBoxes(cam: HouseCam, boxes: List<OBox>, alpha: Float =
 /** A weapon waiting to be picked up: a plant standing on the floor, or a bat lying on it. */
 private fun DrawScope.drawSpot(cam: HouseCam, sp: HouseWorld.Spot) {
     when (sp.weapon) {
-        Weapon.NONE -> {}
+        Weapon.NONE, Weapon.CAR, Weapon.BLAST -> {}
         Weapon.PLANT -> drawBoxes(cam, plantBoxes(v3(sp.x, sp.y + 0.15, sp.z), WorldAxes))
         Weapon.BAT -> {
             val dir = norm3(v3(1.0, 0.0, 0.35))
@@ -769,6 +813,94 @@ private fun DrawScope.drawSpot(cam: HouseCam, sp: HouseWorld.Spot) {
             ))
         }
     }
+}
+
+/**
+ * The open-top car: body, wheels and lights, the driver from the waist up behind the windscreen;
+ * paint that darkens as it's knocked about, smoke and then fire when it's nearly done for, and a
+ * fireball and a burning black shell once it blows up.
+ */
+private fun DrawScope.drawCar(cam: HouseCam, c: HouseView.CarView) {
+    val wreck = c.wreckMs >= 0
+    val r = v3(cos(c.h), 0.0, -sin(c.h))
+    val fw = v3(sin(c.h), 0.0, cos(c.h))
+    val ax = arrayOf(r, v3(0.0, 1.0, 0.0), fw)
+    fun at(right: Double, y: Double, fwd: Double) = v3(c.x + r[0] * right + fw[0] * fwd, y, c.z + r[2] * right + fw[2] * fwd)
+    val paint = if (wreck) CarBurnt else CarPaint.shade(0.5 + 0.5 * (c.health / Car.MAX_HEALTH).coerceIn(0.0, 1.0))
+    val body = mutableListOf(OBox(at(0.0, 0.7, 0.0), ax, doubleArrayOf(Car.HALF_W, 0.4, Car.HALF_L), paint))
+    for (side in listOf(-1.0, 1.0)) for (end in listOf(-1.0, 1.0)) {
+        body += OBox(at(side * 1.175, 0.3, end * 1.5), ax, doubleArrayOf(0.175, 0.3, 0.35), Tyre)
+    }
+    if (!wreck) for (side in listOf(-1.0, 1.0)) {
+        body += OBox(at(side * 0.75, 0.85, Car.HALF_L), ax, doubleArrayOf(0.25, 0.1, 0.03), Headlight)
+        body += OBox(at(side * 0.8, 0.85, -Car.HALF_L), ax, doubleArrayOf(0.22, 0.08, 0.03), Taillight)
+    }
+    drawBoxes(cam, body)
+    val top = Car.BODY_TOP + 0.005
+    fillWorld(cam, listOf(at(-1.0, top, -1.5), at(1.0, top, -1.5), at(1.0, top, 0.5), at(-1.0, top, 0.5)), Cockpit)
+    c.driver?.let { drawFigure(cam, it, Shirts[it.shirt.coerceIn(0, Shirts.size - 1)], 1f, legs = false) }
+    if (!wreck) {
+        // Raked back, top toward the driver.
+        val glass = listOf(at(-1.05, Car.BODY_TOP, 0.75), at(1.05, Car.BODY_TOP, 0.75), at(1.05, Car.HEIGHT, 0.55), at(-1.05, Car.HEIGHT, 0.55))
+        fillWorld(cam, glass, Windscreen, seam = false)
+    }
+
+    val t = c.timeMs / 1000.0
+    val hood = at(0.0, Car.BODY_TOP, 1.5)
+    if (wreck) {
+        val b = c.wreckMs / 1000.0
+        // Fades out over the last couple of seconds before the new car turns up.
+        val fade = ((Car.WRECK_MS - c.wreckMs) / 2000.0).coerceIn(0.0, 1.0).toFloat()
+        if (b < 0.9) fireball(cam, at(0.0, 1.0, 0.0), b, c.wreckMs.toInt())
+        for ((k, spot) in listOf(at(-0.5, Car.BODY_TOP, 1.2), at(0.5, Car.BODY_TOP, -1.0), at(0.0, Car.BODY_TOP, 0.0)).withIndex()) {
+            flames(cam, spot, t + k * 0.37, 1.3, 0.9f * fade)
+        }
+        puffs(cam, at(0.0, 1.6, 0.0), t, 9, 3.5, 0.45, BlackSmoke, 0.7f * fade)
+    } else {
+        if (c.health < Car.SMOKING) {
+            val worse = (1 - c.health / Car.SMOKING).coerceIn(0.0, 1.0)
+            puffs(cam, hood, t, 4 + (worse * 5).toInt(), 2.2, 0.22 + 0.12 * worse, if (c.health < Car.BURNING) BlackSmoke else Smoke, (0.35 + 0.35 * worse).toFloat())
+        }
+        if (c.health < Car.BURNING) flames(cam, hood, t, 0.8, 0.9f)
+    }
+}
+
+/** Smoke rising from [base]: [n] puffs that swell, drift and thin out as they climb [rise] metres. */
+private fun DrawScope.puffs(cam: HouseCam, base: DoubleArray, t: Double, n: Int, rise: Double, size: Double, color: Color, alpha: Float) {
+    val period = 1.8
+    for (i in 0 until n) {
+        val age = (t / period + i.toDouble() / n) % 1.0
+        val c = v3(base[0] + sin(i * 2.4) * 0.35 * age + 0.4 * age, base[1] + rise * age, base[2] + cos(i * 1.7) * 0.35 * age)
+        val half = size * (0.5 + age)
+        drawOBox(cam, OBox(c, WorldAxes, doubleArrayOf(half, half, half), color), alpha * (1 - age).toFloat(), false)
+    }
+}
+
+/** Flickering flames licking up [height] from [base]. */
+private fun DrawScope.flames(cam: HouseCam, base: DoubleArray, t: Double, height: Double, alpha: Float) {
+    if (alpha <= 0f) return
+    for (i in 0 until 5) {
+        val age = (t * 1.7 + i / 5.0) % 1.0
+        val c = v3(base[0] + sin(i * 2.1 + t * 9) * 0.15, base[1] + height * age * 0.7, base[2] + cos(i * 1.3 + t * 7) * 0.15)
+        val half = 0.22 * (1 - age) + 0.05
+        drawOBox(cam, OBox(c, WorldAxes, doubleArrayOf(half, half, half), if (age < 0.4) FlameCore else Flame), alpha * (1 - age * 0.7).toFloat(), false)
+    }
+}
+
+/** The blast, [b] seconds in: blocks of fire flung out and swelling, then gone. */
+private fun DrawScope.fireball(cam: HouseCam, center: DoubleArray, b: Double, seed: Int) {
+    val rnd = kotlin.random.Random(seed / 1000)
+    val k = b / 0.9
+    val alpha = (1 - k).toFloat()
+    val parts = List(10) { i ->
+        val a = rnd.nextDouble(0.0, 2 * PI)
+        val up = rnd.nextDouble(0.2, 1.0)
+        val out = rnd.nextDouble(1.5, 4.0) * k
+        val c = v3(center[0] + sin(a) * out, center[1] + up * 3.0 * k, center[2] + cos(a) * out)
+        val half = 0.5 + 1.3 * k * rnd.nextDouble(0.6, 1.0)
+        OBox(c, WorldAxes, doubleArrayOf(half, half, half), when (i % 3) { 0 -> FlameCore; 1 -> Flame; else -> BlackSmoke })
+    }
+    for (p in parts.sortedByDescending { cam.toCam(it.center)[2] }) drawOBox(cam, p, alpha, false)
 }
 
 /** A plant in flight, tumbling end over end along its path. */

@@ -219,11 +219,18 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   ragdoll (walls, furniture, stairs) for 3 s, then stand up where they landed. Victim decides, with
   a reach check and 1.5 s of immunity after getting up. Shirt colour picker, name tags, synthesized
   swish/smack. Details in [`SIDE_CHANNELS.md`](SIDE_CHANNELS.md#block-house).
-- **Jumping and weapons** (protocol v2): **JUMP** onto furniture, the car, the railing; walking
+- **Jumping and weapons** (protocol v2): **JUMP** onto furniture, the railing; walking
   steps up only 0.3 m and falls off edges; the same walker physics drives dead reckoning. Bats
   (longer reach, harder knock) and potted plants (thrown in an aimed arc, smash on whatever they
   hit) wait at fixed spots that refill after 10 s. A thrown plant is judged by the client it hits,
   against its own figure.
+- **The car** (protocol v3): get in beside it, steer toward the stick, honk; it knocks over anyone
+  it drives into. Health from crashes and from slaps, bats and pots at it; smokes, then burns, then
+  blows up, killing the driver (back to the start) and knocking over anyone near; a new car is in
+  the garage 8 s later. The driver owns the car and its health; victims judge their own falls.
+  `CarTest` + arena tests cover driving out of the garage, steering and reversing, crashing once
+  per contact, dead reckoning stopping at walls, walkers bumping into it, running over, parking,
+  the explosion and respawn, and two drivers at once. Not yet seen on a device.
 - **Verified**: `HouseTest` (codec bounds, walking the stairs up to the bonus room, stairwell edge
   and walls, ragdoll falls flat / stays out of walls / is frame-rate independent, victim-decided
   slaps with reach + replay + immunity checks, crediting, ≤ 4 msg/s under button mashing; jumping
