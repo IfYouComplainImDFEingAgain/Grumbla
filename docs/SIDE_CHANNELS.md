@@ -159,20 +159,22 @@ and hover low; a dive that still reaches the ground costs shield in proportion t
 off. The cushion is part of `Pose3`'s integration, so peers dead-reckon it too. Flying past 350 m hands control to an autopilot that turns you back.
 Enemies off screen show as arrows at the edge.
 
-**Sound:** lasers, hits, taking damage, explosions and a looping afterburner roar while you
-boost, synthesized at startup (`FlightSounds`, no
+**Sound:** lasers, hits, taking damage, explosions, bolts pinging off a roll, and engine loops for
+every ship nearby: an afterburner roar that swells with rising pitch while boosting, and its
+reverse while braking (rushing air whose pitch falls as it swells). Only the four loudest loops
+play. All synthesized at startup (`FlightSounds`, no
 audio assets) and played through a `SoundPool` with game usage. Other players' lasers and
 explosions fade with distance and pan by direction. Silent while self-deafened; the HUD **SFX**
 button mutes it. With voice activation on speakerphone the effects can reach the mic if the phone's
 echo cancellation misses them; PTT or a headset avoids that.
 
-**Wire protocol** — `dataID = notmumla/flight/2` (v2 added the roll direction; a v1 client would
-drop v2 states, so the id changed rather than mixing):
+**Wire protocol** — `dataID = notmumla/flight/3` (v2 added the roll direction, v3 braking; an older
+client would drop the new bits' states, so the id changes rather than mixing versions):
 
 | Message | Meaning |
 | --- | --- |
 | `hi`, `bye` | As in the tank arena |
-| `s <seq> <alive> <x> <y> <z> <h> <p> <v> <w> <q> <fx> <shots> <kills> <deaths>` | My ship: position in dm, heading and pitch in 0.1°, speed in dm/s, yaw and pitch rates in 0.1°/s, `fx` bits 1 = trigger held, 2 = boosting, 4 = rolling, 8 = rolling left |
+| `s <seq> <alive> <x> <y> <z> <h> <p> <v> <w> <q> <fx> <shots> <kills> <deaths>` | My ship: position in dm, heading and pitch in 0.1°, speed in dm/s, yaw and pitch rates in 0.1°/s, `fx` bits 1 = trigger held, 2 = boosting, 4 = rolling, 8 = rolling left, 16 = braking |
 | `hit <shooter> <shot>` | Bolt `<shot>` from `<shooter>` finished me; `<shooter>` = my own session means I crashed with nobody to credit |
 
 **Lasers cost no messages.** At ~6 bolts/s, a message per shot would blow the 4/s budget. Instead

@@ -17,7 +17,7 @@ class FlightMessageTest {
 
     @Test fun stateRoundTrips() {
         val pose = Pose3(-412.3, 179.9, 399.9, 1.5, -1.1, 74.9, -1.25, 1.15)
-        val m = FlightMessage.State(123456, true, pose, 15, 999_999, 42, 7)
+        val m = FlightMessage.State(123456, true, pose, 31, 999_999, 42, 7)
         val d = FlightMessage.decode(enc(m)) as FlightMessage.State
         assertEquals(123456, d.seq)
         assertTrue(d.alive)
@@ -29,7 +29,7 @@ class FlightMessageTest {
         assertEquals(pose.v, d.pose.v, 0.05)
         assertEquals(pose.w, d.pose.w, 0.002)
         assertEquals(pose.q, d.pose.q, 0.002)
-        assertEquals(listOf(15, 999_999, 42, 7), listOf(d.fx, d.shots, d.kills, d.deaths))
+        assertEquals(listOf(31, 999_999, 42, 7), listOf(d.fx, d.shots, d.kills, d.deaths))
         assertTrue(enc(m).size <= 96)
     }
 
@@ -52,7 +52,7 @@ class FlightMessageTest {
             "s 1 1 0 100 0 3600 0 420 0 0 0 0 0 0", // heading out of range
             "s 1 1 0 100 0 0 900 420 0 0 0 0 0 0", // pitched past the limit
             "s 1 1 0 100 0 0 0 999 0 0 0 0 0 0", // too fast
-            "s 1 1 0 100 0 0 0 420 0 0 16 0 0 0", // unknown effect bits
+            "s 1 1 0 100 0 0 0 420 0 0 32 0 0 0", // unknown effect bits
             "s 1 1 -0 100 0 0 0 420 0 0 0 0 0 0", "s 1 1 +5 100 0 0 0 420 0 0 0 0 0 0",
         )) assertNull(bad, dec(bad))
         assertNull(FlightMessage.decode(ByteArray(200) { 'h'.code.toByte() }))
@@ -308,6 +308,23 @@ class FlightArenaTest {
         assertTrue(FlightSound.HURT in heard)
         // Each sound is handed over once, not every frame after.
         assertTrue(tick().sounds.none { it.sound == FlightSound.MY_LASER })
+    }
+
+    @Test fun engineLoopsForUsAndForNearbyShips() {
+        arena.join()
+        val me = tick().me
+        val near = Pose3(me.x + 40, me.y, me.z, 0.0, 0.0, 40.0)
+        arena.onData(2, state(1, near, fx = FlightMessage.BOOSTING))
+        arena.onData(3, state(1, Pose3(-me.x, me.y, -me.z, 0.0, 0.0, 40.0), fx = FlightMessage.BRAKING))
+        val v = tick(16, FlightInput(brake = true))
+        assertTrue(LoopSound(LoopSound.ME, FlightLoop.BRAKE, 1f) in v.loops)
+        val bob = v.loops.single { it.key == 2 }
+        assertEquals(FlightLoop.BOOST, bob.loop)
+        assertTrue("bob is off to our side: ${bob.pan}", abs(bob.pan) > 0.3f)
+        assertTrue("carol is across the map, out of earshot", v.loops.none { it.key == 3 })
+        val sentFx = sent.map { it.second }.filterIsInstance<FlightMessage.State>().last().fx
+        assertTrue(sentFx and FlightMessage.BRAKING != 0)
+        assertTrue(tick(16).loops.none { it.key == LoopSound.ME })
     }
 
     @Test fun leavingSaysBye() {
