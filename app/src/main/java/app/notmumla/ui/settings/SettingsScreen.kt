@@ -430,7 +430,7 @@ fun SettingsScreen(
 
             SectionLabel("ABOUT")
             SettingsGroup {
-                // Easter egg, Android-style: seven taps on the version toggle Four in a Row.
+                // Easter egg, Android-style: seven taps on the version toggle the games.
                 val context = androidx.compose.ui.platform.LocalContext.current
                 var versionTaps by remember { mutableStateOf(0) }
                 var tapToast by remember { mutableStateOf<android.widget.Toast?>(null) }
@@ -443,8 +443,8 @@ fun SettingsScreen(
                             left <= 0 -> {
                                 versionTaps = 0
                                 onSetGamesUnlocked(!settings.gamesUnlocked)
-                                if (settings.gamesUnlocked) "Four in a Row hidden"
-                                else "Four in a Row unlocked: long-press a user to challenge them"
+                                if (settings.gamesUnlocked) "Games hidden"
+                                else "Games unlocked: long-press a user or your channel"
                             }
                             left <= 3 -> "$left more…"
                             else -> null

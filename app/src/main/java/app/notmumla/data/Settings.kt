@@ -49,7 +49,7 @@ data class AppSettings(
     /** Chat composer with a formatting toolbar (WYSIWYG) instead of typed Markdown. */
     val richComposer: Boolean = false,
     val debugOverlay: Boolean = false,
-    /** Easter egg: tapping the version 7 times unlocks Four in a Row with other not-mumla users. */
+    /** Easter egg: tapping the version 7 times unlocks the games (Four in a Row, tanks, dogfight). */
     val gamesUnlocked: Boolean = false,
     /** Output routes in preference order; on connect the first one currently available is used. */
     val routePriority: List<OutputRoute> = DEFAULT_ROUTE_PRIORITY,
