@@ -76,6 +76,8 @@ private val WallInside = Color(0xFFEDE3CF)
 private val WallOutside = Color(0xFFAFC2D6)
 private val WallCap = Color(0xFF5E554C)
 private val WindowSill = Color(0xFFF1EEE6)
+private val Glass = Color(0x5A6EC6F0)
+private val GlassFrame = Color(0xCCE8F4FF)
 private val RailColor = Color(0xFF8B5E3C)
 private val FenceColor = Color(0xFFF4F1EA)
 private val Terracotta = Color(0xFFC0603A)
@@ -469,6 +471,25 @@ private fun DrawScope.drawBlock(cam: HouseCam, i: Int, tops: DoubleArray) {
     }
 }
 
+/** A window pane from [bottom] up: tinted glass with a frame, drawn as the one flat face we see. */
+private fun DrawScope.drawPane(cam: HouseCam, b: HouseWorld.Box, bottom: Double) {
+    val pts = if (b.x1 - b.x0 < b.z1 - b.z0) {
+        val x = (b.x0 + b.x1) / 2
+        listOf(v3(x, bottom, b.z0), v3(x, bottom, b.z1), v3(x, b.y1, b.z1), v3(x, b.y1, b.z0))
+    } else {
+        val z = (b.z0 + b.z1) / 2
+        listOf(v3(b.x0, bottom, z), v3(b.x1, bottom, z), v3(b.x1, b.y1, z), v3(b.x0, b.y1, z))
+    }
+    fillWorld(cam, pts, Glass, seam = false)
+    val c = pts.map(cam::toCam)
+    if (c.any { it[2] < NEAR }) return
+    val scr = c.map(cam::screen)
+    val path = Path()
+    scr.forEachIndexed { i, o -> if (i == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y) }
+    path.close()
+    drawPath(path, GlassFrame, style = Stroke(width = 2.dp.toPx()))
+}
+
 /** Something to paint on one floor, with the world box it fills and its far-to-near sort [key]. */
 private class Drawn(
     val key: Double,
@@ -595,6 +616,13 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
                 // Cut at the same height above the floor everywhere: a lintel over a window goes.
                 top = min(b.y1, y + CUT)
                 if (top <= b.y0) continue
+            }
+            if (b.kind == HouseWorld.Kind.GLASS) {
+                // Where the wall in front is cut away, the pane reaches down to the stub of the
+                // sill, so the window still shows between us and the camera.
+                val bottom = if (active && d < myDepth - 0.3) min(b.y0, y + CUT) else b.y0
+                items += Drawn(d, b.x0, b.x1, bottom, b.y1, b.z0, b.z1) { drawPane(cam, b, bottom) }
+                continue
             }
             tops[i] = top
             items += Drawn(d, b.x0, b.x1, b.y0, top, b.z0, b.z1) { drawBlock(cam, i, tops) }
