@@ -149,6 +149,32 @@ class HouseWorldTest {
         assertEquals(0.0, b[1], 1e-9)
     }
 
+    @Test fun windowsAreTooSmallToClimbThrough() {
+        // At the living room's side window, jumping out toward the yard.
+        val b = run(doubleArrayOf(-8.0, 0.0, -1.9, 0.0), -3.0, 0.0, 1.0, jump = true)
+        assertEquals(HouseWorld.HX0 + HouseWorld.WALL_T + HouseWorld.RADIUS, b[0], 0.1)
+        assertEquals(0.0, b[1], 1e-9)
+    }
+
+    /** Where a pot thrown from hands at (x, feet y, z) toward [heading] breaks. */
+    private fun throwFrom(x: Double, y: Double, z: Double, heading: Double): DoubleArray {
+        val pot = Pot(1, 1, x + sin(heading) * 0.45, y + 1.45, z + cos(heading) * 0.45, heading, 2.5)
+        repeat(400) { pot.advance(10) { false } }
+        return pot.smashedAt!!
+    }
+
+    @Test fun potsFlyOutOfWindowsAndBreakOnWalls() {
+        // From the bonus room, out of the front window: it comes down in the front yard.
+        val out = throwFrom(5.6, HouseWorld.STORY, -4.3, PI)
+        assertTrue(out[2] < HouseWorld.HZ0 - 3)
+        // A step to the side, it hits the wall between the windows.
+        val wall = throwFrom(4.0, HouseWorld.STORY, -4.3, PI)
+        assertTrue(wall[2] > HouseWorld.HZ0 && wall[1] > HouseWorld.STORY)
+        // Over the kitchen counter and out of the back window.
+        val back = throwFrom(-3.1, 0.0, 3.9, 0.0)
+        assertTrue(back[2] > HouseWorld.HZ1 + 2)
+    }
+
     @Test fun wallsBlock() {
         // From the hallway straight west into the living room wall (not at a door).
         val after = HouseWorld.move(-0.5, 0.0, 0.0, -0.5, 0.0)
