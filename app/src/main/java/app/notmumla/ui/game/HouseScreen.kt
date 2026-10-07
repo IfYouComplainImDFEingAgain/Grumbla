@@ -392,10 +392,13 @@ private fun DrawScope.drawFloor(cam: HouseCam, f: HouseWorld.Floor, y: Double) {
  */
 private fun DrawScope.drawAabb(
     cam: HouseCam, x0: Double, x1: Double, y0: Double, y1: Double, z0: Double, z1: Double,
+    buried: (Int) -> Boolean = { false },
     faceColor: (Int) -> Color,
 ) {
     val e = cam.eye
-    fun face(k: Int, n: DoubleArray, vararg p: DoubleArray) = fillWorld(cam, p.toList(), faceColor(k).shade(lit(n)))
+    fun face(k: Int, n: DoubleArray, vararg p: DoubleArray) {
+        if (!buried(k)) fillWorld(cam, p.toList(), faceColor(k).shade(lit(n)))
+    }
     if (e[0] < x0) face(0, v3(-1.0, 0.0, 0.0), v3(x0, y0, z0), v3(x0, y0, z1), v3(x0, y1, z1), v3(x0, y1, z0))
     if (e[0] > x1) face(1, v3(1.0, 0.0, 0.0), v3(x1, y0, z0), v3(x1, y0, z1), v3(x1, y1, z1), v3(x1, y1, z0))
     if (e[2] < z0) face(2, v3(0.0, 0.0, -1.0), v3(x0, y0, z0), v3(x1, y0, z0), v3(x1, y1, z0), v3(x0, y1, z0))
@@ -403,12 +406,40 @@ private fun DrawScope.drawAabb(
     if (e[1] > y1) face(4, v3(0.0, 1.0, 0.0), v3(x0, y1, z0), v3(x1, y1, z0), v3(x1, y1, z1), v3(x0, y1, z1))
 }
 
-private fun DrawScope.drawBlock(cam: HouseCam, b: HouseWorld.Box, top: Double) {
-    val h = top
+/**
+ * For each box's four sides (−x, +x, −z, +z), the box pressed flat against that whole side, or −1.
+ * Walls and fences are runs of short chunks, and their ends meet at corners: without this, every
+ * joint would paint an end face that the painter's sort can leave showing over its neighbour.
+ */
+private val sideNeighbour: Array<IntArray> by lazy {
+    val bs = HouseWorld.boxes
+    val e = 1e-6
+    Array(bs.size) { i ->
+        val a = bs[i]
+        IntArray(4) { k ->
+            bs.indices.firstOrNull { j ->
+                val b = bs[j]
+                j != i && b.solid && b.level == a.level && b.y0 <= a.y0 + e && when (k) {
+                    0 -> b.x0 < a.x0 - e && b.x1 >= a.x0 - e && b.z0 <= a.z0 + e && b.z1 >= a.z1 - e
+                    1 -> b.x1 > a.x1 + e && b.x0 <= a.x1 + e && b.z0 <= a.z0 + e && b.z1 >= a.z1 - e
+                    2 -> b.z0 < a.z0 - e && b.z1 >= a.z0 - e && b.x0 <= a.x0 + e && b.x1 >= a.x1 - e
+                    else -> b.z1 > a.z1 + e && b.z0 <= a.z1 + e && b.x0 <= a.x0 + e && b.x1 >= a.x1 - e
+                }
+            } ?: -1
+        }
+    }
+}
+
+/** [tops] holds how tall each box is drawn this frame (−∞ if it isn't), so a cut-away wall chunk
+ *  still shows the end of the full-height chunk beside it. */
+private fun DrawScope.drawBlock(cam: HouseCam, i: Int, tops: DoubleArray) {
+    val b = HouseWorld.boxes[i]
+    val h = tops[i]
+    val buried = { k: Int -> k < 4 && sideNeighbour[i][k].let { j -> j >= 0 && tops[j] >= h - 1e-6 } }
     when (b.kind) {
         HouseWorld.Kind.EXTERIOR -> {
             val cut = h < b.y1 - 1e-6
-            drawAabb(cam, b.x0, b.x1, b.y0, h, b.z0, b.z1) { k ->
+            drawAabb(cam, b.x0, b.x1, b.y0, h, b.z0, b.z1, buried) { k ->
                 // The face on the house's outline is siding; the rest is the inside wall.
                 val outer = when (k) {
                     0 -> abs(b.x0 - HouseWorld.HX0) < 1e-6
@@ -426,11 +457,11 @@ private fun DrawScope.drawBlock(cam: HouseCam, b: HouseWorld.Box, top: Double) {
         }
         HouseWorld.Kind.WALL -> {
             val cut = h < b.y1 - 1e-6
-            drawAabb(cam, b.x0, b.x1, b.y0, h, b.z0, b.z1) { k -> if (k == 4) (if (cut) WallCap else WallInside.shade(0.85)) else WallInside }
+            drawAabb(cam, b.x0, b.x1, b.y0, h, b.z0, b.z1, buried) { k -> if (k == 4) (if (cut) WallCap else WallInside.shade(0.85)) else WallInside }
         }
-        HouseWorld.Kind.RAIL -> drawAabb(cam, b.x0, b.x1, b.y0, h, b.z0, b.z1) { RailColor }
-        HouseWorld.Kind.FENCE -> drawAabb(cam, b.x0, b.x1, b.y0, h, b.z0, b.z1) { FenceColor }
-        else -> drawAabb(cam, b.x0, b.x1, b.y0, h, b.z0, b.z1) { k -> Color(if (k == 4) b.top else b.color) }
+        HouseWorld.Kind.RAIL -> drawAabb(cam, b.x0, b.x1, b.y0, h, b.z0, b.z1, buried) { RailColor }
+        HouseWorld.Kind.FENCE -> drawAabb(cam, b.x0, b.x1, b.y0, h, b.z0, b.z1, buried) { FenceColor }
+        else -> drawAabb(cam, b.x0, b.x1, b.y0, h, b.z0, b.z1, buried) { k -> Color(if (k == 4) b.top else b.color) }
     }
 }
 
@@ -464,7 +495,8 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
         // Within a floor, everything stands on the same plane: far to near along the ground works.
         val items = ArrayList<Pair<Double, DrawScope.() -> Unit>>()
         val active = level == myLevel || !indoors
-        for (b in HouseWorld.boxes) {
+        val tops = DoubleArray(HouseWorld.boxes.size) { Double.NEGATIVE_INFINITY }
+        for ((i, b) in HouseWorld.boxes.withIndex()) {
             if (b.level != level) continue
             // From upstairs, the downstairs rooms are under the floor; only the stairwell shows.
             if (level == 0 && myLevel == 1 && b.inside && !nearStairwell(b.cx, b.cz)) continue
@@ -476,7 +508,8 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
             if (active && (b.kind == HouseWorld.Kind.WALL || b.kind == HouseWorld.Kind.EXTERIOR) && d < myDepth - 0.3) {
                 top = b.y0 + CUT
             }
-            items += d to { drawBlock(cam, b, top) }
+            tops[i] = top
+            items += d to { drawBlock(cam, i, tops) }
         }
         for (fig in figures) {
             if (fig.level != level || hidden(fig)) continue
