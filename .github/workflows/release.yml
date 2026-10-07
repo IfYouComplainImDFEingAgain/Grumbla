@@ -36,14 +36,16 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/master \
             || { echo "::error::$GITHUB_REF_NAME is not on master"; exit 1; }
 
-      - name: Require tag to match versionName
+      # The tag sets versionName/versionCode at build time (app/build.gradle.kts), so it must be a
+      # plain vMAJOR.MINOR.PATCH; Gradle re-checks the range.
+      - name: Read version from tag
         run: |
-          version=$(sed -nE 's/^\s*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts)
-          [ "v$version" = "$GITHUB_REF_NAME" ] \
-            || { echo "::error::tag $GITHUB_REF_NAME != versionName $version"; exit 1; }
+          [[ "$GITHUB_REF_NAME" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]] \
+            || { echo "::error::tag $GITHUB_REF_NAME is not vMAJOR.MINOR.PATCH"; exit 1; }
+          echo "RELEASE_VERSION=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
 
-      # Settings > About shows BuildConfig.VERSION_NAME, so the tag check above covers it, but only
-      # while the row isn't a hardcoded string.
+      # Settings > About shows BuildConfig.VERSION_NAME, so it follows the tag, but only while the
+      # row isn't a hardcoded string.
       - name: Require About section to show versionName
         run: |
           f=app/src/main/java/app/notmumla/ui/settings/SettingsScreen.kt
@@ -101,7 +103,7 @@ jobs:
           } > keystore.properties
 
       - name: Build release APK
-        run: ./gradlew --no-daemon :app:assembleRelease
+        run: ./gradlew --no-daemon :app:assembleRelease -PreleaseVersion="$RELEASE_VERSION"
 
       - name: Verify signature
         run: |
