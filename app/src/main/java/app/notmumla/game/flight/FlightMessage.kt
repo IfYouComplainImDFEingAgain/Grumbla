@@ -37,14 +37,16 @@ sealed interface FlightMessage {
     data class Hit(val shooter: Int, val shot: Int) : FlightMessage
 
     companion object {
-        // v2: fx gained ROLL_LEFT (v1 clients would reject it, so they don't hear v2 at all).
-        const val DATA_ID = "notmumla/flight/2"
+        // v2: fx gained ROLL_LEFT; v3: BRAKING. Older clients would reject the new bits, so each
+        // change gets a new id and old and new clients simply don't hear each other.
+        const val DATA_ID = "notmumla/flight/3"
         const val FIRING = 1
         const val BOOSTING = 2
         const val ROLLING = 4
         /** With [ROLLING]: the roll goes left (counter-clockwise from behind). */
         const val ROLL_LEFT = 8
-        private const val FX_MAX = 15
+        const val BRAKING = 16
+        private const val FX_MAX = 31
         private const val MAX_LEN = 96
         private const val MAX_COUNT = 999_999_999
         private val POS = (FlightWorld.LIMIT * 10).roundToInt()          // decimetres

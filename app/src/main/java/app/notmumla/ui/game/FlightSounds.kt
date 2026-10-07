@@ -3,7 +3,9 @@ package app.notmumla.ui.game
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.SoundPool
+import app.notmumla.game.flight.FlightLoop
 import app.notmumla.game.flight.FlightSound
+import app.notmumla.game.flight.LoopSound
 import app.notmumla.game.flight.SoundEvent
 import java.io.File
 import java.nio.ByteBuffer
@@ -34,9 +36,11 @@ class FlightSounds(context: Context) {
         .build()
     private val ids = HashMap<FlightSound, Int>()
     private val loaded = HashSet<Int>()
-    private val engineId: Int
-    private var engineStream = 0
-    private var engineLevel = 0f
+    private val loopIds = HashMap<FlightLoop, Int>()
+
+    /** One sounding loop: [env] swells in 0..1 while its ship keeps at it, then fades out. */
+    private class Voice(var stream: Int = 0, var env: Float = 0f, var volume: Float = 0f, var pan: Float = 0f)
+    private val voices = HashMap<Pair<Int, FlightLoop>, Voice>()
 
     init {
         pool.setOnLoadCompleteListener { _, id, status -> if (status == 0) synchronized(loaded) { loaded += id } }
@@ -46,30 +50,43 @@ class FlightSounds(context: Context) {
             if (!file.exists()) file.writeBytes(wav(synth(s)))
             ids[s] = pool.load(file.path, 1)
         }
-        val engine = File(dir, "engine_v$VERSION.wav")
-        if (!engine.exists()) engine.writeBytes(wav(engineLoop()))
-        engineId = pool.load(engine.path, 1)
+        for (l in FlightLoop.entries) {
+            val file = File(dir, "loop_${l.name.lowercase()}_v$VERSION.wav")
+            if (!file.exists()) file.writeBytes(wav(if (l == FlightLoop.BOOST) engineLoop() else brakeLoop()))
+            loopIds[l] = pool.load(file.path, 1)
+        }
     }
 
     /**
-     * Call every frame: the afterburner loop swells in (pitch rising with it) while [on], and
-     * fades out after; [dtMs] is the frame time.
+     * Call every frame with the loops sounding now; [dtMs] is the frame time. A boost swells in
+     * with its pitch rising; a brake is its reverse, the pitch falling as it swells, like an engine
+     * spooling down. Only the loudest few get a voice.
      */
-    fun engine(on: Boolean, dtMs: Long) {
+    fun loops(active: List<LoopSound>, dtMs: Long) {
         val dt = dtMs.coerceIn(0, 100) / 1000f
-        engineLevel = if (on) min(1f, engineLevel + dt / 0.15f) else maxOf(0f, engineLevel - dt / 0.35f)
-        if (engineLevel <= 0f) {
-            if (engineStream != 0) { pool.stop(engineStream); engineStream = 0 }
-            return
+        val wanted = active.sortedByDescending { it.volume }.take(MAX_LOOPS).associateBy { it.key to it.loop }
+        for (k in wanted.keys) voices.getOrPut(k) { Voice() }
+        val it = voices.entries.iterator()
+        while (it.hasNext()) {
+            val (key, v) = it.next()
+            val w = wanted[key]
+            if (w != null) { v.volume = w.volume; v.pan = w.pan }
+            v.env = if (w != null) min(1f, v.env + dt / 0.15f) else maxOf(0f, v.env - dt / 0.35f)
+            if (v.env <= 0f) {
+                if (v.stream != 0) pool.stop(v.stream)
+                it.remove()
+                continue
+            }
+            if (v.stream == 0) {
+                val id = loopIds[key.second] ?: continue
+                if (synchronized(loaded) { id !in loaded }) continue
+                v.stream = pool.play(id, 0f, 0f, 1, -1, 1f)
+                if (v.stream == 0) continue
+            }
+            val g = 0.5f * v.env * v.volume
+            pool.setVolume(v.stream, g * min(1f, 1 - v.pan), g * min(1f, 1 + v.pan))
+            pool.setRate(v.stream, if (key.second == FlightLoop.BOOST) 0.8f + 0.3f * v.env else 1.15f - 0.45f * v.env)
         }
-        if (engineStream == 0) {
-            if (synchronized(loaded) { engineId !in loaded }) return
-            engineStream = pool.play(engineId, 0f, 0f, 2, -1, 1f)
-            if (engineStream == 0) return
-        }
-        val v = 0.5f * engineLevel
-        pool.setVolume(engineStream, v, v)
-        pool.setRate(engineStream, 0.8f + 0.3f * engineLevel)
     }
 
     fun play(events: List<SoundEvent>) {
@@ -83,13 +100,14 @@ class FlightSounds(context: Context) {
     }
 
     fun release() {
-        engineStream = 0
+        voices.clear()
         pool.release()
     }
 
     companion object {
         private const val RATE = 22_050
-        private const val MAX_STREAMS = 10
+        private const val MAX_STREAMS = 14
+        private const val MAX_LOOPS = 4
         /** Bump when a sound changes, so stale cached WAVs aren't reused. */
         private const val VERSION = 1
         private val PRIORITY = mapOf(FlightSound.EXPLOSION to 3, FlightSound.HURT to 2, FlightSound.DEFLECT to 2, FlightSound.HIT to 1)
@@ -162,27 +180,43 @@ class FlightSounds(context: Context) {
         }
 
         /**
-         * A jet roar that loops seamlessly: harmonics that fit a whole number of cycles in the
-         * loop, plus rumbling noise whose end is crossfaded into its start so the seam is silent.
+         * One second of [sample] that loops seamlessly: its tones fit a whole number of cycles in
+         * the second, and the noise's end is crossfaded into its start, so the seam is silent.
          */
-        internal fun engineLoop(): ShortArray {
-            val n = RATE // one second
+        private fun seamless(sample: (t: Double) -> Double): ShortArray {
+            val n = RATE
             val fade = RATE / 10
+            val raw = DoubleArray(n + fade) { i -> sample(i.toDouble() / RATE) }
+            return ShortArray(n) { i ->
+                val s = if (i < fade) raw[i] * (i.toDouble() / fade) + raw[i + n] * (1 - i.toDouble() / fade) else raw[i]
+                (s * 0.6 * Short.MAX_VALUE).toInt().coerceIn(-32767, 32767).toShort()
+            }
+        }
+
+        /** Afterburner: a 60 Hz drone with a 7 Hz throb, a 240 Hz turbine whine, and rumble. */
+        internal fun engineLoop(): ShortArray {
             val rnd = Random(5)
             var lp = 0.0
             var lp2 = 0.0
-            val raw = DoubleArray(n + fade) { i ->
-                val t = i.toDouble() / RATE
+            return seamless { t ->
                 lp += (rnd.nextDouble(-1.0, 1.0) - lp) * 0.12
                 lp2 += (lp - lp2) * 0.25
-                // 60 Hz drone with a 7 Hz throb, plus a 240 Hz turbine whine.
                 val drone = tanh(2.5 * sin(2 * PI * 60 * t)) * (0.75 + 0.25 * sin(2 * PI * 7 * t))
                 val whine = sin(2 * PI * 240 * t) * 0.18
                 lp2 * 2.6 + drone * 0.35 + whine
             }
-            return ShortArray(n) { i ->
-                val s = if (i < fade) raw[i] * (i.toDouble() / fade) + raw[i + n] * (1 - i.toDouble() / fade) else raw[i]
-                (s * 0.6 * Short.MAX_VALUE).toInt().coerceIn(-32767, 32767).toShort()
+        }
+
+        /** Air brake: a lower drone under brighter, rushing air that flutters at 12 Hz. */
+        internal fun brakeLoop(): ShortArray {
+            val rnd = Random(9)
+            var lp = 0.0
+            return seamless { t ->
+                lp += (rnd.nextDouble(-1.0, 1.0) - lp) * 0.3
+                val flutter = 0.6 + 0.4 * sin(2 * PI * 12 * t)
+                val drone = tanh(2.0 * sin(2 * PI * 45 * t)) * 0.3
+                val hum = sin(2 * PI * 180 * t) * 0.1
+                lp * 1.4 * flutter + drone + hum
             }
         }
 

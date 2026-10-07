@@ -18,11 +18,12 @@ class FlightSoundsTest {
         }
     }
 
-    @Test fun engineLoopsWithoutAClick() {
-        val pcm = FlightSounds.engineLoop()
-        assertTrue(pcm.maxOf { abs(it.toInt()) } > 8_000)
-        // Across the seam the step is no bigger than between neighbouring samples elsewhere.
-        val steps = (1 until pcm.size).map { abs(pcm[it] - pcm[it - 1]) }
-        assertTrue(abs(pcm.first() - pcm.last()) <= steps.max())
+    @Test fun loopsLoopWithoutAClick() {
+        for (pcm in listOf(FlightSounds.engineLoop(), FlightSounds.brakeLoop())) {
+            assertTrue(pcm.maxOf { abs(it.toInt()) } > 8_000)
+            // Across the seam the step is no bigger than between neighbouring samples elsewhere.
+            val steps = (1 until pcm.size).map { abs(pcm[it] - pcm[it - 1]) }
+            assertTrue(abs(pcm.first() - pcm.last()) <= steps.max())
+        }
     }
 }

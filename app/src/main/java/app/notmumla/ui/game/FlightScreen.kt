@@ -136,7 +136,7 @@ fun FlightScreen(
                     ),
                 )
                 if (f != null && !quiet) sfx.play(f.sounds)
-                sfx.engine(on = f?.boosting == true && !quiet, dtMs = if (last == 0L) 0 else ms - last)
+                sfx.loops(if (f == null || quiet) emptyList() else f.loops, dtMs = if (last == 0L) 0 else ms - last)
                 last = ms
                 frame = f
             }
