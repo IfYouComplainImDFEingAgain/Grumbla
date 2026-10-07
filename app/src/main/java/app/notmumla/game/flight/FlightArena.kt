@@ -305,8 +305,18 @@ class FlightArena(
         val v = pose.v + (target - pose.v).coerceIn(-dv, dv)
 
         pose = pose.copy(v = v, w = w, q = q).extrapolate(dt)
-        // Pinned to the floor or ceiling, the nose levels out instead of pushing on through.
-        if (pose.y <= FlightWorld.FLOOR + 1e-6 && pose.p < 0) pose = pose.copy(p = 0.0)
+        // Dived through the cushion: the harder we hit, the more it hurts, and we bounce off.
+        if (pose.y <= FlightWorld.FLOOR + 1e-6 && pose.p < 0) {
+            val sink = pose.v * sin(-pose.p) - FlightWorld.CUSHION
+            if (sink > FlightWorld.SAFE_SINK) {
+                hurt((sink - FlightWorld.SAFE_SINK) * FlightWorld.SLAM_DAMAGE, now)
+                sounds += SoundEvent(FlightSound.HURT, 1f)
+                sparks += doubleArrayOf(pose.x, 0.5, pose.z) to now
+            }
+            pose = pose.copy(p = FlightWorld.BOUNCE_PITCH)
+            sendNow = true
+        }
+        // Pinned to the ceiling, the nose levels out instead of pushing on through.
         if (pose.y >= FlightWorld.CEILING - 1e-6 && pose.p > 0) pose = pose.copy(p = 0.0)
 
         if (input.roll && now - rollStart >= FlightWorld.ROLL_COOLDOWN_MS) { rollStart = now; sendNow = true }
@@ -317,7 +327,6 @@ class FlightArena(
             crash(now)
             return
         }
-        if (pose.y <= FlightWorld.FLOOR + 0.5) hurt(FlightWorld.SCRAPE_PER_SEC * dt, now)
         if (shield <= 0) crash(now)
     }
 
