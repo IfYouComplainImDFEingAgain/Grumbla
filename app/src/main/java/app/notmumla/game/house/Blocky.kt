@@ -10,8 +10,18 @@ import kotlin.math.sqrt
 /** Things a character can do on its own; [durationMs] 0 = until it moves or picks another. */
 enum class Emote(val durationMs: Long) { NONE(0), WAVE(2_600), CHEER(2_000), DANCE(0), SIT(0) }
 
-/** What a character holds: a bat swings harder and further than a hand; a plant gets thrown. */
-enum class Weapon { NONE, BAT, PLANT }
+/**
+ * What a character holds: a bat swings harder and further than a hand; a plant gets thrown. The
+ * last two are never held, only what knocked someone over: the car, and the car blowing up.
+ */
+enum class Weapon {
+    NONE, BAT, PLANT, CAR, BLAST;
+
+    companion object {
+        /** The ones a hand can hold. */
+        val HELD = listOf(NONE, BAT, PLANT)
+    }
+}
 
 /**
  * A blocky figure, six boxes in the old brick-game proportions: head, torso, two arms, two legs.
@@ -110,6 +120,7 @@ object Blocky {
                 armL = arm(1.15, -0.4, -1)
                 armR = arm(1.15, -0.4, 1)
             }
+            Weapon.CAR, Weapon.BLAST -> {}
         }
         if (airborne && emote == Emote.NONE) {
             legL = 0.55

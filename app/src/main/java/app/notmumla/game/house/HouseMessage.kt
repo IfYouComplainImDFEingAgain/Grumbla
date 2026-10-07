@@ -16,8 +16,10 @@ sealed interface HouseMessage {
 
     /**
      * The sender's figure: feet at (x, y, z) in cm, heading, velocity in cm/s ([vy] up, while
-     * jumping or falling). [swings] counts swings of hand or bat (when it goes up, play one);
-     * [down] = lying knocked over; [shirt] picks a colour; [held] is what's in its hands.
+     * jumping or falling). [swings] counts swings of hand or bat (when it goes up, play one; in the
+     * car, a honk); [down] = lying knocked over; [shirt] picks a colour; [held] is what's in its hands.
+     * While it drives, [car] is the car's health (else −1) and (x, z, h, vx, vz) are the car's,
+     * turning at [turn] rad/s.
      */
     data class State(
         val seq: Int,
@@ -33,6 +35,8 @@ sealed interface HouseMessage {
         val swings: Int,
         val shirt: Int,
         val held: Weapon,
+        val car: Int = -1,
+        val turn: Double = 0.0,
     ) : HouseMessage
 
     /** "My swing number [swing], with [weapon], hit [victim]": the victim decides whether it really did. */
@@ -50,8 +54,14 @@ sealed interface HouseMessage {
     /** "I picked up what was at [HouseWorld.spots] index [spot]." */
     data class Got(val spot: Int) : HouseMessage
 
+    /** "I got out of the car and left it at (x, z), facing [h], with [health] left." */
+    data class Parked(val x: Double, val z: Double, val h: Double, val health: Int) : HouseMessage
+
+    /** "The car I was driving blew up at (x, z)." */
+    data class Boom(val x: Double, val z: Double) : HouseMessage
+
     companion object {
-        const val DATA_ID = "notmumla/house/2"
+        const val DATA_ID = "notmumla/house/3"
         const val SHIRTS = 8
         private const val MAX_LEN = 96
         private const val MAX_COUNT = 999_999_999
@@ -59,7 +69,11 @@ sealed interface HouseMessage {
         private const val HIGH = 700                // cm: a rail top upstairs, plus a jump
         private const val ANGLE = 3_600             // tenths of a degree
         private const val RISE = 1_500              // cm/s up or down
-        private val SPEED = (HouseWorld.WALK_SPEED * 100 * 1.2).roundToInt()
+        /** cm/s along the ground: a little over the car's top speed. */
+        private val SPEED = (Car.MAX_SPEED * 100 * 1.1).roundToInt()
+        private const val HEALTH = 100
+        /** Car turn rate, tenths of a degree per second. */
+        private const val TURN = 2_000
 
         fun encode(m: HouseMessage): ByteArray = when (m) {
             Hello -> "hi"
@@ -67,6 +81,8 @@ sealed interface HouseMessage {
             is Slap -> "slap ${m.victim} ${m.swing} ${m.weapon.ordinal}"
             is Ow -> "ow ${m.slapper} ${m.swing} ${angle(m.dir)} ${m.weapon.ordinal}"
             is Got -> "got ${m.spot}"
+            is Parked -> "car ${cm(m.x, -POS, POS)} ${cm(m.z, -POS, POS)} ${angle(m.h)} ${m.health.coerceIn(0, HEALTH)}"
+            is Boom -> "boom ${cm(m.x, -POS, POS)} ${cm(m.z, -POS, POS)}"
             is Toss -> "toss ${m.n} ${cm(m.x, -POS, POS)} ${cm(m.y, 0, HIGH)} ${cm(m.z, -POS, POS)} ${angle(m.h)} ${cm(m.vy, -RISE, RISE)}"
             is State -> buildString {
                 append("s ").append(m.seq).append(' ')
@@ -79,7 +95,9 @@ sealed interface HouseMessage {
                 append(cm(m.vy, -RISE, RISE)).append(' ')
                 append(m.emote.ordinal).append(if (m.down) " 1 " else " 0 ")
                 append(m.swings).append(' ').append(m.shirt.coerceIn(0, SHIRTS - 1)).append(' ')
-                append(m.held.ordinal)
+                append(m.held.ordinal).append(' ')
+                append(m.car.coerceIn(-1, HEALTH)).append(' ')
+                append((m.turn * 1800 / PI).roundToInt().coerceIn(-TURN, TURN))
             }
         }.toByteArray(Charsets.US_ASCII)
 
@@ -107,7 +125,7 @@ sealed interface HouseMessage {
                     Slap(
                         parts[1].int(0, MAX_COUNT) ?: return null,
                         parts[2].int(1, MAX_COUNT) ?: return null,
-                        weapon(parts[3]) ?: return null,
+                        parts[3].int(0, Weapon.HELD.size - 1)?.let { Weapon.HELD[it] } ?: return null,
                     )
                 }
                 "ow" -> {
@@ -119,6 +137,19 @@ sealed interface HouseMessage {
                         weapon(parts[4]) ?: return null,
                     )
                 }
+                "car" -> {
+                    if (parts.size != 5) return null
+                    Parked(
+                        (parts[1].int(-POS, POS) ?: return null) / 100.0,
+                        (parts[2].int(-POS, POS) ?: return null) / 100.0,
+                        (parts[3].int(0, ANGLE - 1) ?: return null) * PI / 1800,
+                        parts[4].int(0, HEALTH) ?: return null,
+                    )
+                }
+                "boom" -> {
+                    if (parts.size != 3) return null
+                    Boom((parts[1].int(-POS, POS) ?: return null) / 100.0, (parts[2].int(-POS, POS) ?: return null) / 100.0)
+                }
                 "toss" -> {
                     if (parts.size != 7) return null
                     val bounds = arrayOf(1..MAX_COUNT, -POS..POS, 0..HIGH, -POS..POS, 0 until ANGLE, -RISE..RISE)
@@ -127,17 +158,19 @@ sealed interface HouseMessage {
                     Toss(n[0], n[1] / 100.0, n[2] / 100.0, n[3] / 100.0, n[4] * PI / 1800, n[5] / 100.0)
                 }
                 "s" -> {
-                    if (parts.size != 14) return null
+                    if (parts.size != 16) return null
                     val bounds = arrayOf(
                         0..MAX_COUNT, -POS..POS, 0..HIGH, -POS..POS, 0 until ANGLE, -SPEED..SPEED, -SPEED..SPEED,
-                        -RISE..RISE, 0 until Emote.entries.size, 0..1, 0..MAX_COUNT, 0 until SHIRTS, 0 until Weapon.entries.size,
+                        -RISE..RISE, 0 until Emote.entries.size, 0..1, 0..MAX_COUNT, 0 until SHIRTS, 0 until Weapon.HELD.size,
+                        -1..HEALTH, -TURN..TURN,
                     )
-                    val n = IntArray(13)
-                    for (i in 0 until 13) n[i] = parts[i + 1].int(bounds[i].first, bounds[i].last) ?: return null
+                    val n = IntArray(15)
+                    for (i in 0 until 15) n[i] = parts[i + 1].int(bounds[i].first, bounds[i].last) ?: return null
                     State(
                         seq = n[0], x = n[1] / 100.0, y = n[2] / 100.0, z = n[3] / 100.0, h = n[4] * PI / 1800,
                         vx = n[5] / 100.0, vz = n[6] / 100.0, vy = n[7] / 100.0, emote = Emote.entries[n[8]],
-                        down = n[9] == 1, swings = n[10], shirt = n[11], held = Weapon.entries[n[12]],
+                        down = n[9] == 1, swings = n[10], shirt = n[11], held = Weapon.HELD[n[12]],
+                        car = n[13], turn = n[14] * PI / 1800,
                     )
                 }
                 else -> null

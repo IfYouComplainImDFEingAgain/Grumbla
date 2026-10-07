@@ -32,7 +32,22 @@ class HouseMessageTest {
         assertEquals(7, d.swings)
         assertEquals(5, d.shirt)
         assertEquals(Weapon.PLANT, d.held)
+        assertEquals(-1, d.car)
         assertTrue(bytes.size < 80)
+        val driving = HouseMessage.decode(HouseMessage.encode(m.copy(held = Weapon.NONE, car = 63, turn = -1.2, vx = 10.5))) as HouseMessage.State
+        assertEquals(63, driving.car)
+        assertEquals(-1.2, driving.turn, 0.002)
+        assertEquals(10.5, driving.vx, 0.005)
+    }
+
+    @Test fun carMessagesRoundTrip() {
+        val p = HouseMessage.decode(HouseMessage.encode(HouseMessage.Parked(6.25, -9.5, 3.0, 41))) as HouseMessage.Parked
+        assertEquals(6.25, p.x, 0.005)
+        assertEquals(-9.5, p.z, 0.005)
+        assertEquals(3.0, p.h, 0.002)
+        assertEquals(41, p.health)
+        assertEquals(HouseMessage.Boom(-1.5, 2.0), dec("boom -150 200"))
+        assertEquals(Weapon.CAR, (dec("ow 2 1 0 3") as HouseMessage.Ow).weapon)
     }
 
     @Test fun throwsRoundTrip() {
@@ -59,18 +74,22 @@ class HouseMessageTest {
     @Test fun rejectsAnythingOffShape() {
         for (bad in listOf(
             "", "hi ", "HI", "slap 1 2", "slap 1 0 0", "slap -1 2 0", "slap 01 2 0", "slap 1 2 3",
-            "ow 1 2 0", "ow 1 2 3600 0", "ow 1 2 0 3", "got 8", "got -1", "toss 0 0 0 0 0 0", "toss 1 0 -5 0 0 0",
-            "s 1 0 0 0 0 0 0 0 0 0 0 0", // too few fields
-            "s 1 1701 0 0 0 0 0 0 0 0 0 0 0", // outside the yard
-            "s 1 0 701 0 0 0 0 0 0 0 0 0 0", // above the roof
-            "s 1 0 0 0 3600 0 0 0 0 0 0 0 0", // heading out of range
-            "s 1 0 0 0 0 9999 0 0 0 0 0 0 0", // faster than a walker
-            "s 1 0 0 0 0 0 0 0 5 0 0 0 0", // no such emote
-            "s 1 0 0 0 0 0 0 0 0 2 0 0 0", // down not 0/1
-            "s 1 0 0 0 0 0 0 0 0 0 0 8 0", // no such shirt
-            "s 1 0 0 0 0 0 0 0 0 0 0 0 3", // no such weapon
-            "s 1 -0 0 0 0 0 0 0 0 0 0 0 0", "s 1 +5 0 0 0 0 0 0 0 0 0 0 0",
+            "ow 1 2 0", "ow 1 2 3600 0", "ow 1 2 0 5", "got 8", "got -1", "toss 0 0 0 0 0 0", "toss 1 0 -5 0 0 0",
+            "s 1 0 0 0 0 0 0 0 0 0 0 0 0 -1", // too few fields
+            "s 1 1701 0 0 0 0 0 0 0 0 0 0 0 -1 0", // outside the yard
+            "s 1 0 701 0 0 0 0 0 0 0 0 0 0 -1 0", // above the roof
+            "s 1 0 0 0 3600 0 0 0 0 0 0 0 0 -1 0", // heading out of range
+            "s 1 0 0 0 0 9999 0 0 0 0 0 0 0 -1 0", // faster than the car
+            "s 1 0 0 0 0 0 0 0 5 0 0 0 0 -1 0", // no such emote
+            "s 1 0 0 0 0 0 0 0 0 2 0 0 0 -1 0", // down not 0/1
+            "s 1 0 0 0 0 0 0 0 0 0 0 8 0 -1 0", // no such shirt
+            "s 1 0 0 0 0 0 0 0 0 0 0 0 3 -1 0", // a car isn't something to hold
+            "s 1 0 0 0 0 0 0 0 0 0 0 0 0 101 0", // healthier than new
+            "s 1 0 0 0 0 0 0 0 0 0 0 0 0 -1 2001", // turning too fast
+            "s 1 -0 0 0 0 0 0 0 0 0 0 0 0 -1 0", "s 1 +5 0 0 0 0 0 0 0 0 0 0 0 -1 0",
+            "car 0 0 0", "car 0 0 3600 50", "car 0 0 0 101", "boom 0", "boom 1701 0",
         )) assertNull(bad, dec(bad))
+        assertTrue(dec("s 1 0 0 0 0 0 0 0 0 0 0 0 0 -1 0") is HouseMessage.State)
         assertNull(HouseMessage.decode(ByteArray(200) { 'h'.code.toByte() }))
     }
 }
@@ -187,6 +206,64 @@ class HouseWorldTest {
         // From the hallway straight west into the living room wall (not at a door).
         val after = HouseWorld.move(-0.5, 0.0, 0.0, -0.5, 0.0)
         assertEquals(-0.9 + HouseWorld.RADIUS, after[0], 1e-9)
+    }
+}
+
+class CarTest {
+    private fun drive(m: Car.Motion, mx: Double, mz: Double, seconds: Double): Double {
+        var hit = 0.0
+        repeat((seconds * 60).toInt()) { hit = maxOf(hit, Car.drive(m, mx, mz, 1.0 / 60)) }
+        return hit
+    }
+
+    @Test fun drivesOutOfTheGarageIntoTheFrontYard() {
+        assertFalse(Car.blocked(Car.HOME_X, Car.HOME_Z, Car.HOME_H))
+        val m = Car.Motion(Car.HOME_X, Car.HOME_Z, Car.HOME_H)
+        // Stick toward the front of the house: −z.
+        val hit = drive(m, 0.0, -1.0, 1.5)
+        assertEquals(0.0, hit, 0.0)
+        assertTrue("z ${m.z}", m.z < HouseWorld.HZ0 - Car.HALF_L)
+        assertTrue(m.v > 5)
+    }
+
+    @Test fun turnsTowardTheStickAndBacksUpWhenItsBehind() {
+        // Along the front lawn toward +x, with the stick on the forward-left diagonal: it swings left.
+        val m = Car.Motion(-9.0, -9.5, PI / 2)
+        assertFalse(Car.blocked(m.x, m.z, m.h))
+        assertEquals(0.0, drive(m, sin(PI / 4), cos(PI / 4), 0.6), 0.0)
+        assertTrue("heading ${m.h}", m.h < PI / 2 - 0.3 && m.h > PI / 4 - 0.05)
+        val r = Car.Motion(0.0, -9.0, 0.0)
+        drive(r, 0.0, -1.0, 0.5)
+        assertTrue("backing up", r.v < -1)
+        assertTrue(r.z < -9.0)
+    }
+
+    @Test fun crashingIntoTheHouseStopsItAndCountsOnce() {
+        // Across the front lawn into the living room wall, flat out.
+        val m = Car.Motion(-5.0, -10.3, 0.0)
+        assertFalse(Car.blocked(m.x, m.z, m.h))
+        val hit = drive(m, 0.0, 1.0, 2.5)
+        assertTrue("hit at $hit", hit > Car.CRASH_SPEED)
+        assertTrue(m.z + Car.HALF_L <= HouseWorld.HZ0 + 1e-6)
+        assertFalse(Car.blocked(m.x, m.z, m.h))
+        // Still pushing against the wall: no new hit.
+        assertTrue(drive(m, 0.0, 1.0, 0.5) < Car.CRASH_SPEED)
+    }
+
+    @Test fun othersFollowItButNotThroughWalls() {
+        val c = Car.coast(-5.0, -9.0, 0.0, 10.0, 0.0, 2.0)
+        assertTrue(c[1] + Car.HALF_L <= HouseWorld.HZ0 + 1e-6)
+        assertTrue(c[1] > -9.0 + 1.0)
+    }
+
+    @Test fun walkersBumpIntoItButCanStepOutOfIt() {
+        val car = doubleArrayOf(0.0, -9.0, 0.0)
+        // Walking at its side from 2 m away: stopped at the side.
+        val b = HouseWorld.simulate(doubleArrayOf(3.0, 0.0, -9.0, 0.0), -HouseWorld.WALK_SPEED, 0.0, 1.0, car)
+        assertEquals(Car.HALF_W + HouseWorld.RADIUS, b[0], 0.1)
+        // One it rolled onto walks out.
+        val inside = HouseWorld.simulate(doubleArrayOf(0.5, 0.0, -9.0, 0.0), HouseWorld.WALK_SPEED, 0.0, 1.0, car)
+        assertTrue(inside[0] > 3.0)
     }
 }
 
@@ -482,6 +559,140 @@ class HouseArenaTest {
         val down = sent.map { it.second }.filterIsInstance<HouseMessage.State>().last()
         assertEquals(0.0, down.vy, 1e-9)
         assertEquals(0.0, down.y, 1e-9)
+    }
+
+    /** Walk to (tx, tz); returns the last view. */
+    private fun walkTo(tx: Double, tz: Double, within: Double = 0.3): HouseView {
+        var v = tick()
+        repeat(600) {
+            val dx = tx - v.me.x
+            val dz = tz - v.me.z
+            val d = hypot(dx, dz)
+            if (d < within) return v
+            v = tick(input = HouseInput(dx / d, dz / d))
+        }
+        return v
+    }
+
+    /** Join and get into the car in the garage. */
+    private fun intoTheCar(): HouseView {
+        arena.join()
+        walkTo(Car.HOME_X, HouseWorld.HZ0 - 1.0)
+        val v = walkTo(Car.HOME_X, Car.HOME_Z - Car.HALF_L - 0.6)
+        assertTrue("by the car at ${v.me.x}, ${v.me.z}", v.canDrive)
+        arena.car()
+        return tick()
+    }
+
+    @Test fun getInDriveOffAndParkIt() {
+        var v = intoTheCar()
+        bobAt(-10.0, 8.0)
+        assertTrue(v.driving)
+        assertTrue(v.me.inCar)
+        sent.clear()
+        // Out of the garage, and stopped short of the fence.
+        repeat(100) { v = tick(input = HouseInput(0.0, -1.0)) }
+        assertTrue("car at ${v.car!!.z}", v.car!!.z < HouseWorld.HZ0 - 2)
+        val s = sent.map { it.second }.filterIsInstance<HouseMessage.State>().last()
+        assertEquals(100, s.car)
+        assertTrue(s.vz < -5)
+        sent.clear()
+        arena.car()
+        v = tick()
+        assertFalse(v.driving)
+        val parked = sent.map { it.second }.filterIsInstance<HouseMessage.Parked>().single()
+        assertEquals(v.car!!.z, parked.z, 0.01)
+        // Out beside it, not in it.
+        assertFalse(Car.contains(v.car!!.x, v.car!!.z, v.car!!.h, v.me.x, v.me.z))
+        // The parking spent the budget; on foot again once it's back.
+        repeat(20) { tick(50) }
+        assertEquals(-1, sent.map { it.second }.filterIsInstance<HouseMessage.State>().last().car)
+    }
+
+    @Test fun bobsCarRunsUsOver() {
+        arena.join()
+        val me = tick().me
+        // Bob drives straight at us from 5 m to our left.
+        val bobCar = HouseMessage.State(++bobSeq, me.x - 5.0, 0.0, me.z, PI / 2, 9.0, 0.0, 0.0, Emote.NONE, false, 0, 0, Weapon.NONE, car = 100)
+        arena.onData(2, data(bobCar))
+        sent.clear()
+        var v = tick()
+        repeat(40) { if (!v.down) v = tick() }
+        assertTrue(v.down)
+        assertEquals(Weapon.CAR, v.slappedWith)
+        assertEquals("bob", v.slappedBy)
+        val ow = sent.map { it.second }.filterIsInstance<HouseMessage.Ow>().single()
+        assertEquals(2, ow.slapper)
+        assertEquals(Weapon.CAR, ow.weapon)
+    }
+
+    @Test fun aParkedCarDoesntRunAnyoneOver() {
+        arena.join()
+        val me = tick().me
+        arena.onData(2, data(HouseMessage.State(++bobSeq, me.x - 3.0, 0.0, me.z, PI / 2, 0.0, 0.0, 0.0, Emote.NONE, false, 0, 0, Weapon.NONE, car = 100)))
+        repeat(60) { assertFalse(tick().down) }
+    }
+
+    @Test fun batteredCarBlowsUpAndTheDriverStartsOver() {
+        intoTheCar()
+        // Bob, with a bat, at the car's nose.
+        bobAt(Car.HOME_X, Car.HOME_Z - Car.HALF_L - 0.8, 0.0, held = Weapon.BAT)
+        tick()
+        sent.clear()
+        var swings = 0
+        var v = tick()
+        while (!v.down && swings < 20) {
+            arena.onData(2, data(HouseMessage.Slap(1, ++swings, Weapon.BAT)))
+            v = tick()
+        }
+        assertEquals(Math.ceil(Car.MAX_HEALTH / HouseArena.BAT_DENT).toInt(), swings)
+        assertTrue(v.down)
+        assertFalse(v.driving)
+        assertEquals(Weapon.BLAST, v.slappedWith)
+        assertTrue(v.car!!.wreckMs >= 0)
+        assertTrue(sent.any { it.second is HouseMessage.Boom })
+        // Back on our feet at the start, in the front yard.
+        repeat((Ragdoll.DOWN_MS / 50 + 2).toInt()) { v = tick(50) }
+        assertFalse(v.down)
+        assertTrue(v.me.z < HouseWorld.HZ0 - 1)
+        // And a new car in the garage once the wreck burns out.
+        repeat((Car.WRECK_MS / 100).toInt()) { v = tick(100) }
+        assertEquals(-1L, v.car!!.wreckMs)
+        assertEquals(Car.MAX_HEALTH, v.car!!.health, 0.0)
+        assertEquals(Car.HOME_X, v.car!!.x, 1e-9)
+    }
+
+    @Test fun bobsCarBlowingUpNextToUsKnocksUsOver() {
+        arena.join()
+        val me = tick().me
+        arena.onData(2, data(HouseMessage.State(++bobSeq, me.x + 3.5, 0.0, me.z, 0.0, 0.0, 0.0, 0.0, Emote.NONE, false, 0, 0, Weapon.NONE, car = 5)))
+        tick()
+        sent.clear()
+        arena.onData(2, data(HouseMessage.Boom(me.x + 3.5, me.z)))
+        val v = tick()
+        assertTrue(v.down)
+        assertEquals(Weapon.BLAST, v.slappedWith)
+        assertTrue(v.car!!.wreckMs >= 0)
+        assertTrue(v.feed.any { it == "bob's car blew up" })
+        assertEquals(Weapon.BLAST, sent.map { it.second }.filterIsInstance<HouseMessage.Ow>().single().weapon)
+    }
+
+    @Test fun aBoomFromSomeoneNotDrivingIsIgnored() {
+        arena.join()
+        val me = tick().me
+        bobAt(me.x + 3.0, me.z)
+        tick()
+        arena.onData(2, data(HouseMessage.Boom(Car.HOME_X, Car.HOME_Z)))
+        val v = tick()
+        assertFalse(v.down)
+        assertEquals(-1L, v.car!!.wreckMs)
+    }
+
+    @Test fun twoInTheCarAtOnceTheLowerSessionKeepsIt() {
+        intoTheCar()
+        // Bob (session 2) thinks he got in too: we keep it.
+        arena.onData(2, data(HouseMessage.State(++bobSeq, Car.HOME_X, 0.0, Car.HOME_Z, PI, 0.0, 0.0, 0.0, Emote.NONE, false, 0, 0, Weapon.NONE, car = 100)))
+        assertTrue(tick().driving)
     }
 
     @Test fun staysUnderTheServerRateLimit() {

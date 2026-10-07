@@ -16,11 +16,12 @@ import kotlin.random.Random
 /**
  * The block house's sounds, synthesized once like [FlightSounds]: a whoosh for a swing, a sharp
  * smack for a slap that lands, a hollow wooden bonk for a bat, a crash of pottery, a springy hop and
- * a pop for picking something up, and a window shattering. Game usage, so it follows the media volume.
+ * a pop for picking something up, a window shattering, and the car's horn, crunch and explosion.
+ * Game usage, so it follows the media volume.
  */
 class HouseSounds(context: Context) {
     private val pool = SoundPool.Builder()
-        .setMaxStreams(6)
+        .setMaxStreams(8)
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_GAME)
@@ -69,6 +70,9 @@ class HouseSounds(context: Context) {
             HouseSound.JUMP -> hop()
             HouseSound.PICKUP -> pop()
             HouseSound.SHATTER -> shatter()
+            HouseSound.HONK -> honk()
+            HouseSound.CRASH -> crunch()
+            HouseSound.BOOM -> boom()
         }
 
         private fun render(seconds: Double, sample: (t: Double) -> Double): ShortArray {
@@ -147,6 +151,51 @@ class HouseSounds(context: Context) {
                 var tink = 0.0
                 for ((at, f) in tinkles) if (t >= at) tink += sin(2 * PI * f * (t - at)) * exp(-(t - at) / 0.02)
                 crack * 0.8 + hiss * 0.6 + tink * 0.2
+            }
+        }
+
+        /** A two-tone car horn: a buzzy major third, held, with a little wobble. */
+        private fun honk(): ShortArray = render(0.42) { t ->
+            val env = min(1.0, t / 0.015) * min(1.0, (0.42 - t) / 0.04)
+            fun buzz(f: Double): Double {
+                val ph = (f * t + 0.002 * sin(2 * PI * 7 * t)) % 1.0
+                // Square-ish: a rounded pulse, so it isn't harsh.
+                return kotlin.math.tanh(4 * sin(2 * PI * ph))
+            }
+            (buzz(392.0) + buzz(494.0)) * 0.32 * env
+        }
+
+        /** Metal on wall: a deep thump, a burst of crunch, and a ringing panel. */
+        private fun crunch(): ShortArray {
+            val rnd = Random(57)
+            var lp = 0.0
+            return render(0.5) { t ->
+                val n = rnd.nextDouble(-1.0, 1.0)
+                lp += (n - lp) * 0.2
+                val crunch = lp * 2.2 * exp(-t / 0.07) * (0.6 + 0.4 * sin(2 * PI * 37 * t))
+                val thump = sin(2 * PI * 62 * t * (1 - t)) * exp(-t / 0.09)
+                val panel = (sin(2 * PI * 310 * t) + 0.7 * sin(2 * PI * 457 * t) + 0.4 * sin(2 * PI * 893 * t)) * exp(-t / 0.12)
+                crunch * 0.8 + thump * 0.8 + panel * 0.18
+            }
+        }
+
+        /** The car going up: a hard crack, a low rumbling roar that rolls off, and debris pattering down. */
+        private fun boom(): ShortArray {
+            val rnd = Random(77)
+            val debris = List(16) { rnd.nextDouble(0.25, 1.3) to rnd.nextDouble(900.0, 2600.0) }
+            var lp = 0.0
+            var lp2 = 0.0
+            return render(1.6) { t ->
+                val n = rnd.nextDouble(-1.0, 1.0)
+                lp += (n - lp) * 0.05
+                lp2 += (lp - lp2) * 0.1
+                val crack = n * exp(-t / 0.01)
+                val roar = lp * 9 * exp(-t / 0.45)
+                val rumble = lp2 * 25 * exp(-t / 0.7)
+                val thud = sin(2 * PI * 45 * t * (1 - t * 0.3)) * exp(-t / 0.25)
+                var bits = 0.0
+                for ((at, f) in debris) if (t >= at) bits += sin(2 * PI * f * (t - at)) * exp(-(t - at) / 0.015)
+                (crack * 0.9 + roar * 0.6 + rumble * 0.5 + thud * 0.9 + bits * 0.12).coerceIn(-1.2, 1.2)
             }
         }
 
