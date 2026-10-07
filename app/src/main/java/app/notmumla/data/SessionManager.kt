@@ -21,6 +21,8 @@ import app.notmumla.game.GameMessage
 import app.notmumla.game.GameState
 import app.notmumla.game.flight.FlightArena
 import app.notmumla.game.flight.FlightMessage
+import app.notmumla.game.house.HouseArena
+import app.notmumla.game.house.HouseMessage
 import app.notmumla.game.tank.TankArena
 import app.notmumla.game.tank.TankMessage
 import app.notmumla.nudge.NudgeEffects
@@ -400,6 +402,15 @@ class SessionManager @Inject constructor(
         onInvite = { gameInvite(it, "dogfight") },
     )
 
+    /** A two-storey block house to walk around, wave and slap each other in, the same way (easter egg). */
+    val house = HouseArena(
+        send = { receivers, m -> client?.sendPluginData(receivers, HouseMessage.DATA_ID, HouseMessage.encode(m)) },
+        self = { _state.value.sessionId },
+        channelPeers = ::channelPeers,
+        enabled = { settings.gamesUnlocked },
+        onInvite = { gameInvite(it, "block house") },
+    )
+
     private val nudgeLimiter = NudgeLimiter()
     private val nudgeEffects = NudgeEffects(context)
     private var lastNudgeSent = 0L
@@ -539,6 +550,7 @@ class SessionManager @Inject constructor(
                         game.onUsersPresent(s.users.keys)
                         tanks.onUsersPresent(s.self?.channelId)
                         flights.onUsersPresent(s.self?.channelId)
+                        house.onUsersPresent(s.self?.channelId)
                     }
                     applyUserVolumes() // new/moved users pick up their saved volume
                     _whisper.value?.let { w -> if (w.session !in s.users) stopWhisper() }
@@ -561,6 +573,7 @@ class SessionManager @Inject constructor(
                     NudgeMessage.DATA_ID -> onNudge(event.sender, event.data)
                     TankMessage.DATA_ID -> tanks.onData(event.sender, event.data)
                     FlightMessage.DATA_ID -> flights.onData(event.sender, event.data)
+                    HouseMessage.DATA_ID -> house.onData(event.sender, event.data)
                 }
                 events.tryEmit(event)
             }
@@ -808,6 +821,7 @@ class SessionManager @Inject constructor(
         game.reset()
         tanks.reset()
         flights.reset()
+        house.reset()
         nudgeLimiter.reset()
         _localTransmitting.value = false
         _inputLevel.value = 0f

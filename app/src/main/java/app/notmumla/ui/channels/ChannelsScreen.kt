@@ -116,6 +116,8 @@ fun ChannelsScreen(
     onPlayTanks: (() -> Unit)? = null,
     /** Open the dogfight in our channel: null until the easter egg is unlocked. */
     onPlayFlights: (() -> Unit)? = null,
+    /** Open the block house in our channel: null until the easter egg is unlocked. */
+    onPlayHouse: (() -> Unit)? = null,
     onDisconnect: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -230,6 +232,7 @@ fun ChannelsScreen(
                 onSetListening = { listen -> onSetListening(ch.id, listen); actionChannelId = null },
                 onPlayTanks = onPlayTanks?.takeIf { ch.isCurrent }?.let { { it(); actionChannelId = null } },
                 onPlayFlights = onPlayFlights?.takeIf { ch.isCurrent }?.let { { it(); actionChannelId = null } },
+                onPlayHouse = onPlayHouse?.takeIf { ch.isCurrent }?.let { { it(); actionChannelId = null } },
                 onDismiss = { actionChannelId = null },
             )
         }
@@ -254,6 +257,7 @@ private fun ChannelActionsSheet(
     onSetListening: (Boolean) -> Unit,
     onPlayTanks: (() -> Unit)?,
     onPlayFlights: (() -> Unit)?,
+    onPlayHouse: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -296,7 +300,13 @@ private fun ChannelActionsSheet(
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Dogfight") }
                 }
-                if (onPlayTanks != null || onPlayFlights != null) {
+                if (onPlayHouse != null) {
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = onPlayHouse,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Block house") }
+                }
+                if (onPlayTanks != null || onPlayFlights != null || onPlayHouse != null) {
                     Text("Everyone here who opens one plays together.", fontSize = 12.sp, color = c.onSurfaceVar)
                 }
             }

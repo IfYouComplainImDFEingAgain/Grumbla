@@ -210,6 +210,20 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
   crediting, barrel roll, ≤ 4 msg/s under button mashing, airspace bounds); rendering checked on
   the Pixel. Not yet played device-to-device.
 
+### Block house (multiplayer easter egg) 🧪
+- Brick-game-style blocky figures in a two-storey house: long-press your channel → **Block house**.
+  Living room, kitchen and hallway with stairs downstairs; two bedrooms and a bonus room over the
+  garage (on the right) upstairs; a fenced yard with trees. Dollhouse camera that cuts away walls in
+  front of you and hides the upstairs while you're downstairs; rotate in 90° steps, three zooms.
+- Emotes: wave, cheer, dance, sit. **SLAP** whoever's in front of you: they flop over as a Verlet
+  ragdoll (walls, furniture, stairs) for 3 s, then stand up where they landed. Victim decides, with
+  a reach check and 1.5 s of immunity after getting up. Shirt colour picker, name tags, synthesized
+  swish/smack. Details in [`SIDE_CHANNELS.md`](SIDE_CHANNELS.md#block-house).
+- **Verified**: `HouseTest` (codec bounds, walking the stairs up to the bonus room, stairwell edge
+  and walls, ragdoll falls flat / stays out of walls / is frame-rate independent, victim-decided
+  slaps with reach + replay + immunity checks, crediting, ≤ 4 msg/s under button mashing). Not yet
+  played device-to-device.
+
 ### Nudge ✅
 - Long-press a user → Nudge: their screen shakes, 40 ms buzz, synthesized "boing". Throttled on
   receive (10 s per sender, 3 s global), follows the ringer switch, opt-out in Settings.

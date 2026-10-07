@@ -100,12 +100,20 @@ class SessionViewModel @Inject constructor(
 
     // Channel arena games (easter eggs); one open at a time.
     val tanksActive: StateFlow<Boolean> = sessionManager.tanks.active
-    fun joinTanks() { sessionManager.flights.leave(); sessionManager.tanks.join() }
+    fun joinTanks() { sessionManager.flights.leave(); sessionManager.house.leave(); sessionManager.tanks.join() }
     fun leaveTanks() = sessionManager.tanks.leave()
     fun stepTanks(input: app.notmumla.game.tank.TankInput) = sessionManager.tanks.step(input)
 
     val flightsActive: StateFlow<Boolean> = sessionManager.flights.active
-    fun joinFlights() { sessionManager.tanks.leave(); sessionManager.flights.join() }
+    fun joinFlights() { sessionManager.tanks.leave(); sessionManager.house.leave(); sessionManager.flights.join() }
     fun leaveFlights() = sessionManager.flights.leave()
     fun stepFlights(input: app.notmumla.game.flight.FlightInput) = sessionManager.flights.step(input)
+
+    val houseActive: StateFlow<Boolean> = sessionManager.house.active
+    fun joinHouse() { sessionManager.tanks.leave(); sessionManager.flights.leave(); sessionManager.house.join() }
+    fun leaveHouse() = sessionManager.house.leave()
+    fun stepHouse(input: app.notmumla.game.house.HouseInput) = sessionManager.house.step(input)
+    fun houseSlap() = sessionManager.house.slap()
+    fun houseEmote(e: app.notmumla.game.house.Emote) = sessionManager.house.emote(e)
+    fun houseShirt() = sessionManager.house.cycleShirt()
 }

@@ -195,6 +195,60 @@ ship.
 `ui/game/ArenaControls.kt` (stick and buttons, shared with the tanks); wired in
 `SessionManager.flights`. Tests: `app/src/test/.../game/flight/FlightTest.kt`.
 
+## Block house
+
+Blocky figures in a two-storey house: the living room, kitchen and hallway downstairs, the stairs
+up to two bedrooms and a bonus room over the garage (which is on the right as you face the house),
+and a fenced yard. Same channel rules as the tank arena (built on `ChannelArena`); opening one game
+leaves the others.
+
+**Play:** long-press your current channel → **Block house**. The stick walks (relative to the
+camera; ⟲/⟳ turn the view, **Zoom** cycles distance). **WAVE**, **YAY**, **DANCE** and **SIT**
+toggle an emote; walking cancels it. **SLAP** swings at whoever is in front of you within arm's
+reach (1.5 m, ±75°), turning you to face them. They flop over as a ragdoll for 3 s and get up where
+they landed. The swatch top left changes your shirt colour.
+
+**View:** a dollhouse camera above and behind you. Walls between the camera and you are cut down to
+0.7 m; while you're downstairs indoors, the upstairs isn't drawn; while you're upstairs, the
+downstairs rooms are skipped except around the stairwell. Within a floor, the painter's sort is by
+distance along the ground, which is right for things standing on one plane.
+
+**Wire protocol** — `dataID = notmumla/house/1`:
+
+| Message | Meaning |
+| --- | --- |
+| `hi`, `bye` | As in the tank arena |
+| `s <seq> <x> <z> <lvl> <h> <vx> <vz> <emote> <down> <swings> <shirt>` | My figure: position and velocity in cm and cm/s, floor 0/1, heading in 0.1°, emote 0–4 (none, wave, cheer, dance, sit), down = lying slapped, swings = slaps swung, shirt 0–7 |
+| `slap <victim> <swing>` | My swing number `<swing>` hit `<victim>` (to all players, so everyone plays the swing) |
+| `ow <slapper> <swing> <dir>` | That swing knocked me over, flying toward heading `<dir>` (0.1°) |
+
+**Rules:**
+
+- **The victim decides.** On `slap`, the victim checks the slapper is a player within 2.8 m of it
+  on its own screen (reach plus slack for prediction error), on the same floor, not lying down;
+  that it isn't down itself or in its 1.5 s of immunity after getting up; and that the swing number
+  is new from that slapper. Then it falls and sends `ow`. A hostile client can refuse to fall, or
+  slap from up to 2.8 m, and no more.
+- **The ragdoll is cosmetic but repeatable.** Eleven Verlet particles at the joints (plus one at
+  the chest so the torso has depth), stiff sticks, gravity, friction, and the house's floors, walls,
+  furniture and stairs, in fixed 1/120 s steps counted from the start, so every client that starts
+  from the same pose sees much the same fall. While down, the victim keeps sending the spot where it
+  was hit; when it gets up, its next state carries where it landed, and everyone snaps to that.
+- **A swing without a hit costs nothing extra:** the `swings` counter in the next state replays it,
+  like the tank's shell counter. A swing that hits uses one token for the `slap` (if none is left,
+  it falls back to the counter, and the hit is lost).
+- **Rate and bounds** as in the tank arena: states every 333 ms while walking (and at once when
+  starting or stopping), every 1 s while still, under our 3.5/s bucket. Dead reckoning walks each
+  figure through the map (walls, stairs) for up to 600 ms and eases corrections over 150 ms.
+
+**Sound:** a swish for every swing and a smack for every slap that lands, synthesized
+(`HouseSounds`), by distance and pan. Silent while self-deafened; **SFX** mutes it.
+
+**Code:** `app/.../game/house/`: `HouseWorld` (map, floors, stairs, `move`), `Blocky` (skeleton,
+emote animations, `Ragdoll`), `HouseMessage`, `HouseArena`; `ui/game/HouseScreen.kt` (renderer and
+controls), `ui/game/HouseSounds.kt`; wired in `SessionManager.house`. Tests:
+`app/src/test/.../game/house/HouseTest.kt`.
+
 ## Nudge
 
 Long-press a user → **Nudge**. If they run not-mumla with **Allow nudges** on (Settings, default
