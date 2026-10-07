@@ -17,7 +17,7 @@ class FlightMessageTest {
 
     @Test fun stateRoundTrips() {
         val pose = Pose3(-412.3, 179.9, 399.9, 1.5, -1.1, 74.9, -1.25, 1.15)
-        val m = FlightMessage.State(123456, true, pose, 7, 999_999, 42, 7)
+        val m = FlightMessage.State(123456, true, pose, 15, 999_999, 42, 7)
         val d = FlightMessage.decode(enc(m)) as FlightMessage.State
         assertEquals(123456, d.seq)
         assertTrue(d.alive)
@@ -29,7 +29,7 @@ class FlightMessageTest {
         assertEquals(pose.v, d.pose.v, 0.05)
         assertEquals(pose.w, d.pose.w, 0.002)
         assertEquals(pose.q, d.pose.q, 0.002)
-        assertEquals(listOf(7, 999_999, 42, 7), listOf(d.fx, d.shots, d.kills, d.deaths))
+        assertEquals(listOf(15, 999_999, 42, 7), listOf(d.fx, d.shots, d.kills, d.deaths))
         assertTrue(enc(m).size <= 96)
     }
 
@@ -52,7 +52,7 @@ class FlightMessageTest {
             "s 1 1 0 100 0 3600 0 420 0 0 0 0 0 0", // heading out of range
             "s 1 1 0 100 0 0 900 420 0 0 0 0 0 0", // pitched past the limit
             "s 1 1 0 100 0 0 0 999 0 0 0 0 0 0", // too fast
-            "s 1 1 0 100 0 0 0 420 0 0 8 0 0 0", // unknown effect bits
+            "s 1 1 0 100 0 0 0 420 0 0 16 0 0 0", // unknown effect bits
             "s 1 1 -0 100 0 0 0 420 0 0 0 0 0 0", "s 1 1 +5 100 0 0 0 420 0 0 0 0 0 0",
         )) assertNull(bad, dec(bad))
         assertNull(FlightMessage.decode(ByteArray(200) { 'h'.code.toByte() }))
@@ -194,12 +194,12 @@ class FlightArenaTest {
         arena.join()
         arena.onData(2, state(1, Pose3(300.0, 150.0, 300.0, 0.0, 0.0)))
         sent.clear()
-        // Dive into the floor and stay there: scraping wears the shield away.
+        // Keep slamming into the ground, boosted: each hit wears the shield down until it's gone.
         var v = tick()
         var steps = 0
-        while (v.alive && steps++ < 2000) {
+        while (v.alive && steps++ < 6000) {
             if (steps % 50 == 0) arena.onData(2, state(1 + steps, Pose3(300.0, 150.0, 300.0, 0.0, 0.0)))
-            v = tick(16, FlightInput(pitch = -1f))
+            v = tick(16, FlightInput(pitch = -1f, boost = true))
         }
         assertFalse(v.alive)
         assertNull(v.killedBy)
@@ -248,13 +248,56 @@ class FlightArenaTest {
         }
     }
 
-    @Test fun barrelRollShrugsOffBolts() {
+    @Test fun barrelRollBlocksBolts() {
         bobFiresAtUs(d = 30.0)
         sent.clear()
         // A roll lasts ROLL_MS; bolts take ~0.1 s to cover 30 m, so the first volley meets the roll.
         var v = tick(16, FlightInput(roll = true))
-        repeat(20) { v = tick(16) }
+        val heard = ArrayList<FlightSound>()
+        repeat(20) { v = tick(16); heard += v.sounds.map { it.sound } }
         assertEquals(1f, v.shield, 0f)
+        assertTrue(FlightSound.DEFLECT in heard)
+        // Blocked bolts are gone, not flying on through us.
+        assertTrue(v.bolts.none { !it.mine && kotlin.math.hypot(it.x - v.me.x, it.z - v.me.z) < 2 })
+    }
+
+    @Test fun rollGoesTheWayWeSteer() {
+        arena.join()
+        arena.onData(2, state(1, Pose3(300.0, 150.0, 300.0, 0.0, 0.0)))
+        tick()
+        var v = tick(16, FlightInput(yaw = -1f, roll = true))
+        repeat(15) { v = tick(16, FlightInput(yaw = -1f)) }
+        assertTrue("left roll: ${v.bank}", v.bank < -1.5)
+        val state = sent.map { it.second }.filterIsInstance<FlightMessage.State>().last()
+        assertTrue(state.fx and FlightMessage.ROLLING != 0 && state.fx and FlightMessage.ROLL_LEFT != 0)
+        now += FlightWorld.ROLL_COOLDOWN_MS
+        v = tick(16, FlightInput(yaw = 1f, roll = true))
+        repeat(15) { v = tick(16, FlightInput(yaw = 1f)) }
+        assertTrue("right roll: ${v.bank}", v.bank > 1.5)
+    }
+
+    @Test fun flyingIntoABuildingHurtsAndBouncesInsteadOfKilling() {
+        arena.join()
+        // Glide down into the cushion and fly straight: we spawn heading for the middle of the
+        // map, so a building is coming.
+        var v = tick()
+        repeat(16) { v = tick(16, FlightInput(pitch = -1f)) }
+        var bounced = false
+        repeat(1200) {
+            v = tick(16)
+            assertTrue("never inside a building: ${v.me}", !FlightWorld.solid(v.me.x, v.me.y, v.me.z))
+            if (v.shield < 1f && !bounced) {
+                bounced = true
+                assertTrue(v.alive)
+                assertTrue(v.shield > 0.66f)
+            }
+        }
+        assertTrue("hit something", bounced)
+    }
+
+    @Test fun aFullShieldSurvivesThreeHeadOnBuildingHits() {
+        val worst = (FlightWorld.BOOST_SPEED - FlightWorld.SAFE_SINK) * FlightWorld.WALL_DAMAGE
+        assertTrue("$worst", 3 * worst < FlightWorld.SHIELD)
     }
 
     @Test fun soundsFollowTheAction() {

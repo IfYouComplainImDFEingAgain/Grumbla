@@ -149,8 +149,10 @@ other.
 
 **Play:** long-press your current channel → **Dogfight**. The stick steers (yaw and pitch; the
 **Y** button toggles flight-style "pull back to climb" and arcade-style); **FIRE** holds for rapid
-twin lasers; **BOOST**/**BRAKE** share a meter; **ROLL** barrel-rolls, and bolts pass through you
-mid-roll. Shields take 20 per bolt (five hits) and only refill on respawn; hitting a building is fatal.
+twin lasers; **BOOST**/**BRAKE** share a meter; **ROLL** barrel-rolls the way you're steering (or banked), and knocks away
+any bolt that reaches you mid-roll. Shields take 20 per bolt (five hits) and only refill on respawn; hitting a building costs shield for the speed
+you had into its face (a boosted head-on hit costs 28, so a full shield takes three) and bounces
+you off it, mirrored and slower.
 Below 14 m a ground cushion pushes ships up (up to 32 m/s of climb at the ground), so you can skim
 and hover low; a dive that still reaches the ground costs shield in proportion to how hard it hit
 (the hardest, boosted and nose fully down, costs 29, so a full shield takes three), and bounces you
@@ -164,12 +166,13 @@ explosions fade with distance and pan by direction. Silent while self-deafened; 
 button mutes it. With voice activation on speakerphone the effects can reach the mic if the phone's
 echo cancellation misses them; PTT or a headset avoids that.
 
-**Wire protocol** — `dataID = notmumla/flight/1`:
+**Wire protocol** — `dataID = notmumla/flight/2` (v2 added the roll direction; a v1 client would
+drop v2 states, so the id changed rather than mixing):
 
 | Message | Meaning |
 | --- | --- |
 | `hi`, `bye` | As in the tank arena |
-| `s <seq> <alive> <x> <y> <z> <h> <p> <v> <w> <q> <fx> <shots> <kills> <deaths>` | My ship: position in dm, heading and pitch in 0.1°, speed in dm/s, yaw and pitch rates in 0.1°/s, `fx` bits 1 = trigger held, 2 = boosting, 4 = rolling |
+| `s <seq> <alive> <x> <y> <z> <h> <p> <v> <w> <q> <fx> <shots> <kills> <deaths>` | My ship: position in dm, heading and pitch in 0.1°, speed in dm/s, yaw and pitch rates in 0.1°/s, `fx` bits 1 = trigger held, 2 = boosting, 4 = rolling, 8 = rolling left |
 | `hit <shooter> <shot>` | Bolt `<shot>` from `<shooter>` finished me; `<shooter>` = my own session means I crashed with nobody to credit |
 
 **Lasers cost no messages.** At ~6 bolts/s, a message per shot would blow the 4/s budget. Instead
