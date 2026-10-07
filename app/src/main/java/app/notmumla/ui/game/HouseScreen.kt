@@ -78,6 +78,7 @@ private val WallCap = Color(0xFF5E554C)
 private val WindowSill = Color(0xFFF1EEE6)
 private val Glass = Color(0x5A6EC6F0)
 private val GlassFrame = Color(0xCCE8F4FF)
+private val GlassBit = Color(0xFF8FD3F5)
 private val RailColor = Color(0xFF8B5E3C)
 private val FenceColor = Color(0xFFF4F1EA)
 private val Terracotta = Color(0xFFC0603A)
@@ -618,6 +619,7 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
                 if (top <= b.y0) continue
             }
             if (b.kind == HouseWorld.Kind.GLASS) {
+                if (i in f.brokenPanes) continue
                 // Where the wall in front is cut away, the pane reaches down to the stub of the
                 // sill, so the window still shows between us and the camera.
                 val bottom = if (active && d < myDepth - 0.3) min(b.y0, y + CUT) else b.y0
@@ -785,12 +787,13 @@ private fun DrawScope.drawShards(cam: HouseCam, sh: HouseView.Shards) {
     val floor = HouseWorld.groundAt(sh.x, sh.z, sh.y)
     val rnd = kotlin.random.Random(sh.seed)
     val alpha = (1f - sh.ageMs.toFloat() / app.notmumla.game.house.Pot.SHARDS_MS).coerceIn(0f, 1f)
-    val bits = List(9) { i ->
+    val bits = List(if (sh.glass) 14 else 9) { i ->
         val a = rnd.nextDouble(0.0, 2 * PI)
         val sp = rnd.nextDouble(1.0, 3.0)
         val vy = rnd.nextDouble(1.0, 4.0)
         val y = max(floor + 0.05, sh.y + vy * t - HouseWorld.GRAVITY * t * t / 2)
         val c = v3(sh.x + sin(a) * sp * t, y, sh.z + cos(a) * sp * t)
+        if (sh.glass) return@List OBox(c, WorldAxes, doubleArrayOf(0.05, 0.015, 0.04), if (i % 2 == 0) GlassBit else GlassFrame)
         val color = when (i % 3) { 0 -> Terracotta; 1 -> Foliage; else -> Dirt }
         OBox(c, WorldAxes, doubleArrayOf(0.06, 0.05, 0.06), color)
     }

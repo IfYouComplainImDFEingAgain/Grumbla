@@ -36,11 +36,15 @@ class Pot(
     /** Tumble angle, for drawing. */
     fun spin() = steps * DT * 9.0
 
+    /** Panes already gone through, so each is reported once. */
+    private val through = HashSet<Int>()
+
     /**
      * Fly on by [ms]. [hits] says whether a figure is in the way at a point; returns true when this
-     * call ended the flight against one.
+     * call ended the flight against one. [glass] hears of each window pane (an index into
+     * [HouseWorld.boxes]) it passes through, and where: glass never stops it.
      */
-    fun advance(ms: Long, hits: (DoubleArray) -> Boolean): Boolean {
+    fun advance(ms: Long, glass: (Int, DoubleArray) -> Unit = { _, _ -> }, hits: (DoubleArray) -> Boolean): Boolean {
         if (smashedAt != null) return false
         ageMs += ms
         val due = ageMs * RATE / 1000
@@ -48,6 +52,14 @@ class Pot(
             steps++
             val p = at(steps * DT)
             if (hits(p)) { smashedAt = p; return true }
+            for (k in HouseWorld.panes) {
+                if (k in through) continue
+                val b = HouseWorld.boxes[k]
+                if (p[0] > b.x0 - R && p[0] < b.x1 + R && p[1] > b.y0 - R && p[1] < b.y1 + R && p[2] > b.z0 - R && p[2] < b.z1 + R) {
+                    through += k
+                    glass(k, p)
+                }
+            }
             val prev = at((steps - 1) * DT)
             if (blocked(p, prev[1]) || steps * DT > MAX_FLIGHT_S) { smashedAt = prev; return false }
         }

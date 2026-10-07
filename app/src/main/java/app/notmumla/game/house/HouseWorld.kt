@@ -347,6 +347,12 @@ object HouseWorld {
 
     val solids: List<Box> = boxes.filter { it.solid }
 
+    /** The window panes, as indexes into [boxes]. */
+    val panes: List<Int> = boxes.indices.filter { boxes[it].kind == Kind.GLASS }
+
+    /** How long a broken pane takes to be glazed again. */
+    const val PANE_RESPAWN_MS = 20_000L
+
     val floors: List<Floor> = listOf(
         // Downstairs.
         Floor(HX0, -1.0, HZ0, 1.0, 0, 0xFFC9B48F),
