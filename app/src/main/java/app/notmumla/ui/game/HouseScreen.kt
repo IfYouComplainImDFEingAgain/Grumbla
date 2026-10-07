@@ -465,6 +465,89 @@ private fun DrawScope.drawBlock(cam: HouseCam, i: Int, tops: DoubleArray) {
     }
 }
 
+/** Something to paint on one floor, with the world box it fills and its far-to-near sort [key]. */
+private class Drawn(
+    val key: Double,
+    val x0: Double, val x1: Double, val y0: Double, val y1: Double, val z0: Double, val z1: Double,
+    val draw: DrawScope.() -> Unit,
+) {
+    var sx0 = 0f; var sx1 = 0f; var sy0 = 0f; var sy1 = 0f
+
+    companion object {
+        fun around(key: Double, x: Double, y0: Double, y1: Double, z: Double, r: Double, draw: DrawScope.() -> Unit) =
+            Drawn(key, x - r, x + r, y0, y1, z - r, z + r, draw)
+    }
+}
+
+/**
+ * Whether [a] must be painted before [b] (+1), after it (−1), or either (0). Two boxes that don't
+ * intersect have a plane between them, and the one on the camera's side of it is in front. This is
+ * what keeps a couch flush against the inside of the front wall from showing through it: sorting by
+ * centres alone gets that wrong whenever the camera looks along the wall at an angle.
+ */
+private fun order(eye: DoubleArray, a: Drawn, b: Drawn): Int {
+    val e = 1e-6
+    fun side(aLo: Double, aHi: Double, bLo: Double, bHi: Double, eyeAt: Double): Int = when {
+        aHi <= bLo + e -> if (eyeAt < (aHi + bLo) / 2) -1 else 1
+        bHi <= aLo + e -> if (eyeAt > (bHi + aLo) / 2) -1 else 1
+        else -> 0
+    }
+    side(a.y0, a.y1, b.y0, b.y1, eye[1]).let { if (it != 0) return it }
+    side(a.x0, a.x1, b.x0, b.x1, eye[0]).let { if (it != 0) return it }
+    side(a.z0, a.z1, b.z0, b.z1, eye[2]).let { if (it != 0) return it }
+    return 0
+}
+
+/**
+ * The painter's order: overlapping things on screen go by [order], the rest (and anything caught
+ * in a cycle, or interpenetrating) far to near by key.
+ */
+private fun DrawScope.paintersOrder(cam: HouseCam, items: List<Drawn>): List<Drawn> {
+    val n = items.size
+    for (d in items) {
+        var x0 = Float.MAX_VALUE; var x1 = -Float.MAX_VALUE; var y0 = Float.MAX_VALUE; var y1 = -Float.MAX_VALUE
+        var behind = false
+        for (c in 0 until 8) {
+            val p = cam.toCam(if (c and 1 == 0) d.x0 else d.x1, if (c and 2 == 0) d.y0 else d.y1, if (c and 4 == 0) d.z0 else d.z1)
+            if (p[2] < NEAR) { behind = true; break }
+            val o = cam.screen(p)
+            x0 = min(x0, o.x); x1 = max(x1, o.x); y0 = min(y0, o.y); y1 = max(y1, o.y)
+        }
+        if (behind) { x0 = -Float.MAX_VALUE; x1 = Float.MAX_VALUE; y0 = -Float.MAX_VALUE; y1 = Float.MAX_VALUE }
+        d.sx0 = x0; d.sx1 = x1; d.sy0 = y0; d.sy1 = y1
+    }
+    // Far to near by key first; edges only correct it where two things actually overlap.
+    val byKey = items.indices.sortedByDescending { items[it].key }
+    val rank = IntArray(n).also { r -> byKey.forEachIndexed { pos, i -> r[i] = pos } }
+    val after = Array(n) { ArrayList<Int>(4) }
+    val waiting = IntArray(n)
+    for (i in 0 until n) for (j in i + 1 until n) {
+        val a = items[i]; val b = items[j]
+        if (a.sx1 < b.sx0 || b.sx1 < a.sx0 || a.sy1 < b.sy0 || b.sy1 < a.sy0) continue
+        when (order(cam.eye, a, b)) {
+            1 -> { after[i] += j; waiting[j]++ }
+            -1 -> { after[j] += i; waiting[i]++ }
+        }
+    }
+    val ready = java.util.PriorityQueue<Int>(compareBy { rank[it] })
+    for (i in 0 until n) if (waiting[i] == 0) ready += i
+    val done = BooleanArray(n)
+    val out = ArrayList<Drawn>(n)
+    var next = 0
+    while (out.size < n) {
+        val i = ready.poll() ?: run {
+            // A cycle: break it at the farthest thing left.
+            while (done[byKey[next]]) next++
+            byKey[next]
+        }
+        if (done[i]) continue
+        done[i] = true
+        out += items[i]
+        for (j in after[i]) if (--waiting[j] == 0 && !done[j]) ready += j
+    }
+    return out
+}
+
 /** Whether a box downstairs shows through the stairwell from upstairs. */
 private fun nearStairwell(x: Double, z: Double) =
     x > HouseWorld.SX0 - 1.2 && x < HouseWorld.GARAGE_X + 0.3 && z > HouseWorld.SZ0 - 1.2 && z < HouseWorld.SZ1 + 0.3
@@ -492,8 +575,7 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
     for (level in 0..(if (showUpper) 1 else 0)) {
         val y = level * HouseWorld.STORY
         for (fl in HouseWorld.floors) if (fl.level == level) drawFloor(cam, fl, y)
-        // Within a floor, everything stands on the same plane: far to near along the ground works.
-        val items = ArrayList<Pair<Double, DrawScope.() -> Unit>>()
+        val items = ArrayList<Drawn>()
         val active = level == myLevel || !indoors
         val tops = DoubleArray(HouseWorld.boxes.size) { Double.NEGATIVE_INFINITY }
         for ((i, b) in HouseWorld.boxes.withIndex()) {
@@ -509,28 +591,33 @@ private fun DrawScope.drawHouse(f: HouseView, yaw: Double, camY: Double, dist: D
                 top = b.y0 + CUT
             }
             tops[i] = top
-            items += d to { drawBlock(cam, i, tops) }
+            items += Drawn(d, b.x0, b.x1, b.y0, top, b.z0, b.z1) { drawBlock(cam, i, tops) }
         }
         for (fig in figures) {
             if (fig.level != level || hidden(fig)) continue
             val shirt = Shirts[fig.shirt.coerceIn(0, Shirts.size - 1)]
-            items += cam.depthH(fig.x, fig.z) to { drawFigure(cam, fig, shirt, 1f) }
+            // The body's own footprint, not its swinging limbs: those may poke through a wall,
+            // and a box that overlaps everything around it can't be put in order.
+            val r = if (fig.down) 0.9 else HouseWorld.RADIUS
+            val y0 = if (fig.down) fig.y - 0.1 else fig.y
+            items += Drawn(cam.depthH(fig.x, fig.z), fig.x - r, fig.x + r, y0, fig.y + HouseWorld.HEIGHT, fig.z - r, fig.z + r) {
+                drawFigure(cam, fig, shirt, 1f)
+            }
         }
         for (k in f.spots) {
             val sp = HouseWorld.spots[k]
             if (HouseWorld.levelOf(sp.y) != level || hiddenAt(sp.x, sp.y, sp.z)) continue
-            items += cam.depthH(sp.x, sp.z) to { drawSpot(cam, sp) }
+            items += Drawn.around(cam.depthH(sp.x, sp.z), sp.x, sp.y, sp.y + 0.7, sp.z, 0.5) { drawSpot(cam, sp) }
         }
         for (pot in f.pots) {
             if (HouseWorld.levelOf(pot.y) != level || hiddenAt(pot.x, pot.y, pot.z)) continue
-            items += cam.depthH(pot.x, pot.z) to { drawFlyingPot(cam, pot) }
+            items += Drawn.around(cam.depthH(pot.x, pot.z), pot.x, pot.y - 0.3, pot.y + 0.5, pot.z, 0.3) { drawFlyingPot(cam, pot) }
         }
         for (sh in f.shards) {
             if (HouseWorld.levelOf(sh.y) != level || hiddenAt(sh.x, sh.y, sh.z)) continue
-            items += cam.depthH(sh.x, sh.z) to { drawShards(cam, sh) }
+            items += Drawn.around(cam.depthH(sh.x, sh.z), sh.x, sh.y - 0.3, sh.y + 0.6, sh.z, 1.2) { drawShards(cam, sh) }
         }
-        items.sortByDescending { it.first }
-        for ((_, draw) in items) draw()
+        for (d in paintersOrder(cam, items)) d.draw(this)
     }
     // A faint copy of us over everything, so a tree or a wall never loses us.
     drawFigure(cam, me, Shirts[me.shirt.coerceIn(0, Shirts.size - 1)], 0.3f)
