@@ -31,6 +31,15 @@ object FlightWorld {
     const val SLAM_DAMAGE = 0.85
     /** Nose-up pitch a ship bounces to off the ground. */
     const val BOUNCE_PITCH = 0.25
+    /**
+     * Hitting a building: each m/s of speed into its face past [SAFE_SINK] costs this much shield;
+     * a boosted head-on hit costs under a third of a full shield. The ship bounces off at
+     * [WALL_BOUNCE_SPEED] of its speed.
+     */
+    const val WALL_DAMAGE = 0.4
+    const val WALL_BOUNCE_SPEED = 0.6
+    /** How close a ship's centre may come to a building. */
+    const val WALL_MARGIN = 1.0
 
     const val CRUISE = 42.0             // m/s
     const val BOOST_SPEED = 75.0
@@ -126,6 +135,8 @@ object FlightWorld {
     }
 
     fun solid(x: Double, y: Double, z: Double, margin: Double = 0.0) = boxes.any { it.contains(x, y, z, margin) }
+
+    fun boxAt(x: Double, y: Double, z: Double, margin: Double = 0.0) = boxes.firstOrNull { it.contains(x, y, z, margin) }
 
     fun wrap(h: Double): Double {
         var a = h % (2 * PI)
