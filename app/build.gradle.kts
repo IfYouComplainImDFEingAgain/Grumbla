@@ -12,12 +12,22 @@ android {
     namespace = "app.notmumla"
     compileSdk = 35
 
+    // CI passes the tag's version (-PreleaseVersion=0.5.0); local builds fall back to the values
+    // below. versionCode is derived so it rises with every tag: 0.5.0 -> 500, 1.2.3 -> 10203.
+    val releaseVersion = (findProperty("releaseVersion") as String?)?.also {
+        require(Regex("""\d+\.\d{1,2}\.\d{1,2}""").matches(it)) {
+            "releaseVersion must be MAJOR.MINOR.PATCH with MINOR/PATCH < 100, got '$it'"
+        }
+    }
+
     defaultConfig {
         applicationId = "app.notmumla"
         minSdk = 31
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.4.0"
+        versionCode = releaseVersion
+            ?.split('.')?.map(String::toInt)?.let { (ma, mi, pa) -> ma * 10000 + mi * 100 + pa }
+            ?: 5
+        versionName = releaseVersion ?: "0.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

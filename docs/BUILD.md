@@ -47,8 +47,10 @@ apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
 ```
 - **Losing the key means installs can never be updated in place** — keep an off-machine backup of
   the `.jks` and its password.
-- Bump `versionCode` (and `versionName`) in `app/build.gradle.kts` for every release; Android
-  rejects an update whose `versionCode` isn't higher than the installed one.
+- CI sets the version from the tag (`-PreleaseVersion=0.5.0` → `versionName` 0.5.0,
+  `versionCode` 500, i.e. `MAJOR*10000 + MINOR*100 + PATCH`). Android rejects an update whose
+  `versionCode` isn't higher than the installed one, so tags must only go up. Local builds without
+  the property use the fallback values in `app/build.gradle.kts`; pass it to build a release locally.
 - Debug and release builds are signed with different keys, so switching a phone from one to the
   other needs an uninstall (export the identity certificate in-app first — uninstall wipes it).
 
@@ -92,8 +94,9 @@ adb reverse tcp:64738 tcp:64738
 
 ## CI release (GitHub Actions)
 `.github/workflows/release.yml` builds, signs, verifies and publishes a GitHub release when a `v*`
-tag is pushed. It refuses tags that aren't on `master` or don't match `versionName` (tag `v0.4.0` ↔
-`versionName = "0.4.0"`), and fails if the APK isn't signed with the cert digest above.
+tag is pushed. The tag sets the app version at build time (tag `v0.5.0` → `versionName` 0.5.0).
+It refuses tags that aren't on `master` or aren't `vMAJOR.MINOR.PATCH` (MINOR/PATCH < 100), and
+fails if the APK isn't signed with the cert digest above.
 
 Repository secrets (Settings → Secrets and variables → Actions):
 | Secret | Value |
@@ -103,5 +106,4 @@ Repository secrets (Settings → Secrets and variables → Actions):
 | `KEY_ALIAS` | `grumbla` |
 | `KEY_PASSWORD` | key password |
 
-Release: bump `versionCode`/`versionName`, commit to `master`, then
-`git tag v0.4.0 && git push origin v0.4.0`.
+Release: on `master`, `git tag v0.5.0 && git push origin v0.5.0`. No version bump commit needed.
