@@ -34,6 +34,9 @@ class FlightSounds(context: Context) {
         .build()
     private val ids = HashMap<FlightSound, Int>()
     private val loaded = HashSet<Int>()
+    private val engineId: Int
+    private var engineStream = 0
+    private var engineLevel = 0f
 
     init {
         pool.setOnLoadCompleteListener { _, id, status -> if (status == 0) synchronized(loaded) { loaded += id } }
@@ -43,6 +46,30 @@ class FlightSounds(context: Context) {
             if (!file.exists()) file.writeBytes(wav(synth(s)))
             ids[s] = pool.load(file.path, 1)
         }
+        val engine = File(dir, "engine_v$VERSION.wav")
+        if (!engine.exists()) engine.writeBytes(wav(engineLoop()))
+        engineId = pool.load(engine.path, 1)
+    }
+
+    /**
+     * Call every frame: the afterburner loop swells in (pitch rising with it) while [on], and
+     * fades out after; [dtMs] is the frame time.
+     */
+    fun engine(on: Boolean, dtMs: Long) {
+        val dt = dtMs.coerceIn(0, 100) / 1000f
+        engineLevel = if (on) min(1f, engineLevel + dt / 0.15f) else maxOf(0f, engineLevel - dt / 0.35f)
+        if (engineLevel <= 0f) {
+            if (engineStream != 0) { pool.stop(engineStream); engineStream = 0 }
+            return
+        }
+        if (engineStream == 0) {
+            if (synchronized(loaded) { engineId !in loaded }) return
+            engineStream = pool.play(engineId, 0f, 0f, 2, -1, 1f)
+            if (engineStream == 0) return
+        }
+        val v = 0.5f * engineLevel
+        pool.setVolume(engineStream, v, v)
+        pool.setRate(engineStream, 0.8f + 0.3f * engineLevel)
     }
 
     fun play(events: List<SoundEvent>) {
@@ -55,7 +82,10 @@ class FlightSounds(context: Context) {
         }
     }
 
-    fun release() = pool.release()
+    fun release() {
+        engineStream = 0
+        pool.release()
+    }
 
     companion object {
         private const val RATE = 22_050
@@ -121,6 +151,31 @@ class FlightSounds(context: Context) {
                 phase += 2 * PI * (70 * exp(-t * 1.5) + 30) / RATE
                 val env = min(1.0, t / 0.004) * exp(-t / 0.35)
                 (lp2 * 3.2 + sin(phase) * 0.45) * env
+            }
+        }
+
+        /**
+         * A jet roar that loops seamlessly: harmonics that fit a whole number of cycles in the
+         * loop, plus rumbling noise whose end is crossfaded into its start so the seam is silent.
+         */
+        internal fun engineLoop(): ShortArray {
+            val n = RATE // one second
+            val fade = RATE / 10
+            val rnd = Random(5)
+            var lp = 0.0
+            var lp2 = 0.0
+            val raw = DoubleArray(n + fade) { i ->
+                val t = i.toDouble() / RATE
+                lp += (rnd.nextDouble(-1.0, 1.0) - lp) * 0.12
+                lp2 += (lp - lp2) * 0.25
+                // 60 Hz drone with a 7 Hz throb, plus a 240 Hz turbine whine.
+                val drone = tanh(2.5 * sin(2 * PI * 60 * t)) * (0.75 + 0.25 * sin(2 * PI * 7 * t))
+                val whine = sin(2 * PI * 240 * t) * 0.18
+                lp2 * 2.6 + drone * 0.35 + whine
+            }
+            return ShortArray(n) { i ->
+                val s = if (i < fade) raw[i] * (i.toDouble() / fade) + raw[i + n] * (1 - i.toDouble() / fade) else raw[i]
+                (s * 0.6 * Short.MAX_VALUE).toInt().coerceIn(-32767, 32767).toShort()
             }
         }
 

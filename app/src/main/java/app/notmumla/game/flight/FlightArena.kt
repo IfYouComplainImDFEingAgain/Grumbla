@@ -42,6 +42,8 @@ data class FlightView(
     val respawnInMs: Long,
     val shield: Float,
     val boost: Float,
+    /** Our own afterburner is lit. */
+    val boosting: Boolean,
     val turningBack: Boolean,
     val hurtAgoMs: Long,
     val ships: List<Ship>,
@@ -487,6 +489,7 @@ class FlightArena(
             respawnInMs = if (alive) 0 else (deadUntil - now).coerceAtLeast(0),
             shield = (shield / FlightWorld.SHIELD).toFloat().coerceIn(0f, 1f),
             boost = boostMeter.toFloat(),
+            boosting = alive && boosting,
             turningBack = alive && turningBack,
             hurtAgoMs = now - lastHurt,
             ships = ships,
