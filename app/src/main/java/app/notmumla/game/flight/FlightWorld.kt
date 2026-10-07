@@ -23,9 +23,12 @@ object FlightWorld {
     const val HOVER = 14.0
     /** ...reaching this climb rate (m/s) at the ground: a steep dive at cruise just gets through. */
     const val CUSHION = 32.0
-    /** Sink rate (m/s) the ground forgives; above it, each m/s costs [SLAM_DAMAGE] shield. */
+    /**
+     * Sink rate (m/s) the ground forgives; above it, each m/s costs [SLAM_DAMAGE] shield. The
+     * hardest hit there is (boosted, nose fully down) costs under a third of a full shield.
+     */
     const val SAFE_SINK = 4.0
-    const val SLAM_DAMAGE = 2.5
+    const val SLAM_DAMAGE = 0.85
     /** Nose-up pitch a ship bounces to off the ground. */
     const val BOUNCE_PITCH = 0.25
 
