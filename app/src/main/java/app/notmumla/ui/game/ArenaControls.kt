@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -36,13 +35,14 @@ import kotlin.math.roundToInt
 
 // Touch controls shared by the full-screen arena games.
 
-/** Swallow every touch the controls don't take, or it reaches the channel list underneath. */
+/**
+ * Claim every touch the controls don't take, or it reaches the channel list underneath. Only
+ * claim, never consume: a consumed change counts as a cancel to the controls' gestures, so a
+ * thumb moving the stick would keep letting go of the button held by the other thumb.
+ */
 internal fun Modifier.swallowTouches() = pointerInput(Unit) {
-    awaitEachGesture {
-        do {
-            val e = awaitPointerEvent()
-            e.changes.forEach { it.consume() }
-        } while (e.changes.any { it.pressed })
+    awaitPointerEventScope {
+        while (true) awaitPointerEvent()
     }
 }
 
@@ -59,7 +59,10 @@ internal fun HudButton(label: String, color: Color, onClick: () -> Unit) {
     )
 }
 
-/** Held = true from finger down to finger up; works alongside a finger on the stick. */
+/**
+ * Held = true from finger down to finger up, alongside a finger on the stick. A thumb drifting off
+ * the button mid-press still holds it: in a game, letting go is the only way to let go.
+ */
 @Composable
 internal fun HoldButton(label: String, sizeDp: Int, color: Color, onHeld: (Boolean) -> Unit) {
     var held by remember { mutableStateOf(false) }
@@ -69,10 +72,17 @@ internal fun HoldButton(label: String, sizeDp: Int, color: Color, onHeld: (Boole
             .border(2.dp, color, CircleShape)
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    awaitFirstDown().consume()
+                    val down = awaitFirstDown()
+                    down.consume()
                     held = true; onHeld(true)
-                    waitForUpOrCancellation()
-                    held = false; onHeld(false)
+                    try {
+                        while (true) {
+                            val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                            if (!c.pressed) break
+                        }
+                    } finally {
+                        held = false; onHeld(false)
+                    }
                 }
             },
         contentAlignment = Alignment.Center,

@@ -125,8 +125,9 @@ fun FlightScreen(
     var flight by remember { mutableStateOf(flightStyle) }
     var frame by remember { mutableStateOf<FlightView?>(null) }
     LaunchedEffect(Unit) {
+        var last = 0L
         while (true) {
-            withFrameMillis {
+            withFrameMillis { ms ->
                 val f = step(
                     FlightInput(
                         yaw = stick.x,
@@ -135,6 +136,8 @@ fun FlightScreen(
                     ),
                 )
                 if (f != null && !quiet) sfx.play(f.sounds)
+                sfx.engine(on = f?.boosting == true && !quiet, dtMs = if (last == 0L) 0 else ms - last)
+                last = ms
                 frame = f
             }
         }
