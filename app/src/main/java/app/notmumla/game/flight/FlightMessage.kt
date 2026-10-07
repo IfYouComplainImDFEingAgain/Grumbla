@@ -37,10 +37,14 @@ sealed interface FlightMessage {
     data class Hit(val shooter: Int, val shot: Int) : FlightMessage
 
     companion object {
-        const val DATA_ID = "notmumla/flight/1"
+        // v2: fx gained ROLL_LEFT (v1 clients would reject it, so they don't hear v2 at all).
+        const val DATA_ID = "notmumla/flight/2"
         const val FIRING = 1
         const val BOOSTING = 2
         const val ROLLING = 4
+        /** With [ROLLING]: the roll goes left (counter-clockwise from behind). */
+        const val ROLL_LEFT = 8
+        private const val FX_MAX = 15
         private const val MAX_LEN = 96
         private const val MAX_COUNT = 999_999_999
         private val POS = (FlightWorld.LIMIT * 10).roundToInt()          // decimetres
@@ -68,7 +72,7 @@ sealed interface FlightMessage {
                 append((p.v * 10).roundToInt().coerceIn(0, SPEED)).append(' ')
                 append(deci(p.w).coerceIn(-YAW_RATE, YAW_RATE)).append(' ')
                 append(deci(p.q).coerceIn(-PITCH_RATE, PITCH_RATE)).append(' ')
-                append(m.fx and 7).append(' ')
+                append(m.fx and FX_MAX).append(' ')
                 append(m.shots).append(' ').append(m.kills).append(' ').append(m.deaths)
             }
         }.toByteArray(Charsets.US_ASCII)
@@ -87,7 +91,7 @@ sealed interface FlightMessage {
                 "s" -> {
                     val bounds = arrayOf(
                         0..MAX_COUNT, 0..1, -POS..POS, 0..ALT, -POS..POS, 0 until ANGLE, -PITCH..PITCH,
-                        0..SPEED, -YAW_RATE..YAW_RATE, -PITCH_RATE..PITCH_RATE, 0..7,
+                        0..SPEED, -YAW_RATE..YAW_RATE, -PITCH_RATE..PITCH_RATE, 0..FX_MAX,
                         0..MAX_COUNT, 0..MAX_COUNT, 0..MAX_COUNT,
                     )
                     if (parts.size != bounds.size + 1) return null

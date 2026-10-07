@@ -4,6 +4,7 @@ import app.notmumla.game.arena.ChannelArena
 import app.notmumla.game.flight.FlightMessage.Companion.BOOSTING
 import app.notmumla.game.flight.FlightMessage.Companion.FIRING
 import app.notmumla.game.flight.FlightMessage.Companion.ROLLING
+import app.notmumla.game.flight.FlightMessage.Companion.ROLL_LEFT
 import app.notmumla.game.flight.FlightWorld.angleDiff
 import kotlin.math.PI
 import kotlin.math.abs
@@ -26,7 +27,7 @@ data class FlightInput(
 )
 
 /** Sounds the game makes; the screen turns them into audio. */
-enum class FlightSound { MY_LASER, ENEMY_LASER, HIT, HURT, EXPLOSION }
+enum class FlightSound { MY_LASER, ENEMY_LASER, HIT, HURT, EXPLOSION, DEFLECT }
 
 /** One sound to play this frame: [volume] 0..1 (already faded by distance), [pan] −1 left..1 right. */
 data class SoundEvent(val sound: FlightSound, val volume: Float, val pan: Float = 0f)
@@ -100,6 +101,7 @@ class FlightArena(
         var shotsSeen = 0
         var lastBolt = 0L
         var rollStart = Long.MIN_VALUE / 2
+        var rollDir = 1
         var kills = 0
         var deaths = 0
 
@@ -133,6 +135,8 @@ class FlightArena(
     private var firing = false
     private var turningBack = false
     private var rollStart = Long.MIN_VALUE / 2
+    /** +1 rolls right, −1 left. */
+    private var rollDir = 1
     private var lastFire = 0L
     private var lastHurt = Long.MIN_VALUE / 2
     private var lastAttacker = -1
@@ -206,7 +210,10 @@ class FlightArena(
                 if (i == 0) heard(FlightSound.ENEMY_LASER, m.pose.x, m.pose.y, m.pose.z, ENEMY_LASER_RANGE)
             }
         }
-        if (m.fx and ROLLING != 0 && p.fx and ROLLING == 0) p.rollStart = now
+        if (m.fx and ROLLING != 0 && p.fx and ROLLING == 0) {
+            p.rollStart = now
+            p.rollDir = if (m.fx and ROLL_LEFT != 0) -1 else 1
+        }
         p.shots = m.shots
         p.shotsSeen = m.shots
         p.fx = m.fx
@@ -304,6 +311,7 @@ class FlightArena(
         val dv = FlightWorld.ACCEL * dt
         val v = pose.v + (target - pose.v).coerceIn(-dv, dv)
 
+        val before = pose
         pose = pose.copy(v = v, w = w, q = q).extrapolate(dt)
         // Dived through the cushion: the harder we hit, the more it hurts, and we bounce off.
         if (pose.y <= FlightWorld.FLOOR + 1e-6 && pose.p < 0) {
@@ -319,15 +327,51 @@ class FlightArena(
         // Pinned to the ceiling, the nose levels out instead of pushing on through.
         if (pose.y >= FlightWorld.CEILING - 1e-6 && pose.p > 0) pose = pose.copy(p = 0.0)
 
-        if (input.roll && now - rollStart >= FlightWorld.ROLL_COOLDOWN_MS) { rollStart = now; sendNow = true }
+        if (input.roll && now - rollStart >= FlightWorld.ROLL_COOLDOWN_MS) {
+            rollStart = now
+            // Roll the way we're steering, or else the way we're banked.
+            rollDir = when {
+                input.yaw < -0.15f -> -1
+                input.yaw > 0.15f -> 1
+                else -> if (bank < 0) -1 else 1
+            }
+            sendNow = true
+        }
         val target2 = w / FlightWorld.MAX_YAW * BANK
         bank += (target2 - bank) * min(1.0, dt * 8)
 
-        if (FlightWorld.solid(pose.x, pose.y, pose.z, 1.0)) {
-            crash(now)
-            return
-        }
+        FlightWorld.boxAt(pose.x, pose.y, pose.z, FlightWorld.WALL_MARGIN)?.let { bounceOff(it, before, now) }
         if (shield <= 0) crash(now)
+    }
+
+    /**
+     * We flew into [box] this frame from [before]: back out to where we were, take damage for the
+     * speed we had into the face we hit, and leave mirrored off it, slower.
+     */
+    private fun bounceOff(box: FlightWorld.Box, before: Pose3, now: Long) {
+        val m = FlightWorld.WALL_MARGIN
+        // The face we came through: an axis we were outside of before, with the least overlap now.
+        val overlaps = listOf(
+            0 to (minOf(pose.x - (box.x0 - m), (box.x1 + m) - pose.x)).takeIf { before.x <= box.x0 - m || before.x >= box.x1 + m },
+            1 to (minOf(pose.y - (box.y0 - m), (box.y1 + m) - pose.y)).takeIf { before.y <= box.y0 - m || before.y >= box.y1 + m },
+            2 to (minOf(pose.z - (box.z0 - m), (box.z1 + m) - pose.z)).takeIf { before.z <= box.z0 - m || before.z >= box.z1 + m },
+        ).mapNotNull { (axis, d) -> d?.let { axis to it } }
+        val axis = overlaps.minByOrNull { it.second }?.first ?: 0
+        val cp = kotlin.math.cos(pose.p)
+        val dir = doubleArrayOf(sin(pose.h) * cp, sin(pose.p), kotlin.math.cos(pose.h) * cp)
+        val into = abs(dir[axis]) * pose.v
+        if (into > FlightWorld.SAFE_SINK) hurt((into - FlightWorld.SAFE_SINK) * FlightWorld.WALL_DAMAGE, now)
+        sounds += SoundEvent(FlightSound.HURT, 1f)
+        sparks += doubleArrayOf(pose.x, pose.y, pose.z) to now
+        val (h, p) = when (axis) {
+            0 -> FlightWorld.wrap(-pose.h) to pose.p
+            2 -> FlightWorld.wrap(PI - pose.h) to pose.p
+            else -> pose.h to (if (before.y >= box.y1 + m) FlightWorld.BOUNCE_PITCH else -FlightWorld.BOUNCE_PITCH)
+        }
+        // If we somehow started inside (no clean face), at least don't stay stuck: keep the old spot.
+        pose = before.copy(h = h, p = p, v = pose.v * FlightWorld.WALL_BOUNCE_SPEED, w = pose.w, q = pose.q)
+        bank = 0.0
+        sendNow = true
     }
 
     private fun rolling(now: Long) = now - rollStart < FlightWorld.ROLL_MS
@@ -360,17 +404,20 @@ class FlightArena(
             if (b.owner != me && alive &&
                 segmentHitsSphere(a, c, pose.x, pose.y, pose.z, FlightWorld.SHIP_RADIUS)
             ) {
-                // A barrel roll shrugs bolts off.
-                if (!rolling(now)) {
-                    it.remove()
-                    sparks += doubleArrayOf(pose.x, pose.y, pose.z) to now
-                    lastAttacker = b.owner
-                    lastAttackerShot = b.shot
-                    hurt(FlightWorld.LASER_DAMAGE.toDouble(), now)
-                    sounds += SoundEvent(FlightSound.HURT, 1f)
-                    if (shield <= 0) crash(now)
+                it.remove()
+                // A barrel roll knocks bolts away.
+                if (rolling(now)) {
+                    sparks += c to now
+                    sounds += SoundEvent(FlightSound.DEFLECT, 0.8f)
                     continue
                 }
+                sparks += doubleArrayOf(pose.x, pose.y, pose.z) to now
+                lastAttacker = b.owner
+                lastAttackerShot = b.shot
+                hurt(FlightWorld.LASER_DAMAGE.toDouble(), now)
+                sounds += SoundEvent(FlightSound.HURT, 1f)
+                if (shield <= 0) crash(now)
+                continue
             }
             // Bolts that reach another ship stop there; only a visual: the victim decides.
             val target = shown.firstOrNull { (s, p) ->
@@ -463,7 +510,8 @@ class FlightArena(
     }
 
     private fun fx(now: Long) =
-        (if (firing) FIRING else 0) or (if (boosting) BOOSTING else 0) or (if (rolling(now)) ROLLING else 0)
+        (if (firing) FIRING else 0) or (if (boosting) BOOSTING else 0) or
+            (if (rolling(now)) ROLLING or (if (rollDir < 0) ROLL_LEFT else 0) else 0)
 
     private fun sendState(now: Long) {
         seq++
@@ -472,9 +520,9 @@ class FlightArena(
         sendNow = false
     }
 
-    private fun rollAngle(start: Long, now: Long): Double {
+    private fun rollAngle(start: Long, dir: Int, now: Long): Double {
         val t = (now - start).toDouble() / FlightWorld.ROLL_MS
-        return if (t in 0.0..1.0) t * 2 * PI else 0.0
+        return if (t in 0.0..1.0) dir * t * 2 * PI else 0.0
     }
 
     private fun view(now: Long): FlightView {
@@ -482,7 +530,7 @@ class FlightArena(
         val ships = peers.mapNotNull { (session, p) ->
             if (!p.alive) return@mapNotNull null
             p.display(now)?.let {
-                val bank = it.w / FlightWorld.MAX_YAW * BANK + rollAngle(p.rollStart, now)
+                val bank = it.w / FlightWorld.MAX_YAW * BANK + rollAngle(p.rollStart, p.rollDir, now)
                 FlightView.Ship(session, it, bank, p.fx and BOOSTING != 0)
             }
         }
@@ -492,7 +540,7 @@ class FlightArena(
         }.sortedWith(compareByDescending<FlightView.Score> { it.kills }.thenBy { it.deaths })
         return FlightView(
             me = pose,
-            bank = bank + rollAngle(rollStart, now),
+            bank = bank + rollAngle(rollStart, rollDir, now),
             alive = alive,
             killedBy = killedBy,
             respawnInMs = if (alive) 0 else (deadUntil - now).coerceAtLeast(0),

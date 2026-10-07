@@ -92,7 +92,7 @@ class FlightSounds(context: Context) {
         private const val MAX_STREAMS = 10
         /** Bump when a sound changes, so stale cached WAVs aren't reused. */
         private const val VERSION = 1
-        private val PRIORITY = mapOf(FlightSound.EXPLOSION to 3, FlightSound.HURT to 2, FlightSound.HIT to 1)
+        private val PRIORITY = mapOf(FlightSound.EXPLOSION to 3, FlightSound.HURT to 2, FlightSound.DEFLECT to 2, FlightSound.HIT to 1)
 
         internal fun synth(s: FlightSound): ShortArray = when (s) {
             FlightSound.MY_LASER -> laser(from = 1900.0, to = 320.0, seconds = 0.13)
@@ -100,6 +100,7 @@ class FlightSounds(context: Context) {
             FlightSound.HIT -> tick()
             FlightSound.HURT -> crunch()
             FlightSound.EXPLOSION -> boom()
+            FlightSound.DEFLECT -> ping()
         }
 
         private fun render(seconds: Double, sample: (t: Double) -> Double): ShortArray {
@@ -126,6 +127,12 @@ class FlightSounds(context: Context) {
 
         /** A bright, short tick for "your shot connected". */
         private fun tick() = render(0.06) { t -> sin(2 * PI * 2400 * t) * exp(-t / 0.012) * 0.7 }
+
+        /** A bolt glancing off a rolling ship: a metallic ping (inharmonic partials ring like metal). */
+        private fun ping() = render(0.25) { t ->
+            val env = min(1.0, t / 0.001) * exp(-t / 0.06)
+            (sin(2 * PI * 1760 * t) * 0.5 + sin(2 * PI * 2953 * t) * 0.3 + sin(2 * PI * 4410 * t) * 0.2) * env
+        }
 
         /** Taking a hit: a burst of grit over a low buzz. */
         private fun crunch(): ShortArray {
