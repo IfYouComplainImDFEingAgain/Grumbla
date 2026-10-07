@@ -150,8 +150,10 @@ other.
 **Play:** long-press your current channel → **Dogfight**. The stick steers (yaw and pitch; the
 **Y** button toggles flight-style "pull back to climb" and arcade-style); **FIRE** holds for rapid
 twin lasers; **BOOST**/**BRAKE** share a meter; **ROLL** barrel-rolls, and bolts pass through you
-mid-roll. Shields take 20 per bolt (five hits) and only refill on respawn; scraping the floor hurts and
-hitting a building is fatal. Flying past 350 m hands control to an autopilot that turns you back.
+mid-roll. Shields take 20 per bolt (five hits) and only refill on respawn; hitting a building is fatal.
+Below 14 m a ground cushion pushes ships up (up to 32 m/s of climb at the ground), so you can skim
+and hover low; a dive that still reaches the ground costs shield in proportion to how hard it hit,
+and bounces you off. The cushion is part of `Pose3`'s integration, so peers dead-reckon it too. Flying past 350 m hands control to an autopilot that turns you back.
 Enemies off screen show as arrows at the edge.
 
 **Sound:** lasers, hits, taking damage, explosions and a looping afterburner roar while you

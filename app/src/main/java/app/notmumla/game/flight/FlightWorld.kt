@@ -16,8 +16,18 @@ object FlightWorld {
     const val HALF = 350.0
     /** Nothing ever goes past this; also the wire bound. */
     const val LIMIT = 420.0
-    const val FLOOR = 4.0
+    /** Where a ship touches the ground. */
+    const val FLOOR = 1.5
     const val CEILING = 180.0
+    /** Below this a cushion pushes ships up, harder the lower they are... */
+    const val HOVER = 14.0
+    /** ...reaching this climb rate (m/s) at the ground: a steep dive at cruise just gets through. */
+    const val CUSHION = 32.0
+    /** Sink rate (m/s) the ground forgives; above it, each m/s costs [SLAM_DAMAGE] shield. */
+    const val SAFE_SINK = 4.0
+    const val SLAM_DAMAGE = 2.5
+    /** Nose-up pitch a ship bounces to off the ground. */
+    const val BOUNCE_PITCH = 0.25
 
     const val CRUISE = 42.0             // m/s
     const val BOOST_SPEED = 75.0
@@ -35,7 +45,6 @@ object FlightWorld {
     /** Five hits down a full shield, which only refills on respawn. */
     const val LASER_DAMAGE = 20
     const val SHIELD = 100
-    const val SCRAPE_PER_SEC = 30.0
     const val RESPAWN_MS = 3_000L
     const val ROLL_MS = 600L
     const val ROLL_COOLDOWN_MS = 1_500L
@@ -106,6 +115,13 @@ object FlightWorld {
         listOf(-110.0, -60.0, -10.0, 40.0).flatMap { arch(it, 170.0, alongX = false) } +
         listOf(-160.0, -110.0, -60.0).flatMap { arch(260.0, it, alongX = true) }
 
+    /** The ground cushion's climb rate at height [y]. */
+    fun cushion(y: Double): Double {
+        if (y >= HOVER) return 0.0
+        val k = ((HOVER - y) / (HOVER - FLOOR)).coerceAtMost(1.0)
+        return CUSHION * k * k
+    }
+
     fun solid(x: Double, y: Double, z: Double, margin: Double = 0.0) = boxes.any { it.contains(x, y, z, margin) }
 
     fun wrap(h: Double): Double {
@@ -134,8 +150,9 @@ data class Pose3(
 ) {
     /**
      * Where this pose will be after [sec] seconds of the same controls. Integrated in small steps
-     * (the pitch limit and floor make a closed form messy); our own ship flies with the same code,
-     * so a peer holding the stick still is drawn exactly where they are.
+     * (the pitch limit and ground cushion make a closed form messy); our own ship flies with the
+     * same code, so a peer holding the stick still is drawn exactly where they are, hovering
+     * included.
      */
     fun extrapolate(sec: Double): Pose3 {
         var cur = this
@@ -156,7 +173,7 @@ data class Pose3(
         val lim = FlightWorld.LIMIT
         return copy(
             x = (x + sin(hm) * cos(pm) * d).coerceIn(-lim, lim),
-            y = (y + sin(pm) * d).coerceIn(FlightWorld.FLOOR, FlightWorld.CEILING),
+            y = (y + sin(pm) * d + FlightWorld.cushion(y) * dt).coerceIn(FlightWorld.FLOOR, FlightWorld.CEILING),
             z = (z + cos(hm) * cos(pm) * d).coerceIn(-lim, lim),
             h = FlightWorld.wrap(h + w * dt),
             p = p1,

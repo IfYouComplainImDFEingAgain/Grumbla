@@ -74,6 +74,17 @@ class Pose3Test {
         assertEquals(40.0 * (sin(1.3) - sin(0.3)), p.z, 0.05)
     }
 
+    @Test fun cushionHoldsALevelShipUpButNotAHardDive() {
+        val level = Pose3(0.0, 6.0, 0.0, 0.0, 0.0, FlightWorld.CRUISE).extrapolate(5.0)
+        assertTrue("${level.y}", level.y > 10 && level.y <= FlightWorld.HOVER)
+        // A shallow glide settles above the ground.
+        val glide = Pose3(0.0, 30.0, 0.0, 0.0, -0.2, FlightWorld.CRUISE).extrapolate(8.0)
+        assertTrue("${glide.y}", glide.y > FlightWorld.FLOOR + 3)
+        // A boosted dive punches through.
+        val dive = Pose3(0.0, 40.0, 0.0, 0.0, -1.0, FlightWorld.BOOST_SPEED).extrapolate(3.0)
+        assertEquals(FlightWorld.FLOOR, dive.y, 1e-9)
+    }
+
     @Test fun pitchAndAltitudeStayInBounds() {
         val up = Pose3(0.0, 170.0, 0.0, 0.0, 0.0, 70.0, 0.0, 1.2).extrapolate(3.0)
         assertEquals(FlightWorld.MAX_PITCH, up.p, 1e-9)
@@ -150,6 +161,27 @@ class FlightArenaTest {
         val back = tick()
         assertTrue(back.alive)
         assertEquals(1f, back.shield, 0f)
+    }
+
+    @Test fun hoveringIsSafeAndSlammingHurts() {
+        arena.join()
+        // Nose down a little (the stick sets a pitch rate), then hands off, circling: the shallow
+        // glide comes down into the cushion and settles there with the shield untouched.
+        var v = tick()
+        repeat(16) { v = tick(16, FlightInput(yaw = 1f, pitch = -1f)) }
+        repeat(800) { v = tick(16, FlightInput(yaw = 1f)) }
+        assertTrue("${v.me}", v.alive && v.me.y < FlightWorld.HOVER && v.me.y > FlightWorld.FLOOR)
+        assertEquals(1f, v.shield, 0f)
+        // Boosted with the nose hard down, we punch through and it costs shield.
+        var hurt = false
+        var thud = false
+        repeat(200) {
+            v = tick(16, FlightInput(yaw = 1f, pitch = -1f, boost = true))
+            if (v.shield < 1f) hurt = true
+            if (v.sounds.any { it.sound == FlightSound.HURT }) thud = true
+        }
+        assertTrue(hurt)
+        assertTrue(thud)
     }
 
     @Test fun crashingWithNobodyToBlameCreditsNoOne() {
