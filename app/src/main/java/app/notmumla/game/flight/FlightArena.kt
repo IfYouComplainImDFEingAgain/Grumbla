@@ -2,6 +2,7 @@ package app.notmumla.game.flight
 
 import app.notmumla.game.arena.ChannelArena
 import app.notmumla.game.flight.FlightMessage.Companion.BOOSTING
+import app.notmumla.game.flight.FlightMessage.Companion.BRAKING
 import app.notmumla.game.flight.FlightMessage.Companion.FIRING
 import app.notmumla.game.flight.FlightMessage.Companion.ROLLING
 import app.notmumla.game.flight.FlightMessage.Companion.ROLL_LEFT
@@ -32,6 +33,16 @@ enum class FlightSound { MY_LASER, ENEMY_LASER, HIT, HURT, EXPLOSION, DEFLECT }
 /** One sound to play this frame: [volume] 0..1 (already faded by distance), [pan] −1 left..1 right. */
 data class SoundEvent(val sound: FlightSound, val volume: Float, val pan: Float = 0f)
 
+/** Sounds that last as long as a ship keeps doing something. */
+enum class FlightLoop { BOOST, BRAKE }
+
+/** A loop sounding this frame, for ship [key] (a session id, or [ME]); volume and pan as above. */
+data class LoopSound(val key: Int, val loop: FlightLoop, val volume: Float, val pan: Float = 0f) {
+    companion object {
+        const val ME = -1
+    }
+}
+
 /** Everything the renderer needs for one frame; immutable, so it can be drawn off the lock. */
 data class FlightView(
     val me: Pose3,
@@ -43,8 +54,8 @@ data class FlightView(
     val respawnInMs: Long,
     val shield: Float,
     val boost: Float,
-    /** Our own afterburner is lit. */
-    val boosting: Boolean,
+    /** Engine loops sounding now: ours and nearby ships'. */
+    val loops: List<LoopSound> = emptyList(),
     val turningBack: Boolean,
     val hurtAgoMs: Long,
     val ships: List<Ship>,
@@ -132,6 +143,7 @@ class FlightArena(
     private var shield = FlightWorld.SHIELD.toDouble()
     private var boostMeter = 1.0
     private var boosting = false
+    private var braking = false
     private var firing = false
     private var turningBack = false
     private var rollStart = Long.MIN_VALUE / 2
@@ -308,6 +320,7 @@ class FlightArena(
         boostMeter = if (wantBoost || wantBrake) (boostMeter - FlightWorld.BOOST_DRAIN * dt).coerceAtLeast(0.0)
         else (boostMeter + FlightWorld.BOOST_REFILL * dt).coerceAtMost(1.0)
         if (wantBoost != boosting) { boosting = wantBoost; sendNow = true }
+        if (wantBrake != braking) { braking = wantBrake; sendNow = true }
         val dv = FlightWorld.ACCEL * dt
         val v = pose.v + (target - pose.v).coerceIn(-dv, dv)
 
@@ -440,13 +453,30 @@ class FlightArena(
 
     /** A sound from a point in the world: fainter with distance, panned by where it is. */
     private fun heard(sound: FlightSound, x: Double, y: Double, z: Double, range: Double, floor: Float = 0f) {
+        placed(x, y, z, range, floor)?.let { (volume, pan) -> sounds += SoundEvent(sound, volume, pan) }
+    }
+
+    /** Volume and pan of a sound at a point, or null if it's too far to hear. */
+    private fun placed(x: Double, y: Double, z: Double, range: Double, floor: Float = 0f): Pair<Float, Float>? {
         val dx = x - pose.x
         val dz = z - pose.z
         val d = hypot(hypot(dx, y - pose.y), dz)
         val volume = maxOf(floor, (1 - d / range).toFloat())
-        if (volume <= 0.03f) return
+        if (volume <= 0.03f) return null
         val pan = if (d < 1) 0.0 else sin(angleDiff(atan2(dx, dz), pose.h)) * min(1.0, d / 20)
-        sounds += SoundEvent(sound, volume, pan.toFloat())
+        return volume to pan.toFloat()
+    }
+
+    private fun loops(now: Long): List<LoopSound> = buildList {
+        if (alive && boosting) add(LoopSound(LoopSound.ME, FlightLoop.BOOST, 1f))
+        if (alive && braking) add(LoopSound(LoopSound.ME, FlightLoop.BRAKE, 1f))
+        for ((session, p) in peers) {
+            if (!p.alive || p.fx and (BOOSTING or BRAKING) == 0) continue
+            val at = p.display(now) ?: continue
+            val (volume, pan) = placed(at.x, at.y, at.z, ENGINE_RANGE) ?: continue
+            val loop = if (p.fx and BOOSTING != 0) FlightLoop.BOOST else FlightLoop.BRAKE
+            add(LoopSound(session, loop, volume * 0.8f, pan))
+        }
     }
 
     private fun hurt(amount: Double, now: Long) {
@@ -467,6 +497,7 @@ class FlightArena(
         pose = pose.copy(v = 0.0, w = 0.0, q = 0.0)
         firing = false
         boosting = false
+        braking = false
         if (peers.isNotEmpty() && me != null) {
             take(force = true)
             broadcast(
@@ -510,7 +541,7 @@ class FlightArena(
     }
 
     private fun fx(now: Long) =
-        (if (firing) FIRING else 0) or (if (boosting) BOOSTING else 0) or
+        (if (firing) FIRING else 0) or (if (boosting) BOOSTING else 0) or (if (braking) BRAKING else 0) or
             (if (rolling(now)) ROLLING or (if (rollDir < 0) ROLL_LEFT else 0) else 0)
 
     private fun sendState(now: Long) {
@@ -546,7 +577,7 @@ class FlightArena(
             respawnInMs = if (alive) 0 else (deadUntil - now).coerceAtLeast(0),
             shield = (shield / FlightWorld.SHIELD).toFloat().coerceIn(0f, 1f),
             boost = boostMeter.toFloat(),
-            boosting = alive && boosting,
+            loops = loops(now),
             turningBack = alive && turningBack,
             hurtAgoMs = now - lastHurt,
             ships = ships,
@@ -572,6 +603,7 @@ class FlightArena(
         const val MAX_BOLTS_PER_SHIP = 12
         private const val ENEMY_LASER_RANGE = 300.0
         private const val EXPLOSION_RANGE = 600.0
+        private const val ENGINE_RANGE = 250.0
         private const val PHANTOM_SHOTS = 8
         private const val BANK = 0.8
         private const val MAX_EXTRAPOLATE_MS = 1_000L
