@@ -268,9 +268,12 @@ class SessionManager @Inject constructor(
         val btAppeared = now.any { it.isBluetooth && it !in prev }
         val target = when {
             // A Bluetooth device just connected: move to its best route (A2DP and SCO often appear
-            // in separate callbacks, so this may step from one to the higher-priority other).
+            // in separate callbacks, so this may step from one to the higher-priority other). The mode
+            // the user picked by hand wins once it shows up, or a reconnect strands them on the profile
+            // that happened to appear first (e.g. HQ with the phone mic instead of the headset mic).
             btAppeared && settings.autoSwitchBluetooth && engine != null ->
-                settings.routePriority.firstOrNull { it.isBluetooth && it in now }
+                pickedBtRoute?.takeIf { it in now }
+                    ?: settings.routePriority.firstOrNull { it.isBluetooth && it in now }
             // The active route's hardware went away: walk down the priority list.
             current !in now -> bestByPriority(now)
             // Not in a call: just track what the next connect would pick.
@@ -279,6 +282,9 @@ class SessionManager @Inject constructor(
         }
         if (target != null && target != current) applyRoute(target)
     }
+
+    /** Bluetooth mode (HQ or headset) the user last chose by hand; wins over priority on reconnect. */
+    private var pickedBtRoute: OutputRoute? = null
 
     private val OutputRoute.isBluetooth
         get() = this == OutputRoute.BT_A2DP_HQ || this == OutputRoute.BT_HEADSET_SCO
@@ -675,6 +681,7 @@ class SessionManager @Inject constructor(
 
     /** User picked an output route (phone / wired / Bluetooth HQ / Bluetooth headset). */
     fun selectRoute(route: OutputRoute) {
+        if (route.isBluetooth) pickedBtRoute = route
         applyRoute(route)
         scope.launch { settingsRepo.setLastRoute(route) }
     }
