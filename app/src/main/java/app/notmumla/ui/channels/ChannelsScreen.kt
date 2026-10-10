@@ -373,8 +373,6 @@ private fun UserVolumeSheet(
                         Spacer(Modifier.width(8.dp))
                         Text(if (user.locallyMuted) "Unmute ${user.name}" else "Mute ${user.name}")
                     }
-                    Text("Muting is local — they aren't told, and it's remembered by name.",
-                        fontSize = 12.sp, color = c.onSurfaceVar)
                 }
                 Spacer(Modifier.height(16.dp))
                 androidx.compose.material3.FilledTonalButton(
