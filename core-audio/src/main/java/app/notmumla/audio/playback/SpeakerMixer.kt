@@ -34,6 +34,8 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
     private val speakers = ConcurrentHashMap<Int, Speaker>()
     /** Local per-user volume multipliers keyed by session (1.0 = default). */
     private val userGains = ConcurrentHashMap<Int, Float>()
+    /** Locally muted sessions: their packets are dropped before decoding (no CPU, no speaking flag). */
+    private val mutedSessions = ConcurrentHashMap.newKeySet<Int>()
     private val mixBuf = FloatArray(frameSamples)
     private var limiterGain = 1f
 
@@ -44,7 +46,14 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
         if (gain == 1.0f) userGains.remove(session) else userGains[session] = gain
     }
 
+    fun setUserMuted(session: Int, muted: Boolean) {
+        if (muted) mutedSessions += session else mutedSessions -= session
+        // Any already-buffered audio is left to the mix thread, which owns the decoders; muted
+        // speakers just stop being fed and expire through the normal idle path.
+    }
+
     fun enqueue(session: Int, sequence: Long, opus: ByteArray, terminator: Boolean) {
+        if (session in mutedSessions) return
         val speaker = speakers.getOrPut(session) { Speaker() }
         synchronized(speaker) {
             if (opus.isNotEmpty()) speaker.jitter.put(sequence, opus)

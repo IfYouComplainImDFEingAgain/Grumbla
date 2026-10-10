@@ -26,7 +26,7 @@ fun initialsFor(name: String): String {
     }
 }
 
-private fun User.toUiUser(isYou: Boolean, speaking: Boolean, gainDb: Int): UiUser = UiUser(
+private fun User.toUiUser(isYou: Boolean, speaking: Boolean, gainDb: Int, locallyMuted: Boolean): UiUser = UiUser(
     id = session,
     name = name,
     initials = initialsFor(name),
@@ -39,6 +39,7 @@ private fun User.toUiUser(isYou: Boolean, speaking: Boolean, gainDb: Int): UiUse
     isYou = isYou,
     isPrioritySpeaker = prioritySpeaker,
     gainDb = gainDb,
+    locallyMuted = locallyMuted,
 )
 
 /**
@@ -49,6 +50,7 @@ private fun User.toUiUser(isYou: Boolean, speaking: Boolean, gainDb: Int): UiUse
 fun ServerState.toUiChannels(
     speakingSessions: Set<Int> = emptySet(),
     userVolumes: Map<String, Float> = emptyMap(),
+    mutedUsers: Set<String> = emptySet(),
 ): List<UiChannel> {
     val selfSession = sessionId
     val currentChannel = self?.channelId
@@ -60,6 +62,7 @@ fun ServerState.toUiChannels(
                 isYou = session == selfSession,
                 speaking = session in speakingSessions,
                 gainDb = userVolumes[name]?.let { db -> Math.round(db) } ?: 0,
+                locallyMuted = session != selfSession && name in mutedUsers,
             )
             val users = usersInChannel(channel.id).map { it.ui() }
             val listeners = listenersOf(channel.id).map { it.ui() }

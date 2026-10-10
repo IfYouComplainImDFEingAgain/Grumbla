@@ -270,13 +270,13 @@ Legend: ✅ done & verified · 🟡 implemented, partial verification · ⬜ not
 ## Backlog / not-yet-wired (post-M5)
 - **Still visual-only settings**: master volume, priority speaker, join/leave sounds. Channel-**layout**
   selection (VoiceBar/QuickSettings) is still ephemeral (not persisted); transmission mode **is** now
-  persisted (Settings-only). Per-user volume is done; a true one-tap **local mute** entry (vs. −30 dB)
-  is still a quick add.
+  persisted (Settings-only). Per-user volume and **local mute** are done (mute: user sheet, persisted by name,
+  packets dropped before decode in `SpeakerMixer`).
 - **UDP + OCB2** voice path — ✅ done (see the section above). Remaining polish: decode ping echoes for
   a real RTT/jitter readout, and surface UDP↔TCP transitions in the UI beyond the debug overlay.
 - **Server-cert TOFU on first connect** still auto-accepts/pins silently; only a *changed* cert now
   prompts. A first-connect "trust this fingerprint?" prompt is still not shown.
-- **Profile editing** (display name/avatar/comment), blocked users, local mute list (designed, stubbed).
+- **Profile editing** (display name/avatar/comment), blocked users (designed, stubbed).
 - **DNS SRV resolution** (`_mumble._tcp`) — connect is host:port only so far.
 - **PermissionDenied / CodecVersion / ServerConfig** handling in `MumbleClient` (currently ignored).
 - **Wired/SCO route audibility** — verify on hardware; earpiece-vs-loudspeaker toggle may be wanted.

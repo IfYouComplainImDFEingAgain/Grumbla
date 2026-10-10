@@ -109,6 +109,7 @@ class SettingsRepository @Inject constructor(
         val LAST_ROUTE = stringPreferencesKey("last_route")
         val AUTO_BT = booleanPreferencesKey("auto_switch_bluetooth")
         val USER_VOLUMES = stringPreferencesKey("user_volumes") // JSON: {name: gainDb}
+        val MUTED_USERS = stringPreferencesKey("muted_users") // JSON: [name, ...]
     }
 
     /** Persisted local per-user volume adjustments (username -> gain in dB). */
@@ -118,6 +119,23 @@ class SettingsRepository @Inject constructor(
         val map = decodeVolumes(p[Keys.USER_VOLUMES]).toMutableMap()
         if (db == 0f) map.remove(name) else map[name] = db
         p[Keys.USER_VOLUMES] = encodeVolumes(map)
+    }
+
+    /** Usernames we've muted locally (persisted by name, like volumes, so it survives reconnects). */
+    val mutedUsers: Flow<Set<String>> = context.dataStore.data.map { decodeNames(it[Keys.MUTED_USERS]) }
+
+    suspend fun setUserMuted(name: String, muted: Boolean) = edit { p ->
+        val set = decodeNames(p[Keys.MUTED_USERS]).toMutableSet()
+        if (muted) set += name else set -= name
+        p[Keys.MUTED_USERS] = org.json.JSONArray(set.sorted()).toString()
+    }
+
+    private fun decodeNames(s: String?): Set<String> {
+        if (s.isNullOrBlank()) return emptySet()
+        return runCatching {
+            val a = org.json.JSONArray(s)
+            buildSet { for (i in 0 until a.length()) add(a.getString(i)) }
+        }.getOrDefault(emptySet())
     }
 
     private fun decodeVolumes(s: String?): Map<String, Float> {
