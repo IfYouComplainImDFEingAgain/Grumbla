@@ -85,6 +85,10 @@ class SessionManager @Inject constructor(
     /** Local per-user volume adjustments (username -> gain in dB). */
     val userVolumes: StateFlow<Map<String, Float>> = _userVolumes.asStateFlow()
 
+    private val _mutedUsers = MutableStateFlow<Set<String>>(emptySet())
+    /** Usernames muted locally (their audio is dropped on our side only). */
+    val mutedUsers: StateFlow<Set<String>> = _mutedUsers.asStateFlow()
+
     init {
         scope.launch {
             settingsRepo.settings.collect { s ->
@@ -103,15 +107,29 @@ class SessionManager @Inject constructor(
         scope.launch {
             settingsRepo.userVolumes.collect { _userVolumes.value = it; applyUserVolumes() }
         }
+        scope.launch {
+            settingsRepo.mutedUsers.collect { _mutedUsers.value = it; applyUserVolumes() }
+        }
     }
 
     /** Push each connected user's saved volume into the mixer (by session). No-op if not connected. */
     private fun applyUserVolumes() {
         val eng = engine ?: return
         val vols = _userVolumes.value
+        val muted = _mutedUsers.value
         _state.value.users.values.forEach { u ->
             val db = vols[u.name] ?: 0f
             eng.setUserVolume(u.session, Math.pow(10.0, db / 20.0).toFloat())
+            eng.setUserMuted(u.session, u.name in muted)
+        }
+    }
+
+    /** Locally mute/unmute a user by name; persisted and applied live. Never sent to the server. */
+    fun setUserMuted(name: String, muted: Boolean) {
+        _mutedUsers.value = if (muted) _mutedUsers.value + name else _mutedUsers.value - name
+        scope.launch { settingsRepo.setUserMuted(name, muted) }
+        engine?.let { eng ->
+            _state.value.users.values.filter { it.name == name }.forEach { eng.setUserMuted(it.session, muted) }
         }
     }
 

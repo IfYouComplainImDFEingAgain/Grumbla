@@ -23,6 +23,8 @@ class SessionViewModel @Inject constructor(
     val inputLevel: StateFlow<Float> = sessionManager.inputLevel
     val userVolumes: StateFlow<Map<String, Float>> = sessionManager.userVolumes
     fun setUserVolume(name: String, db: Float) = sessionManager.setUserVolume(name, db)
+    val mutedUsers: StateFlow<Set<String>> = sessionManager.mutedUsers
+    fun setUserMuted(name: String, muted: Boolean) = sessionManager.setUserMuted(name, muted)
     val whisper: StateFlow<app.notmumla.data.UserRef?> = sessionManager.whisper
     fun startWhisper(session: Int, name: String) = sessionManager.startWhisper(session, name)
     fun stopWhisper() = sessionManager.stopWhisper()

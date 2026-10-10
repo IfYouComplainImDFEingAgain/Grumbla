@@ -158,6 +158,9 @@ class AudioEngine(
     /** Local playback gain (multiplier) for a remote speaker session. */
     fun setUserVolume(session: Int, gain: Float) = mixer.setUserGain(session, gain)
 
+    /** Locally mute a remote speaker session: their audio is dropped, only for us. */
+    fun setUserMuted(session: Int, muted: Boolean) = mixer.setUserMuted(session, muted)
+
     /** Apply a new capture/playback route, restarting the audio threads if running. */
     fun applyRoute(config: RouteConfig, captureEnabled: Boolean = true) {
         routeConfig = config

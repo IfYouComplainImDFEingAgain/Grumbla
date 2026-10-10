@@ -215,6 +215,7 @@ private fun AppNav() {
             val whisper by vm.whisper.collectAsState()
             val privateChat by vm.privateChat.collectAsState()
             val userVolumes by vm.userVolumes.collectAsState()
+            val mutedUsers by vm.mutedUsers.collectAsState()
             val sessionRoute by vm.currentRoute.collectAsState()
             val settingsVm: SettingsViewModel = hiltViewModel()
             val appSettings by settingsVm.settings.collectAsState()
@@ -291,7 +292,7 @@ private fun AppNav() {
                     connectionLabel = connectionLabel,
                     // Remembered so unrelated updates (e.g. `transmitting` flipping) hand the screen the
                     // same list instances and Compose can skip the channel tree / chat entirely.
-                    channels = remember(state, speaking, userVolumes) { state.toUiChannels(speaking, userVolumes) },
+                    channels = remember(state, speaking, userVolumes, mutedUsers) { state.toUiChannels(speaking, userVolumes, mutedUsers) },
                     chatMessages = remember(chat) { chat.map { it.toUiMessage() } },
                     selfMuted = self?.selfMute ?: false,
                     selfDeafened = self?.selfDeaf ?: false,
@@ -320,6 +321,7 @@ private fun AppNav() {
                     onChatRead = vm::markChatRead,
                     onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                     onSetUserVolume = vm::setUserVolume,
+                    onSetUserMuted = vm::setUserMuted,
                     micInUseElsewhere = micYielded,
                     whisperingTo = whisper?.name,
                     onWhisper = { u -> vm.startWhisper(u.id, u.name) },

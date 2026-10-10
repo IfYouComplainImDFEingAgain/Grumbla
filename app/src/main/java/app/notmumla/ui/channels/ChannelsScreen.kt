@@ -29,6 +29,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Lock
@@ -89,6 +90,7 @@ fun ChannelsScreen(
     onChatRead: () -> Unit,
     onOpenSettings: () -> Unit,
     onSetUserVolume: (name: String, db: Float) -> Unit,
+    onSetUserMuted: (name: String, muted: Boolean) -> Unit = { _, _ -> },
     /** Another app is recording and we've released the mic to it. */
     micInUseElsewhere: Boolean,
     whisperingTo: String?,
@@ -236,9 +238,14 @@ fun ChannelsScreen(
                 onDismiss = { actionChannelId = null },
             )
         }
-        volumeUser?.let { u ->
+        volumeUser?.let { picked ->
+            // Re-resolve from live state so toggles made in the sheet (mute) show immediately.
+            val u = channels.firstNotNullOfOrNull { ch ->
+                ch.users.firstOrNull { it.id == picked.id } ?: ch.listeners.firstOrNull { it.id == picked.id }
+            } ?: picked
             UserVolumeSheet(
                 u, onSetUserVolume,
+                onSetMuted = { muted -> onSetUserMuted(u.name, muted) },
                 onWhisper = { onWhisper(u); volumeUser = null },
                 onMessage = { onStartPrivateChat(u.id, u.name); volumeUser = null; showTab(1) },
                 onNudge = { onNudge(u); volumeUser = null },
@@ -321,6 +328,7 @@ private fun ChannelActionsSheet(
 private fun UserVolumeSheet(
     user: UiUser,
     onSet: (String, Float) -> Unit,
+    onSetMuted: (Boolean) -> Unit,
     onWhisper: () -> Unit,
     onMessage: () -> Unit,
     onNudge: () -> Unit,
@@ -351,6 +359,23 @@ private fun UserVolumeSheet(
                     ),
                 )
                 Text("Only affects how you hear them.", fontSize = 12.sp, color = c.onSurfaceVar)
+                if (!user.isYou) {
+                    Spacer(Modifier.height(12.dp))
+                    // Sheet stays open: muting is a toggle you may want to undo straight away.
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = { onSetMuted(!user.locallyMuted) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            if (user.locallyMuted) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                            null, modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (user.locallyMuted) "Unmute ${user.name}" else "Mute ${user.name}")
+                    }
+                    Text("Muting is local — they aren't told, and it's remembered by name.",
+                        fontSize = 12.sp, color = c.onSurfaceVar)
+                }
                 Spacer(Modifier.height(16.dp))
                 androidx.compose.material3.FilledTonalButton(
                     onClick = onWhisper,
@@ -506,6 +531,17 @@ private fun TreeLayout(
     }
 }
 
+/** Local-only audio state next to a name: a muted speaker icon, else the volume adjustment. */
+@Composable
+private fun LocalAudioBadge(user: UiUser, size: androidx.compose.ui.unit.Dp = 16.dp) {
+    if (user.locallyMuted) {
+        Icon(Icons.AutoMirrored.Filled.VolumeOff, "muted by you", tint = MumbleTheme.colors.muted,
+            modifier = Modifier.size(size))
+    } else if (user.gainDb != 0) {
+        GainBadge(user.gainDb)
+    }
+}
+
 /** Small inline badge showing a user's local volume adjustment, e.g. "+10" / "-3". */
 @Composable
 private fun GainBadge(gainDb: Int) {
@@ -588,7 +624,7 @@ private fun UserRow(user: UiUser, onLongPress: () -> Unit) {
         Avatar(user.initials, user.avatar, size = 28.dp, dimmed = user.status == UserStatus.AFK)
         Text(user.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.onSurface,
             modifier = Modifier.weight(1f))
-        if (user.gainDb != 0) GainBadge(user.gainDb)
+        LocalAudioBadge(user)
         when (user.status) {
             UserStatus.SPEAKING -> SpeakingBars()
             UserStatus.MUTED -> Icon(Icons.Filled.MicOff, "muted", tint = c.muted,
@@ -654,7 +690,7 @@ private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onU
                 Avatar(user.initials, user.avatar, size = 32.dp)
                 Text(user.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     color = c.onSurface, modifier = Modifier.weight(1f))
-                if (user.gainDb != 0) GainBadge(user.gainDb)
+                LocalAudioBadge(user)
                 if (user.status == UserStatus.MUTED)
                     Icon(Icons.Filled.MicOff, "muted", tint = c.muted, modifier = Modifier.size(16.dp))
                 if (user.isYou) Text("YOU", color = c.primary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
@@ -674,7 +710,7 @@ private fun SpeakerBubble(user: UiUser, onLongPress: () -> Unit) {
         Avatar(user.initials, user.avatar, size = 56.dp)
         Text(user.name.substringBefore(" "), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
             color = c.onSurface)
-        if (user.gainDb != 0) GainBadge(user.gainDb)
+        LocalAudioBadge(user)
     }
 }
 
@@ -732,7 +768,7 @@ private fun CompactLayout(
                     }
                     Text(user.name, fontSize = 13.sp, color = c.onSurface,
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    if (user.gainDb != 0) GainBadge(user.gainDb)
+                    LocalAudioBadge(user)
                     if (user.isYou) Text("YOU", color = c.primary, fontWeight = FontWeight.Bold,
                         fontFamily = MonoFamily, fontSize = 10.sp)
                 }
