@@ -55,9 +55,7 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
     fun enqueue(session: Int, sequence: Long, opus: ByteArray, terminator: Boolean) {
         if (session in mutedSessions) return
         val speaker = speakers.getOrPut(session) { Speaker() }
-        synchronized(speaker) {
-            if (opus.isNotEmpty()) speaker.jitter.put(sequence, opus)
-        }
+        synchronized(speaker) { speaker.jitter.put(sequence, opus, terminator) }
     }
 
     /**
@@ -111,12 +109,19 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
     }
 
     private fun decodeNext(speaker: Speaker): Boolean {
-        val opus = speaker.jitter.pull().opus ?: return false
-        val n = speaker.decoder.decode(opus, speaker.decodeBuf, speaker.decodeBuf.size)
+        val pull = speaker.jitter.pull()
+        if (pull.isEmpty) return false
+        if (pull.resetDecoder) speaker.decoder.reset()
+        val opus = pull.opus
+        val n = if (opus != null) speaker.decoder.decode(opus, speaker.decodeBuf, speaker.decodeBuf.size)
+        else speaker.decoder.concealLoss(speaker.decodeBuf, AudioConstants.FRAME_SAMPLES)
+        if (pull.endOfStream) speaker.decoder.reset()
         if (n <= 0) return false
+        // Fade concealment to silence where the stream stops, instead of cutting the waveform.
+        if (pull.fadeOut) for (i in 0 until n) speaker.decodeBuf[i] = (speaker.decodeBuf[i] * (1f - (i + 1f) / n)).toInt().toShort()
         speaker.pendingLen = n
         speaker.pendingPos = 0
-        updateLeveling(speaker, n)
+        if (opus != null) updateLeveling(speaker, n)
         return true
     }
 

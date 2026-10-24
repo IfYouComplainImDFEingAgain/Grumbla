@@ -13,5 +13,6 @@ internal object OpusNative {
 
     external fun decoderCreate(sampleRate: Int, channels: Int): Long
     external fun decode(handle: Long, data: ByteArray?, dataLen: Int, pcmOut: ShortArray, frameSize: Int, fec: Boolean): Int
+    external fun decoderReset(handle: Long)
     external fun decoderDestroy(handle: Long)
 }

@@ -499,8 +499,9 @@ class MumbleClient(
                 body.copyInto(it, 1)
             }
         }
+        // Keep counting across talk-spurts (like desktop Mumble): restarting at 0 made a new spurt's
+        // frames sort ahead of the previous spurt's still-buffered tail in an ordered jitter buffer.
         audioSequence += 1
-        if (terminator) audioSequence = 0
         txCount++
         // Prefer the direct UDP path once it's confirmed; otherwise tunnel over the TCP control channel.
         val transport = udp

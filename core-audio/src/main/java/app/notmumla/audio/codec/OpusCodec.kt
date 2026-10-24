@@ -74,6 +74,11 @@ class OpusDecoder(
         return OpusNative.decode(handle, null, 0, pcmOut, frameSize, false)
     }
 
+    /** Discard decoder state, as for a new stream. */
+    fun reset() {
+        if (handle != 0L) OpusNative.decoderReset(handle)
+    }
+
     fun release() {
         if (handle != 0L) {
             OpusNative.decoderDestroy(handle)

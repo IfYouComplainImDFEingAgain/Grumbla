@@ -43,4 +43,5 @@ dependencies {
     implementation(project(":core-protocol"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core.ktx)
+    testImplementation(libs.junit)
 }

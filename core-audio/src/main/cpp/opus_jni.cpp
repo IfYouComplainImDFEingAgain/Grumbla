@@ -94,6 +94,13 @@ Java_app_notmumla_audio_codec_OpusNative_decode(
     return decoded;
 }
 
+// Back to a fresh decoder's state: each talk-spurt arrives from a freshly reset encoder.
+JNIEXPORT void JNICALL
+Java_app_notmumla_audio_codec_OpusNative_decoderReset(JNIEnv *, jclass, jlong handle) {
+    auto *dec = reinterpret_cast<OpusDecoder *>(handle);
+    if (dec) opus_decoder_ctl(dec, OPUS_RESET_STATE);
+}
+
 JNIEXPORT void JNICALL
 Java_app_notmumla_audio_codec_OpusNative_decoderDestroy(JNIEnv *, jclass, jlong handle) {
     auto *dec = reinterpret_cast<OpusDecoder *>(handle);
