@@ -47,6 +47,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // -PnoDebuggable: debug signing/ids but compiled ART code, so audio isn't run in the
+            // interpreter (debuggable builds stutter on the Pixel 10; see CLAUDE.md gotcha 13).
+            isDebuggable = !providers.gradleProperty("noDebuggable").isPresent
+        }
         release {
             signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
