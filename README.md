@@ -81,9 +81,13 @@ Release signing, multiple phones, and connecting a phone to a local server are c
 
 Most of it is in Settings. The ones worth knowing about:
 
-- **Use media volume** (default on): plays voice on the media stream, so the volume buttons work
-  like they do for music. Turn it off to use call mode instead. Call mode is the fallback for phones
-  whose echo cancellation only works in a call.
+- **Speaker audio mode** (Auto / Call / Media, default Auto): how the phone's loudspeaker plays.
+  Media uses the media stream, so the volume buttons work like they do for music. Call uses call
+  mode and the phone's call echo cancelling. Auto starts on media and switches to call by itself
+  (once, remembered for the phone) if it hears its own playback coming back through the mic, i.e.
+  others would hear an echo of themselves. Other outputs don't need a choice: wired and Bluetooth
+  high-quality always play as media, the ear speaker and Bluetooth headsets always as a call. When a
+  switch happens mid-call, the volume you were hearing carries over to the other stream.
 - **Ear speaker**: plays through the earpiece instead of the loudspeaker on the phone route. Also
   toggleable from quick settings.
 - **Raw microphone**: records the mic without the system's voice-call processing. Grumbla then
