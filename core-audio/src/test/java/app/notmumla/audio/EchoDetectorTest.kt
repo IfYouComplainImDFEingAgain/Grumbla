@@ -77,6 +77,31 @@ class EchoDetectorTest {
         assertEquals(1, fired)
     }
 
+    @Test fun `detected when both streams deliver frames in bursts`() {
+        // Like the Titan 2: playback hands over 4 frames at once, the mic 2, at different phases.
+        var now = 0L
+        var fired = 0
+        val det = EchoDetector(onEcho = { fired++ }, clock = { now })
+        val talker = Talker(3)
+        val played = ArrayDeque<DoubleArray>()
+        val farBurst = ArrayList<ShortArray>()
+        val nearBurst = ArrayList<ShortArray>()
+        repeat(40 * 100) { step ->
+            val f = DoubleArray(frame)
+            talker.next(f)
+            played.addLast(f)
+            farBurst += f.toPcm()
+            val m = DoubleArray(frame)
+            if (played.size > 15) played.removeFirst().forEachIndexed { i, v -> m[i] = v * 0.3 }
+            addNoise(m)
+            nearBurst += m.toPcm()
+            if (step % 4 == 3) { farBurst.forEach { det.onPlayback(it, frame) }; farBurst.clear() }
+            if (step % 2 == 0) { nearBurst.forEach { det.onCapture(it, frame) }; nearBurst.clear() }
+            now += EchoDetector.SLOT_NS
+        }
+        assertEquals(1, fired)
+    }
+
     @Test fun `echo with the local user talking over it is still detected`() {
         val local = Talker(7, level = 0.1)
         val buf = DoubleArray(frame)

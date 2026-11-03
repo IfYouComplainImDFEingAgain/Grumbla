@@ -8,8 +8,10 @@ import kotlin.math.log10
  * cancelling works in the mode we're in. Used on the loudspeaker in media mode, where that's up to
  * the audio HAL and `AcousticEchoCanceler.isAvailable()` says nothing useful.
  *
- * Both audio threads report the level of each 10 ms frame with its clock time, which puts them on
- * a shared grid of [SLOT_NS] slots without having to know the output/input latencies. Every
+ * Both audio threads report the level of each 10 ms frame, placed on a shared grid of [SLOT_NS]
+ * slots by clock time, without having to know the output/input latencies. Frames often arrive in
+ * bursts (two or more per audio period), so each stream counts its frames into consecutive slots and
+ * only snaps back to the clock when it's off by more than [RESYNC_SLOTS]. Every
  * [WINDOW_SLOTS], for each delay up to [MAX_LAG_SLOTS], the mic's quiet floor while something was
  * played is compared with its floor while nothing was; echo lifts it by [ECHO_RISE_DB] or more at
  * some delay. Background noise and local speech don't follow the remote talker's on/off pattern,
@@ -30,6 +32,8 @@ class EchoDetector(
     private val activeNear = FloatArray(WINDOW_SLOTS)
     private val quietNear = FloatArray(WINDOW_SLOTS)
     private var firstSlot = -1L
+    private var farNext = -1L
+    private var nearNext = -1L
     private var nextCheck = -1L
     private var hits = 0
     private var hitLag = -1
@@ -40,14 +44,29 @@ class EchoDetector(
     @Volatile var lastScore = Float.NaN
         private set
 
-    fun onPlayback(pcm: ShortArray, len: Int) = record(far, farSlot, pcm, len)
-
-    fun onCapture(pcm: ShortArray, len: Int) = record(near, nearSlot, pcm, len)
+    @Synchronized
+    fun onPlayback(pcm: ShortArray, len: Int) {
+        if (fired) return
+        val slot = nextSlot(farNext)
+        farNext = slot + 1
+        record(far, farSlot, slot, pcm, len)
+    }
 
     @Synchronized
-    private fun record(env: FloatArray, slots: LongArray, pcm: ShortArray, len: Int) {
+    fun onCapture(pcm: ShortArray, len: Int) {
         if (fired) return
-        val slot = clock() / SLOT_NS
+        val slot = nextSlot(nearNext)
+        nearNext = slot + 1
+        record(near, nearSlot, slot, pcm, len)
+    }
+
+    /** The slot after the stream's last frame, unless that's drifted too far from the clock. */
+    private fun nextSlot(next: Long): Long {
+        val now = clock() / SLOT_NS
+        return if (next < 0 || abs(next - now) > RESYNC_SLOTS) now else next
+    }
+
+    private fun record(env: FloatArray, slots: LongArray, slot: Long, pcm: ShortArray, len: Int) {
         if (firstSlot < 0) {
             firstSlot = slot
             nextCheck = slot + WINDOW_SLOTS + MAX_LAG_SLOTS
@@ -66,7 +85,10 @@ class EchoDetector(
         val end = now - SETTLE_SLOTS
         val start = end - WINDOW_SLOTS
         val score = bestRise(start, end)
-        if (score.isNaN()) return // not enough playback in this window to tell
+        if (score.isNaN()) { // not enough talk and quiet in this window to tell
+            log(unscoredReason(start, end))
+            return
+        }
         lastScore = score
         log("speaker echo: floor rise %.1f dB at %d ms".format(score, bestLag * 10))
         // Real echo comes back at the same delay every time; a chance overlap with local speech
@@ -116,6 +138,17 @@ class EchoDetector(
         return values[(n * FLOOR_PERCENTILE).toInt()]
     }
 
+    private fun unscoredReason(start: Long, end: Long): String {
+        var active = 0; var quiet = 0; var mic = 0
+        for (s in start until end) {
+            val i = index(s)
+            if (farSlot[i] == s) { if (far[i] > ACTIVE_DB) active++ else quiet++ }
+            if (nearSlot[i] == s) mic++
+        }
+        return "speaker echo: unscored, playback active %d / quiet %d, mic %d of %d slots"
+            .format(active, quiet, mic, WINDOW_SLOTS)
+    }
+
     private fun index(slot: Long) = slot.mod(RING.toLong()).toInt()
 
     private fun levelDb(pcm: ShortArray, len: Int): Float {
@@ -133,6 +166,8 @@ class EchoDetector(
         const val MAX_LAG_SLOTS = 50
         /** Wait for the slower thread before scoring a window. */
         const val SETTLE_SLOTS = 20
+        /** Frame count vs. clock disagreement (stall, restart, drift) that resets a stream to the clock. */
+        const val RESYNC_SLOTS = 10
         private const val RING = WINDOW_SLOTS + MAX_LAG_SLOTS + SETTLE_SLOTS * 2 + 64
 
         /** Playback louder than this counts as someone talking. */
