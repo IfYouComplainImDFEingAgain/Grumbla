@@ -3,6 +3,7 @@ package app.notmumla.vm
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.notmumla.audio.TransmissionMode
+import app.notmumla.audio.routing.CallModeOverride
 import app.notmumla.data.AppSettings
 import app.notmumla.data.IdentityStore
 import app.notmumla.data.SettingsRepository
@@ -98,7 +99,7 @@ class SettingsViewModel @Inject constructor(
     fun setEchoCancellation(v: Boolean) = update { repo.setEchoCancellation(v) }
     fun setShareMic(v: Boolean) = update { repo.setShareMic(v) }
     fun setAudioLeveling(v: Boolean) = update { repo.setAudioLeveling(v) }
-    fun setMediaVolume(v: Boolean) = update { repo.setMediaVolume(v) }
+    fun setCallMode(v: CallModeOverride) = update { repo.setCallMode(v) }
     fun setPhoneEarpiece(v: Boolean) = update { repo.setPhoneEarpiece(v) }
     fun setAudioBitrate(v: Int) = update { repo.setAudioBitrate(v) }
     fun setShowAvatars(v: Boolean) = update { repo.setShowAvatars(v) }

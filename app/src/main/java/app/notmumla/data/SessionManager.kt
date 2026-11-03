@@ -92,9 +92,9 @@ class SessionManager @Inject constructor(
     init {
         scope.launch {
             settingsRepo.settings.collect { s ->
-                val routingChanged = router.mediaVolume != s.mediaVolume || router.earpiece != s.phoneEarpiece
+                val routingChanged = router.callMode != s.callMode || router.earpiece != s.phoneEarpiece
                 settings = s
-                router.mediaVolume = s.mediaVolume
+                router.callMode = s.callMode
                 router.earpiece = s.phoneEarpiece
                 if (routingChanged) scope.launch(Dispatchers.Main) { if (engine != null) applyRoute(router.current.value) }
                 applyAudioSettings(s)

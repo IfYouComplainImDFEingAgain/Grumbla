@@ -39,7 +39,7 @@ data class RouteConfig(
     companion object {
         /**
          * Default phone loudspeaker/mic route placeholder. The real config (with the loudspeaker as
-         * the communication device) is built by [routing.AudioRouter.configFor] at connect time, so
+         * the communication device) is built by [resolveRoute] at connect time, so
          * MODE_IN_COMMUNICATION here routes to the loudspeaker rather than the earpiece.
          */
         val PHONE = RouteConfig(

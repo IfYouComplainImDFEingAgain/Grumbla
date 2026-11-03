@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.notmumla.audio.TransmissionMode
+import app.notmumla.audio.routing.CallModeOverride
 import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.ui.ChannelLayout
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,7 +37,7 @@ data class AppSettings(
     val echoCancellation: Boolean = true,
     val shareMic: Boolean = true, // release the mic (and call mode) while another app records
     val audioLeveling: Boolean = false, // normalize incoming speakers to a consistent loudness
-    val mediaVolume: Boolean = true, // play phone/wired audio as media, not a call (volume keys = media)
+    val callMode: CallModeOverride = CallModeOverride.AUTO, // loudspeaker as call or media (volume keys)
     val phoneEarpiece: Boolean = false, // phone route plays through the ear speaker instead of the loudspeaker
     val audioBitrate: Int = 128_000,
     val showAvatars: Boolean = true,
@@ -91,7 +92,8 @@ class SettingsRepository @Inject constructor(
         val RAW_MIC = booleanPreferencesKey("raw_mic")
         val AEC = booleanPreferencesKey("echo_cancellation")
         val SHARE_MIC = booleanPreferencesKey("share_mic")
-        val MEDIA_VOLUME = booleanPreferencesKey("media_volume")
+        val MEDIA_VOLUME = booleanPreferencesKey("media_volume") // legacy: read once to seed CALL_MODE
+        val CALL_MODE = stringPreferencesKey("call_mode")
         val PHONE_EARPIECE = booleanPreferencesKey("phone_earpiece")
         val LEVELING = booleanPreferencesKey("audio_leveling")
         val BITRATE = intPreferencesKey("audio_bitrate")
@@ -169,7 +171,9 @@ class SettingsRepository @Inject constructor(
             echoCancellation = p[Keys.AEC] ?: true,
             shareMic = p[Keys.SHARE_MIC] ?: true,
             audioLeveling = p[Keys.LEVELING] ?: false,
-            mediaVolume = p[Keys.MEDIA_VOLUME] ?: true,
+            // Turning "Use media volume" off was the old way to fix echo on speaker; keep that as Call.
+            callMode = p[Keys.CALL_MODE]?.let { runCatching { CallModeOverride.valueOf(it) }.getOrNull() }
+                ?: if (p[Keys.MEDIA_VOLUME] == false) CallModeOverride.CALL else CallModeOverride.AUTO,
             phoneEarpiece = p[Keys.PHONE_EARPIECE] ?: false,
             audioBitrate = p[Keys.BITRATE] ?: 128_000,
             showAvatars = p[Keys.AVATARS] ?: true,
@@ -201,7 +205,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setEchoCancellation(v: Boolean) = edit { it[Keys.AEC] = v }
     suspend fun setShareMic(v: Boolean) = edit { it[Keys.SHARE_MIC] = v }
     suspend fun setAudioLeveling(v: Boolean) = edit { it[Keys.LEVELING] = v }
-    suspend fun setMediaVolume(v: Boolean) = edit { it[Keys.MEDIA_VOLUME] = v }
+    suspend fun setCallMode(v: CallModeOverride) = edit { it[Keys.CALL_MODE] = v.name }
     suspend fun setPhoneEarpiece(v: Boolean) = edit { it[Keys.PHONE_EARPIECE] = v }
     suspend fun setAudioBitrate(v: Int) = edit { it[Keys.BITRATE] = v }
     suspend fun setShowAvatars(v: Boolean) = edit { it[Keys.AVATARS] = v }

@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.notmumla.BuildConfig
 import app.notmumla.audio.TransmissionMode
+import app.notmumla.audio.routing.CallModeOverride
 import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.data.AppSettings
 import app.notmumla.data.NoiseSuppression
@@ -123,7 +124,7 @@ fun SettingsScreen(
     onToggleRawMic: (Boolean) -> Unit,
     onToggleShareMic: (Boolean) -> Unit,
     onToggleAudioLeveling: (Boolean) -> Unit,
-    onToggleMediaVolume: (Boolean) -> Unit,
+    onSetCallMode: (CallModeOverride) -> Unit,
     onSetPhoneEarpiece: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
     onToggleAvatars: (Boolean) -> Unit,
@@ -393,11 +394,32 @@ fun SettingsScreen(
                     "Even out quiet and loud talkers to a consistent volume",
                     settings.audioLeveling, onToggleAudioLeveling)
                 Divider()
-                ToggleRow(Icons.AutoMirrored.Filled.VolumeUp, "Use media volume",
-                    "Volume buttons set media volume, shared with music and videos. Turn off if " +
-                        "others hear an echo of themselves on speaker. Bluetooth headsets always " +
-                        "use call volume.",
-                    settings.mediaVolume, onToggleMediaVolume)
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = c.onSurfaceVar,
+                            modifier = Modifier.size(22.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Speaker audio mode", fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                                color = c.onSurface)
+                            Text(when (settings.callMode) {
+                                // TODO(echo detection): Auto picks Call by itself once SpeakerEcho is measured.
+                                CallModeOverride.AUTO -> "Media volume, shared with music and videos. " +
+                                    "Pick Call if others hear an echo of themselves."
+                                CallModeOverride.CALL -> "Call volume and the phone's call echo " +
+                                    "cancelling"
+                                CallModeOverride.MEDIA -> "Always media volume, even if Auto would " +
+                                    "pick Call"
+                            }, fontSize = 13.sp, color = c.onSurfaceVar)
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    SegmentedToggle(
+                        options = listOf("Auto", "Call", "Media"),
+                        selectedIndex = settings.callMode.ordinal,
+                        onSelect = { onSetCallMode(CallModeOverride.entries[it]) },
+                    )
+                }
             }
 
             SectionLabel("CHAT")

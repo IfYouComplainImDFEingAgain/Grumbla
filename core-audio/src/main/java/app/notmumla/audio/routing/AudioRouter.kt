@@ -1,11 +1,9 @@
 package app.notmumla.audio.routing
 
 import android.content.Context
-import android.media.AudioAttributes
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
-import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -70,17 +68,15 @@ class AudioRouter(context: Context) {
     private fun commDevice(vararg types: Int): AudioDeviceInfo? =
         am.availableCommunicationDevices.firstOrNull { it.type in types }
 
-    /**
-     * Play phone-speaker and wired audio as media (MODE_NORMAL) instead of as a call. In call mode
-     * Android points the volume keys at call volume no matter what the app asks, so this is the only
-     * way to get media volume. Capture keeps the VOICE_COMMUNICATION source; whether that still gets
-     * the platform's echo canceller outside call mode is up to the device's audio HAL.
-     */
-    @Volatile var mediaVolume: Boolean = true
+    /** Call vs. media choice for the loudspeaker; see [resolveRoute]. */
+    @Volatile var callMode: CallModeOverride = CallModeOverride.AUTO
+
+    /** Measured echo cancelling on the loudspeaker outside call mode; used by [CallModeOverride.AUTO]. */
+    @Volatile var speakerEcho: SpeakerEcho = SpeakerEcho.UNKNOWN
 
     /**
      * Phone route plays through the ear speaker instead of the loudspeaker. Android only reaches
-     * the earpiece as a call's communication device, so this overrides [mediaVolume] on that route.
+     * the earpiece as a call's communication device, so this is always call mode.
      */
     @Volatile var earpiece: Boolean = false
 
@@ -88,118 +84,31 @@ class AudioRouter(context: Context) {
     val hasEarpiece: Boolean
         get() = commDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) != null
 
-    private fun usesEarpiece(route: OutputRoute) =
-        route == OutputRoute.PHONE_SPEAKER && earpiece && hasEarpiece
-
-    private val builtinMicId: Int?
-        get() = inputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)?.id
-
-    /** Build the engine config for [route] using currently-connected devices. */
-    fun configFor(route: OutputRoute): RouteConfig {
-        val call = callConfigFor(route)
-        if (!mediaVolume || usesEarpiece(route) ||
-            (route != OutputRoute.PHONE_SPEAKER && route != OutputRoute.WIRED)) return call
-        // SCO stays a call (HFP audio has its own headset volume); A2DP-HQ is already media.
-        return asMedia(call)
-    }
-
-    /** [config] without call mode: media usage pinned to the route's output, no communication device. */
-    private fun asMedia(config: RouteConfig): RouteConfig = config.copy(
-        audioMode = AudioManager.MODE_NORMAL,
-        communicationDeviceId = null,
-        trackUsage = AudioAttributes.USAGE_MEDIA,
-        trackDeviceId = when (config.route) {
-            OutputRoute.PHONE_SPEAKER -> outputDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)?.id
-            // Without SCO, the headset's A2DP profile (if it has one) is the way to reach it.
-            OutputRoute.BT_HEADSET_SCO -> outputDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)?.id
-            else -> config.trackDeviceId
-        },
+    private fun devices() = RouteDevices(
+        speakerOut = outputDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)?.id,
+        speakerComm = commDevice(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)?.id,
+        earpieceOut = outputDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)?.id,
+        earpieceComm = commDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)?.id,
+        wiredOut = outputDevice(AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES)?.id,
+        a2dpOut = outputDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)?.id,
+        btHeadsetComm = commDevice(AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_SCO)?.id,
+        builtinMic = inputDevice(AudioDeviceInfo.TYPE_BUILTIN_MIC)?.id,
     )
 
-    private fun callConfigFor(route: OutputRoute): RouteConfig = when (route) {
-        // MODE_IN_COMMUNICATION + VOICE_COMMUNICATION is the clean, hardware-leveled capture path that
-        // Mumble/Mumla use. We explicitly route output to the built-in loudspeaker so voice doesn't
-        // land on the earpiece (the reason we'd previously fallen back to the distortion-prone
-        // MODE_NORMAL + VOICE_RECOGNITION combo).
-        OutputRoute.PHONE_SPEAKER -> RouteConfig(
-            route = route,
-            audioMode = AudioManager.MODE_IN_COMMUNICATION,
-            recordSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-            recordDeviceId = null,
-            trackUsage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
-            trackDeviceId = null,
-            communicationDeviceId = commDevice(
-                if (usesEarpiece(route)) AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-                else AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
-            )?.id,
-        )
-
-        OutputRoute.WIRED -> RouteConfig(
-            route = route,
-            audioMode = AudioManager.MODE_IN_COMMUNICATION,
-            recordSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-            recordDeviceId = null,
-            trackUsage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
-            trackDeviceId = outputDevice(
-                AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-            )?.id,
-            communicationDeviceId = outputDevice(
-                AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-            )?.id,
-        )
-
-        OutputRoute.BT_A2DP_HQ -> RouteConfig(
-            route = route,
-            // MODE_NORMAL so the system keeps the high-quality A2DP profile instead of HFP/SCO.
-            audioMode = AudioManager.MODE_NORMAL,
-            // MIC (not VOICE_COMMUNICATION) avoids the framework steering capture toward SCO.
-            recordSource = MediaRecorder.AudioSource.MIC,
-            recordDeviceId = builtinMicId,
-            trackUsage = AudioAttributes.USAGE_MEDIA,
-            trackDeviceId = outputDevice(AudioDeviceInfo.TYPE_BLUETOOTH_A2DP)?.id,
-            communicationDeviceId = null, // do NOT set a comm device → no SCO
-        )
-
-        OutputRoute.BT_HEADSET_SCO -> {
-            val bt = commDevice(AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLUETOOTH_SCO)
-            RouteConfig(
-                route = route,
-                audioMode = AudioManager.MODE_IN_COMMUNICATION,
-                recordSource = MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                recordDeviceId = null,
-                trackUsage = AudioAttributes.USAGE_VOICE_COMMUNICATION,
-                trackDeviceId = null,
-                communicationDeviceId = bt?.id,
-            )
-        }
-    }
-
     /**
-     * Playback-only variant of [route] used while another app has the mic. Call mode makes Android
-     * silence every other app's capture, so it's dropped: MODE_NORMAL, no communication device, and
-     * media usage pinned to the route's output (voice usage outside call mode can land on the earpiece).
+     * Build the engine config for [route] using currently-connected devices. [micContended] gives
+     * the playback-only variant used while another app has the mic (no call mode).
      */
-    fun sharedConfigFor(route: OutputRoute): RouteConfig {
-        val base = configFor(route)
-        if (usesEarpiece(route)) {
-            // Media usage can't reach the earpiece; voice usage outside call mode is the one way
-            // there, pinned to it so the HAL doesn't pick the loudspeaker instead.
-            return base.copy(
-                audioMode = AudioManager.MODE_NORMAL,
-                communicationDeviceId = null,
-                trackDeviceId = outputDevice(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)?.id,
-            )
-        }
-        return if (base.audioMode == AudioManager.MODE_NORMAL) base else asMedia(base)
-    }
+    fun configFor(route: OutputRoute, micContended: Boolean = false): RouteConfig =
+        resolveRoute(route, earpiece, callMode, speakerEcho, micContended, devices())
 
     /**
      * Apply [route] at the AudioManager level (audio mode + communication device) and return the
      * [RouteConfig] the engine should adopt. Caller passes the config to AudioEngine.applyRoute.
-     * [shareMic] selects the playback-only [sharedConfigFor] variant.
+     * [shareMic] selects the playback-only variant used while another app records.
      */
     fun select(route: OutputRoute, shareMic: Boolean = false): RouteConfig {
-        val config = if (shareMic) sharedConfigFor(route) else configFor(route)
+        val config = configFor(route, micContended = shareMic)
         val commId = config.communicationDeviceId
         if (commId != null) {
             am.availableCommunicationDevices.firstOrNull { it.id == commId }
