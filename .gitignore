@@ -28,3 +28,8 @@ mumble-android-chat-app/
 
 # Local agent notes
 CLAUDE.md
+
+# Session tooling
+.claude/settings.local.json
+logs/claude-loop/
+STOP

@@ -163,7 +163,7 @@ Mumble's brute-force auto-ban (10 per 120 s) partway through, and the remaining 
 - No DNS SRV lookup. Connect by host and port.
 - Some settings are still visual only: master volume, priority speaker, join/leave sounds.
 
-The full backlog is in [`docs/PROGRESS.md`](docs/PROGRESS.md).
+The full backlog is in [`NEXT.md`](NEXT.md) and [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ## License
 
