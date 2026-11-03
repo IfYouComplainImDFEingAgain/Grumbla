@@ -14,12 +14,19 @@ data class User(
     val selfDeaf: Boolean = false,
     val prioritySpeaker: Boolean = false,
     val comment: String? = null,
+    /** SHA-1 (hex) of the comment, sent instead of [comment] when it is 128+ chars. */
+    val commentHash: String? = null,
+    /** SHA-1 (hex) of the avatar ("texture"); null when the user has none. */
+    val textureHash: String? = null,
+    /** Registered user id on this server; null for a guest (unregistered) session. */
+    val userId: Int? = null,
     val certHash: String? = null,
     /** Channels this user is listening to (channel listeners) without being in them. */
     val listeningChannels: Set<Int> = emptySet(),
 ) {
     val effectivelyMuted: Boolean get() = mute || selfMute || suppress
     val effectivelyDeaf: Boolean get() = deaf || selfDeaf
+    val registered: Boolean get() = userId != null
 }
 
 /** A channel in the server's tree. */

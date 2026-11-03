@@ -66,6 +66,8 @@ data class AppSettings(
     val lastRoute: OutputRoute? = null,
     /** Mid-call, jump to Bluetooth output as soon as a Bluetooth device connects. */
     val autoSwitchBluetooth: Boolean = true,
+    /** Pre-filled username when adding a server (Mumble names are per server). */
+    val defaultUsername: String = "user",
 )
 
 val DEFAULT_ROUTE_PRIORITY = listOf(
@@ -120,6 +122,7 @@ class SettingsRepository @Inject constructor(
         val REMEMBER_ROUTE = booleanPreferencesKey("remember_last_route")
         val LAST_ROUTE = stringPreferencesKey("last_route")
         val AUTO_BT = booleanPreferencesKey("auto_switch_bluetooth")
+        val DEFAULT_USERNAME = stringPreferencesKey("default_username")
         val USER_VOLUMES = stringPreferencesKey("user_volumes") // JSON: {name: gainDb}
         val MUTED_USERS = stringPreferencesKey("muted_users") // JSON: [name, ...]
     }
@@ -202,6 +205,7 @@ class SettingsRepository @Inject constructor(
             rememberLastRoute = p[Keys.REMEMBER_ROUTE] ?: false,
             lastRoute = p[Keys.LAST_ROUTE]?.let { runCatching { OutputRoute.valueOf(it) }.getOrNull() },
             autoSwitchBluetooth = p[Keys.AUTO_BT] ?: true,
+            defaultUsername = p[Keys.DEFAULT_USERNAME] ?: "user",
         )
     }
 
@@ -241,6 +245,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setRememberLastRoute(v: Boolean) = edit { it[Keys.REMEMBER_ROUTE] = v }
     suspend fun setLastRoute(v: OutputRoute) = edit { it[Keys.LAST_ROUTE] = v.name }
     suspend fun setAutoSwitchBluetooth(v: Boolean) = edit { it[Keys.AUTO_BT] = v }
+    suspend fun setDefaultUsername(v: String) = edit { it[Keys.DEFAULT_USERNAME] = v }
 
     private suspend fun edit(block: (androidx.datastore.preferences.core.MutablePreferences) -> Unit) {
         context.dataStore.edit(block)

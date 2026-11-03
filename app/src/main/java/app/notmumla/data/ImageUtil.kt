@@ -52,6 +52,36 @@ object ImageUtil {
         return if (out.size() <= maxRaw) out.toByteArray() else null
     }
 
+    /**
+     * Load [uri] as a square avatar: centre-cropped, [AVATAR_SIZE] px, JPEG. Mumble desktop rejects
+     * textures over 1024 px, and Murmur rejects any over the server's image-message limit.
+     */
+    fun loadAvatar(context: Context, uri: Uri): ByteArray? {
+        val source = runCatching {
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { d, info, _ ->
+                d.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                val shortest = minOf(info.size.width, info.size.height)
+                if (shortest > AVATAR_SIZE * 2) {
+                    val scale = AVATAR_SIZE * 2f / shortest
+                    d.setTargetSize((info.size.width * scale).toInt().coerceAtLeast(1),
+                        (info.size.height * scale).toInt().coerceAtLeast(1))
+                }
+            }
+        }.getOrNull() ?: return null
+        val side = minOf(source.width, source.height)
+        val square = Bitmap.createBitmap(source, (source.width - side) / 2, (source.height - side) / 2, side, side)
+        val bmp = if (side > AVATAR_SIZE) Bitmap.createScaledBitmap(square, AVATAR_SIZE, AVATAR_SIZE, true) else square
+        for (quality in intArrayOf(88, 75, 60)) {
+            val out = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)
+            if (out.size() <= AVATAR_MAX_BYTES) return out.toByteArray()
+        }
+        return null
+    }
+
+    private const val AVATAR_SIZE = 256
+    private const val AVATAR_MAX_BYTES = 60_000
+
     /** Wrap JPEG [bytes] in the Mumble inline-image HTML (`<img src="data:image/jpeg;base64,…">`). */
     fun toImageHtml(bytes: ByteArray): String {
         val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)

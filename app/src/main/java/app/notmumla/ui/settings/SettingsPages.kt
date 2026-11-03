@@ -1,7 +1,18 @@
 package app.notmumla.ui.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.filled.HowToReg
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -107,7 +118,10 @@ internal val BITRATES = listOf(16_000, 24_000, 40_000, 72_000, 96_000, 128_000, 
 internal fun AccountPage(
     onBack: () -> Unit,
     profile: ProfileInfo,
+    account: AccountState,
     identity: IdentityInfo?,
+    onOpenProfile: () -> Unit,
+    onRegister: () -> Unit,
     onRegenerateIdentity: () -> Unit,
     onExportIdentity: suspend (password: String) -> ByteArray?,
     onImportIdentity: suspend (bytes: ByteArray, password: String) -> Boolean,
@@ -119,20 +133,18 @@ internal fun AccountPage(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            ProfileAvatar(profile.initials, 84.dp, profile.online, ringColor = c.surface)
+            ProfileAvatar(profile.initials, 84.dp, profile.online, ringColor = c.surface, image = profile.avatar)
             Text(profile.name, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = c.onSurface)
             Text(profile.status, fontSize = 13.sp, color = c.onSurfaceVar)
         }
         SectionLabel("ACCOUNT")
         SettingsGroup {
-            NavRow(Icons.Filled.Person, "Profile & status", "Display name, avatar, comment")
+            NavRow(Icons.Filled.Person, "Profile", "Avatar, comment, default username", onClick = onOpenProfile)
             Divider()
             var showIdentity by remember { mutableStateOf(false) }
             NavRow(
-                Icons.Filled.VerifiedUser, "Identity certificate", "Import, export or regenerate",
-                trailing = {
-                    Text("Verified", color = c.speaking, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                },
+                Icons.Filled.VerifiedUser, "Identity certificate",
+                identity?.let { "${it.commonName} · ${it.sha256.take(11)}…" } ?: "Import, export or regenerate",
                 onClick = { showIdentity = true },
             )
             if (showIdentity) {
@@ -144,7 +156,152 @@ internal fun AccountPage(
                     onDismiss = { showIdentity = false },
                 )
             }
+            Divider()
+            var confirmRegister by remember { mutableStateOf(false) }
+            val canRegister = account.connected && !account.registered
+            RowBase(
+                Icons.Filled.HowToReg, "Server registration",
+                when {
+                    !account.connected -> "Connect to a server to register on it"
+                    account.registered -> "${account.name} is registered on ${account.serverLabel}"
+                    else -> "Guest on ${account.serverLabel}. Register to keep ${account.name}"
+                },
+                trailing = {
+                    when {
+                        account.connected && account.registered ->
+                            Text("Registered", color = c.speaking, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        canRegister -> PillButton("Register", { confirmRegister = true }, tonal = true)
+                    }
+                },
+                onClick = if (canRegister) ({ confirmRegister = true }) else null,
+            )
+            if (confirmRegister) {
+                AlertDialog(
+                    onDismissRequest = { confirmRegister = false },
+                    title = { Text("Register as ${account.name}?") },
+                    text = {
+                        Text(
+                            "This binds the name ${account.name} on ${account.serverLabel} to your identity " +
+                                "certificate. It can't be undone from the app and the name can't be changed " +
+                                "afterwards. Export a backup of the certificate: without it you lose the account.",
+                        )
+                    },
+                    confirmButton = {
+                        TextButton({ confirmRegister = false; onRegister() }) { Text("Register") }
+                    },
+                    dismissButton = { TextButton({ confirmRegister = false }) { Text("Cancel") } },
+                )
+            }
         }
+        Text(
+            "Mumble accounts are per server: your certificate is your login, and a registered name, " +
+                "comment and avatar are kept by that server.",
+            fontSize = 12.sp, color = c.onSurfaceVar,
+            modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 10.dp),
+        )
+    }
+}
+
+/* ---------------- 03.1a Profile ---------------- */
+
+@Composable
+internal fun ProfilePage(
+    onBack: () -> Unit,
+    profile: ProfileInfo,
+    comment: String,
+    defaultUsername: String,
+    onSaveComment: (String) -> Unit,
+    onPickAvatar: suspend (android.net.Uri) -> Boolean,
+    onRemoveAvatar: () -> Unit,
+    onSetDefaultUsername: (String) -> Unit,
+) {
+    val c = MumbleTheme.colors
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) scope.launch {
+            if (!onPickAvatar(uri)) {
+                android.widget.Toast.makeText(ctx, "Couldn't read that image", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    SettingsPageScaffold("Profile", onBack) {
+        SectionLabel("AVATAR")
+        SettingsGroup {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                ProfileAvatar(profile.initials, 72.dp, online = false, ringColor = c.surfContainer, image = profile.avatar)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PillButton(if (profile.avatar == null) "Choose image" else "Change", {
+                            picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        }, tonal = true)
+                        if (profile.avatar != null) PillButton("Remove", onRemoveAvatar, tonal = false)
+                    }
+                    Text("Cropped square, 256 px", fontSize = 12.sp, color = c.onSurfaceVar)
+                }
+            }
+        }
+
+        SectionLabel("COMMENT")
+        var draft by rememberSaveable(comment) { mutableStateOf(comment) }
+        SettingsGroup {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ProfileTextField(draft, "Tell people something about yourself", singleLine = false) { draft = it }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Shown when others open your user info.",
+                        fontSize = 12.sp, color = c.onSurfaceVar, modifier = Modifier.weight(1f),
+                    )
+                    PillButton("Save", { onSaveComment(draft) }, tonal = true, enabled = draft.trim() != comment)
+                }
+            }
+        }
+
+        SectionLabel("NEW SERVERS")
+        SettingsGroup {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ProfileTextField(defaultUsername, "user", singleLine = true, onChange = onSetDefaultUsername)
+                Text(
+                    "Pre-filled username when adding a server. Each saved server keeps its own name.",
+                    fontSize = 12.sp, color = c.onSurfaceVar,
+                )
+            }
+        }
+        Text(
+            "Your avatar and comment are sent to every server you join. A server keeps them only for " +
+                "registered users, so Grumbla sends them again each time you connect.",
+            fontSize = 12.sp, color = c.onSurfaceVar,
+            modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 10.dp),
+        )
+    }
+}
+
+@Composable
+private fun ProfileTextField(value: String, placeholder: String, singleLine: Boolean, onChange: (String) -> Unit) {
+    val c = MumbleTheme.colors
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.surface)
+            .border(1.dp, c.outlineVariant, RoundedCornerShape(14.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = singleLine,
+            minLines = if (singleLine) 1 else 3,
+            maxLines = if (singleLine) 1 else 8,
+            textStyle = TextStyle(color = c.onSurface, fontSize = 15.sp),
+            cursorBrush = SolidColor(c.primary),
+            modifier = Modifier.fillMaxWidth(),
+            decorationBox = { inner ->
+                if (value.isEmpty()) Text(placeholder, color = c.onSurfaceVar.copy(alpha = 0.6f), fontSize = 15.sp)
+                inner()
+            },
+        )
     }
 }
 

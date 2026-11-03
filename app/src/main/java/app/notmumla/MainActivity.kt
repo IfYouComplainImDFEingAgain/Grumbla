@@ -197,6 +197,7 @@ private fun AppNav() {
                 onDelete = vm::delete,
                 onSaveEdit = vm::update,
                 onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                defaultUsername = vm.defaultUsername.collectAsState().value,
             )
         }
         composable(Routes.CHANNELS) {
@@ -386,6 +387,15 @@ private fun AppNav() {
             val vadCalibrating by session.vadCalibrating.collectAsState()
             val micTestState by session.micTestState.collectAsState()
             val identity by settingsVm.identity.collectAsState()
+            val comment by settingsVm.comment.collectAsState()
+            val avatar by settingsVm.avatar.collectAsState()
+            val serverLabel by session.serverLabel.collectAsState()
+            val settingsToastCtx = androidx.compose.ui.platform.LocalContext.current
+            LaunchedEffect(Unit) {
+                kotlinx.coroutines.flow.merge(session.denials, session.notices).collect {
+                    android.widget.Toast.makeText(settingsToastCtx, it, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
             // Run a live mic-level preview while Settings is open (no-op if already in a call).
             DisposableEffect(Unit) {
                 session.startMicPreview()
@@ -394,7 +404,14 @@ private fun AppNav() {
             SettingsScreen(
                 onBack = { nav.popBackStack() },
                 settings = settings,
-                profileName = connection.self?.name,
+                account = app.notmumla.ui.settings.AccountState(
+                    connected = connection.connection == ConnectionState.CONNECTED,
+                    serverLabel = serverLabel,
+                    name = connection.self?.name,
+                    registered = connection.self?.registered == true,
+                ),
+                comment = comment,
+                avatar = avatar,
                 inputLevel = inputLevel,
                 vadCalibrating = vadCalibrating,
                 onCalibrateVad = session::calibrateVad,
@@ -444,6 +461,11 @@ private fun AppNav() {
                 onRegenerateIdentity = { settingsVm.regenerateIdentity() },
                 onExportIdentity = settingsVm::exportIdentity,
                 onImportIdentity = settingsVm::importIdentity,
+                onSaveComment = settingsVm::saveComment,
+                onPickAvatar = settingsVm::setAvatar,
+                onRemoveAvatar = settingsVm::removeAvatar,
+                onSetDefaultUsername = settingsVm::setDefaultUsername,
+                onRegister = settingsVm::registerSelf,
                 onOpenLicenses = { nav.navigate(Routes.LICENSES) },
             )
         }

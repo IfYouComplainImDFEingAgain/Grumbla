@@ -33,6 +33,7 @@ import app.notmumla.protocol.ConnectConfig
 import app.notmumla.protocol.MumbleClient
 import app.notmumla.protocol.model.ConnectionState
 import app.notmumla.protocol.model.ServerState
+import app.notmumla.protocol.model.User
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -59,6 +60,7 @@ class SessionManager @Inject constructor(
     private val settingsRepo: SettingsRepository,
     private val tts: TtsManager,
     private val notifier: Notifier,
+    private val profile: ProfileStore,
 ) {
     private val scope = CoroutineScope(SupervisorJob())
 
@@ -412,6 +414,10 @@ class SessionManager @Inject constructor(
     private var eventJob: Job? = null
     private var audioStarted = false
     private var activeServerId: Long? = null
+    /** Our comment/avatar have been checked against the server for this session. */
+    private var profileSynced = false
+    /** Last seen registration state of our session, to catch a self-registration completing. */
+    private var wasRegistered = false
 
     val activeClient: MumbleClient? get() = client
 
@@ -654,6 +660,15 @@ class SessionManager @Inject constructor(
                 .forEach { client?.setListening(it, true) }
         }
         reconnectAttempts = 0
+        state.self?.let { self ->
+            // Murmur's registration stores only name + cert, so re-send the profile for it to keep.
+            val justRegistered = profileSynced && self.registered && !wasRegistered
+            wasRegistered = self.registered
+            if (!profileSynced || justRegistered) {
+                profileSynced = true
+                syncProfile(self, state, force = justRegistered)
+            }
+        }
         val id = activeServerId ?: return
         scope.launch {
             val fp = state.serverFingerprintSha256
@@ -661,6 +676,44 @@ class SessionManager @Inject constructor(
             serverDao.markConnected(id, System.currentTimeMillis(), state.self?.channelId)
         }
     }
+
+    /**
+     * Push our saved comment/avatar if the server's copy differs. An empty local value leaves the
+     * server's alone, so a registered user's profile set from another client isn't wiped.
+     */
+    private fun syncProfile(self: User, state: ServerState, force: Boolean) {
+        val comment = profile.comment.value
+        if (comment.isNotEmpty() && (force || !commentMatches(self, ProfileStore.commentHtml(comment)))) pushComment()
+        val avatar = profile.avatar.value
+        if (avatar != null && (force || self.textureHash != sha1Hex(avatar))) pushAvatar(state)
+    }
+
+    private fun commentMatches(self: User, html: String) =
+        self.comment == html || (self.commentHash != null && self.commentHash == sha1Hex(html.toByteArray()))
+
+    private fun sha1Hex(bytes: ByteArray) =
+        java.security.MessageDigest.getInstance("SHA-1").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    /** Send the saved comment now (empty clears it); no-op when not connected. */
+    fun pushComment() {
+        client?.setSelfComment(ProfileStore.commentHtml(profile.comment.value))
+    }
+
+    /** Send the saved avatar now (none clears it); no-op when not connected. */
+    fun pushAvatar(state: ServerState = _state.value) {
+        val mc = client ?: return
+        if (state.connection != ConnectionState.CONNECTED) return
+        val avatar = profile.avatar.value ?: ByteArray(0)
+        val limit = state.imageMessageLength
+        if (limit > 0 && avatar.size > limit) {
+            _notices.tryEmit("Avatar is too large for this server")
+            return
+        }
+        mc.setSelfTexture(avatar)
+    }
+
+    /** Register our current name and certificate on the connected server (irreversible). */
+    fun registerSelf() = client?.registerSelf()
 
     private fun shouldReconnect(): Boolean =
         settings.autoReconnect && !userInitiatedDisconnect && lastServer != null &&
@@ -867,6 +920,8 @@ class SessionManager @Inject constructor(
         client?.disconnect()
         client = null
         activeServerId = null
+        profileSynced = false
+        wasRegistered = false
         _speaking.value = emptySet()
         stopWhisper() // session ids don't survive a reconnect
         stopPrivateChat()

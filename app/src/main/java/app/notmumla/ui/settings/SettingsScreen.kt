@@ -78,6 +78,7 @@ import app.notmumla.vm.IdentityInfo
 internal enum class SettingsPage(val title: String, val icon: ImageVector) {
     HUB("Settings", Icons.Filled.Info),
     ACCOUNT("Account", Icons.Filled.Person),
+    PROFILE("Profile", Icons.Filled.Person),
     CONNECTION("Connection", Icons.Filled.Dns),
     APPEARANCE("Appearance", Icons.Filled.Palette),
     INPUT("Audio input", Icons.Filled.Mic),
@@ -88,16 +89,27 @@ internal enum class SettingsPage(val title: String, val icon: ImageVector) {
     ABOUT("About", Icons.Filled.Info),
 }
 
-internal data class ProfileInfo(val name: String, val online: Boolean) {
+/** Our standing on the connected server, for the Account page. */
+data class AccountState(
+    val connected: Boolean = false,
+    val serverLabel: String? = null,
+    /** Our name as the server knows it (null when offline). */
+    val name: String? = null,
+    /** Registered (bound to our certificate) on this server; meaningless when offline. */
+    val registered: Boolean = false,
+)
+
+internal data class ProfileInfo(val name: String, val online: Boolean, val avatar: ByteArray?, val status: String) {
     val initials: String get() = name.filter { it.isLetterOrDigit() }.take(2).uppercase().ifEmpty { "?" }
-    val status: String get() = if (online) "Online" else "Not connected"
 }
 
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
     settings: AppSettings,
-    profileName: String?,
+    account: AccountState,
+    comment: String,
+    avatar: ByteArray?,
     inputLevel: Float,
     vadCalibrating: Boolean,
     onCalibrateVad: () -> Unit,
@@ -142,6 +154,11 @@ fun SettingsScreen(
     onRegenerateIdentity: () -> Unit,
     onExportIdentity: suspend (password: String) -> ByteArray?,
     onImportIdentity: suspend (bytes: ByteArray, password: String) -> Boolean,
+    onSaveComment: (String) -> Unit,
+    onPickAvatar: suspend (android.net.Uri) -> Boolean,
+    onRemoveAvatar: () -> Unit,
+    onSetDefaultUsername: (String) -> Unit,
+    onRegister: () -> Unit,
     onOpenLicenses: () -> Unit,
 ) {
     // Saveable so a trip to Licenses (a real nav route) returns to the same sub-page.
@@ -155,11 +172,24 @@ fun SettingsScreen(
     // System back steps out of a sub-page (to the search results if it was opened from there), then
     // out of search, and only then leaves Settings.
     BackHandler(enabled = page != SettingsPage.HUB || searching) {
-        if (page != SettingsPage.HUB) page = SettingsPage.HUB else { searching = false; query = "" }
+        page = when {
+            page == SettingsPage.PROFILE -> SettingsPage.ACCOUNT
+            page != SettingsPage.HUB -> SettingsPage.HUB
+            else -> { searching = false; query = ""; SettingsPage.HUB }
+        }
     }
     val toHub = { page = SettingsPage.HUB }
 
-    val profile = ProfileInfo(profileName ?: identity?.commonName ?: "You", online = inCall)
+    val profile = ProfileInfo(
+        name = account.name ?: settings.defaultUsername.trim().ifEmpty { identity?.commonName ?: "You" },
+        online = account.connected,
+        avatar = avatar,
+        status = when {
+            !account.connected -> "Not connected"
+            account.registered -> "Registered on ${account.serverLabel}"
+            else -> "Guest on ${account.serverLabel}"
+        },
+    )
     val (perms, _) = rememberPermissionStatus()
 
     AnimatedContent(
@@ -197,8 +227,16 @@ fun SettingsScreen(
                         onOpen = { page = it },
                     )
                 }
-            SettingsPage.ACCOUNT -> AccountPage(toHub, profile, identity, onRegenerateIdentity,
-                onExportIdentity, onImportIdentity)
+            SettingsPage.ACCOUNT -> AccountPage(toHub, profile, account, identity,
+                onOpenProfile = { page = SettingsPage.PROFILE }, onRegister = onRegister,
+                onRegenerateIdentity = onRegenerateIdentity, onExportIdentity = onExportIdentity,
+                onImportIdentity = onImportIdentity)
+            SettingsPage.PROFILE -> ProfilePage(
+                onBack = { page = SettingsPage.ACCOUNT }, profile = profile, comment = comment,
+                defaultUsername = settings.defaultUsername, onSaveComment = onSaveComment,
+                onPickAvatar = onPickAvatar, onRemoveAvatar = onRemoveAvatar,
+                onSetDefaultUsername = onSetDefaultUsername,
+            )
             SettingsPage.CONNECTION -> ConnectionPage(toHub, settings, onToggleAutoReconnect, onSetBitrate)
             SettingsPage.APPEARANCE -> AppearancePage(toHub, settings, onSetTheme, onToggleAvatars, onToggleKeepAwake)
             SettingsPage.INPUT -> AudioInputPage(
@@ -263,10 +301,10 @@ private fun SettingsHub(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            ProfileAvatar(profile.initials, 54.dp, profile.online, ringColor = c.surfContainer)
+            ProfileAvatar(profile.initials, 54.dp, profile.online, ringColor = c.surfContainer, image = profile.avatar)
             Column(Modifier.weight(1f)) {
                 Text(profile.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = c.onSurface)
-                Text("Profile, status & identity certificate", fontSize = 13.sp, color = c.onSurfaceVar)
+                Text("Profile, registration & identity certificate", fontSize = 13.sp, color = c.onSurfaceVar)
             }
             Chevron()
         }

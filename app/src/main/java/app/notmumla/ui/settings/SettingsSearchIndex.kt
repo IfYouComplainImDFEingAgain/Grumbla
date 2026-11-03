@@ -48,10 +48,16 @@ internal data class SearchEntry(
 
 internal val SETTINGS_INDEX: List<SearchEntry> = listOf(
     // Account
-    SearchEntry("Profile & status", SettingsPage.ACCOUNT, Icons.Filled.Person, "Display name, avatar, comment",
-        keywords = "name username"),
+    SearchEntry("Avatar", SettingsPage.PROFILE, Icons.Filled.Person, "Picture other users see",
+        keywords = "profile picture photo texture image"),
+    SearchEntry("Comment", SettingsPage.PROFILE, Icons.Filled.Person, "Shown in your user info",
+        keywords = "profile bio about status"),
+    SearchEntry("Default username", SettingsPage.PROFILE, Icons.Filled.Person, "Pre-filled when adding a server",
+        keywords = "name nickname display"),
     SearchEntry("Identity certificate", SettingsPage.ACCOUNT, Icons.Filled.VerifiedUser, "Import, export or regenerate",
         keywords = "cert certificate fingerprint p12 pkcs12 backup"),
+    SearchEntry("Server registration", SettingsPage.ACCOUNT, Icons.Filled.VerifiedUser, "Register your name on a server",
+        keywords = "register account login"),
     // Connection
     SearchEntry("Auto-reconnect", SettingsPage.CONNECTION, Icons.Filled.Autorenew, "Rejoin last channel automatically",
         keywords = "reconnect"),

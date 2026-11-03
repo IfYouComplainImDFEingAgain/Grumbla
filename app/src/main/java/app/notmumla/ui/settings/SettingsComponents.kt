@@ -54,6 +54,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.notmumla.ui.theme.MumbleTheme
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import kotlin.math.roundToInt
 
 /* Building blocks shared by the settings hub and its sub-pages (design 03A–03.9). */
@@ -365,13 +370,19 @@ internal fun AdvancedSection(
     }
 }
 
-/** Initials avatar with an optional green presence dot (hub card 54dp, Account header 84dp). */
+/** Avatar image (or initials) with an optional green presence dot (hub card 54dp, Account header 84dp). */
 @Composable
-internal fun ProfileAvatar(initials: String, size: Dp, online: Boolean, ringColor: Color) {
+internal fun ProfileAvatar(initials: String, size: Dp, online: Boolean, ringColor: Color, image: ByteArray? = null) {
     val c = MumbleTheme.colors
     val dot = if (size > 60.dp) 24.dp else 15.dp
+    val bitmap = remember(image) {
+        image?.let { runCatching { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }.getOrNull() }
+    }
     Box(Modifier.size(size)) {
-        Box(Modifier.fillMaxSize().clip(CircleShape).background(c.primary), contentAlignment = Alignment.Center) {
+        if (bitmap != null) {
+            Image(bitmap, "Avatar", contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(CircleShape))
+        } else Box(Modifier.fillMaxSize().clip(CircleShape).background(c.primary), contentAlignment = Alignment.Center) {
             Text(initials, color = c.onPrimary, fontWeight = FontWeight.Bold,
                 fontSize = if (size > 60.dp) 31.sp else 20.sp, textAlign = TextAlign.Center)
         }

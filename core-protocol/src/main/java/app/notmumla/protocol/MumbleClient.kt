@@ -345,7 +345,19 @@ class MumbleClient(
                 selfMute = msg.self_mute ?: existing?.selfMute ?: false,
                 selfDeaf = msg.self_deaf ?: existing?.selfDeaf ?: false,
                 prioritySpeaker = msg.priority_speaker ?: existing?.prioritySpeaker ?: false,
-                comment = msg.comment ?: existing?.comment,
+                // Murmur sends either the text or (for 128+ chars) only its hash; a new one replaces both.
+                comment = if (msg.comment != null || msg.comment_hash != null) msg.comment else existing?.comment,
+                commentHash = when {
+                    msg.comment_hash != null -> msg.comment_hash!!.hex()
+                    msg.comment != null -> null
+                    else -> existing?.commentHash
+                },
+                textureHash = when {
+                    msg.texture_hash != null -> msg.texture_hash!!.hex().ifEmpty { null }
+                    msg.texture != null -> msg.texture!!.takeIf { it.size > 0 }?.sha1()?.hex()
+                    else -> existing?.textureHash
+                },
+                userId = msg.user_id ?: existing?.userId,
                 certHash = msg.hash ?: existing?.certHash,
                 // Listener changes arrive as deltas, not a full set.
                 listeningChannels = (existing?.listeningChannels.orEmpty() +
@@ -557,6 +569,27 @@ class MumbleClient(
     }
 
     /** Send a text message to [channelId]. */
+    /** Set our own comment (HTML). Murmur stores it only for registered users. */
+    fun setSelfComment(comment: String) {
+        val session = _state.value.sessionId ?: return
+        sendAsync(UserState(session = session, comment = comment))
+    }
+
+    /** Set our own avatar (PNG/JPEG bytes; empty clears it). Murmur stores it only for registered users. */
+    fun setSelfTexture(image: ByteArray) {
+        val session = _state.value.sessionId ?: return
+        sendAsync(UserState(session = session, texture = image.toByteString()))
+    }
+
+    /**
+     * Register our current name + certificate on the server (`user_id = 0` on our own session).
+     * Irreversible from the client; needs the SelfRegister permission, else a PermissionDenied.
+     */
+    fun registerSelf() {
+        val session = _state.value.sessionId ?: return
+        sendAsync(UserState(session = session, user_id = 0))
+    }
+
     fun sendText(channelId: Int, message: String) {
         sendAsync(TextMessage(message = message, channel_id = listOf(channelId)))
     }

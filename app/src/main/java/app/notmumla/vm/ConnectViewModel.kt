@@ -33,7 +33,12 @@ sealed interface ServerStatus {
 class ConnectViewModel @Inject constructor(
     private val serverDao: ServerDao,
     private val sessionManager: SessionManager,
+    settingsRepo: app.notmumla.data.SettingsRepository,
 ) : ViewModel() {
+
+    /** Pre-filled username for the add-server form (Settings › Account › Profile). */
+    val defaultUsername = settingsRepo.settings.map { it.defaultUsername.trim().ifEmpty { "user" } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "user")
 
     val savedServers = serverDao.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

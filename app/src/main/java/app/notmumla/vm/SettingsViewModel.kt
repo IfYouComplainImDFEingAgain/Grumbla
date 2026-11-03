@@ -5,7 +5,13 @@ import androidx.lifecycle.viewModelScope
 import app.notmumla.audio.TransmissionMode
 import app.notmumla.audio.routing.CallModeOverride
 import app.notmumla.data.AppSettings
+import android.content.Context
+import android.net.Uri
 import app.notmumla.data.IdentityStore
+import app.notmumla.data.ImageUtil
+import app.notmumla.data.ProfileStore
+import app.notmumla.data.SessionManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import app.notmumla.data.SettingsRepository
 import app.notmumla.data.ThemeMode
 import app.notmumla.protocol.identity.IdentityCertificate
@@ -34,6 +40,9 @@ data class IdentityInfo(
 class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
     private val identityStore: IdentityStore,
+    private val profile: ProfileStore,
+    private val session: SessionManager,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     val settings = repo.settings
@@ -85,6 +94,31 @@ class SettingsViewModel @Inject constructor(
         if (ok) loadIdentity()
         return ok
     }
+
+    /** Our Mumble comment (plain text) and avatar (JPEG), sent to every server we join. */
+    val comment: StateFlow<String> = profile.comment
+    val avatar: StateFlow<ByteArray?> = profile.avatar
+
+    fun saveComment(text: String) = update {
+        profile.setComment(text)
+        session.pushComment()
+    }
+
+    /** Crop/scale the picked image to an avatar and send it; false if it couldn't be decoded. */
+    suspend fun setAvatar(uri: Uri): Boolean {
+        val jpeg = withContext(Dispatchers.IO) { ImageUtil.loadAvatar(context, uri) } ?: return false
+        profile.setAvatar(jpeg)
+        session.pushAvatar()
+        return true
+    }
+
+    fun removeAvatar() = update {
+        profile.setAvatar(null)
+        session.pushAvatar()
+    }
+
+    fun registerSelf() { session.registerSelf() }
+    fun setDefaultUsername(v: String) = update { repo.setDefaultUsername(v) }
 
     fun setTheme(v: ThemeMode) = update { repo.setTheme(v) }
     fun setChannelLayout(v: ChannelLayout) = update { repo.setChannelLayout(v) }

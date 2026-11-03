@@ -67,6 +67,7 @@ fun ConnectScreen(
     onDelete: (ServerEntity) -> Unit,
     onSaveEdit: (ServerEntity) -> Unit,
     onOpenSettings: () -> Unit,
+    defaultUsername: String = "user",
 ) {
     val c = MumbleTheme.colors
     var showAdd by remember { mutableStateOf(false) }
@@ -97,7 +98,7 @@ fun ConnectScreen(
         }
 
         if (savedServers.isEmpty()) {
-            NewServerForm(onConnectNew)
+            NewServerForm(onConnectNew, defaultUsername)
         } else {
             Text("RECENT SERVERS", color = c.onSurfaceVar, fontWeight = FontWeight.Bold,
                 fontSize = 12.sp, letterSpacing = 0.06.sp,
@@ -129,6 +130,7 @@ fun ConnectScreen(
         ) {
             Column(Modifier.padding(horizontal = 20.dp)) {
                 NewServerForm(
+                    defaultUsername = defaultUsername,
                     onConnectNew = { host, port, user, pass ->
                         showAdd = false
                         onConnectNew(host, port, user, pass)
@@ -237,13 +239,14 @@ private fun EditServerForm(
 @Composable
 private fun NewServerForm(
     onConnectNew: (host: String, port: Int, username: String, password: String?) -> Unit,
+    defaultUsername: String,
     title: String? = null,
     onCancel: (() -> Unit)? = null,
 ) {
     val c = MumbleTheme.colors
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf(Mumble.DEFAULT_PORT.toString()) }
-    var username by remember { mutableStateOf("user") }
+    var username by remember(defaultUsername) { mutableStateOf(defaultUsername) }
 
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(c.surfContainer)
