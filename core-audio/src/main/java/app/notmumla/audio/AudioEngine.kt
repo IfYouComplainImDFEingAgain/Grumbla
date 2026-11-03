@@ -123,6 +123,10 @@ class AudioEngine(
     private var playbackThread: Thread? = null
     @Volatile private var running = false
 
+    /** Set while the route needs its echo cancelling checked; called (once) if playback leaks into the mic. */
+    @Volatile private var onSpeakerEcho: (() -> Unit)? = null
+    @Volatile private var echoDetector: EchoDetector? = null
+
     /** False while another app has the mic: playback keeps running, nothing is captured. */
     @Volatile var captureEnabled: Boolean = true
         private set
@@ -134,6 +138,10 @@ class AudioEngine(
     fun start() {
         if (running) return
         running = true
+        // Fresh per start: a route change moves the speaker-to-mic delay.
+        echoDetector = onSpeakerEcho?.takeIf { captureEnabled }?.let { cb ->
+            EchoDetector(onEcho = cb, log = { android.util.Log.i("notmumla-audio", it) })
+        }
         if (captureEnabled) {
             captureThread = thread(name = "mumble-capture", priority = Thread.MAX_PRIORITY) { captureLoop() }
         }
@@ -161,10 +169,14 @@ class AudioEngine(
     /** Locally mute a remote speaker session: their audio is dropped, only for us. */
     fun setUserMuted(session: Int, muted: Boolean) = mixer.setUserMuted(session, muted)
 
-    /** Apply a new capture/playback route, restarting the audio threads if running. */
-    fun applyRoute(config: RouteConfig, captureEnabled: Boolean = true) {
+    /**
+     * Apply a new capture/playback route, restarting the audio threads if running. [onSpeakerEcho],
+     * if given, watches for our playback leaking into the mic (see [EchoDetector]).
+     */
+    fun applyRoute(config: RouteConfig, captureEnabled: Boolean = true, onSpeakerEcho: (() -> Unit)? = null) {
         routeConfig = config
         this.captureEnabled = captureEnabled
+        this.onSpeakerEcho = onSpeakerEcho
         if (running) {
             stop()
             start()
@@ -238,6 +250,8 @@ class AudioEngine(
                     read += n
                 }
                 if (read < frame) continue
+                // Before our own gain and denoising: what the platform's capture chain lets through.
+                echoDetector?.onCapture(pcm, read)
 
                 denoiser?.let { it.mix = noiseReductionMix; it.leveling = autoGain; it.process(pcm) }
                 applyGain(pcm, read, micGain)
@@ -342,6 +356,7 @@ class AudioEngine(
                 }
                 if (changed) _speaking.value = heldFor.keys.toSet()
                 track.write(out, 0, frame)
+                echoDetector?.onPlayback(out, frame)
                 // mixNextFrame consumes one 20ms frame; AudioTrack.write blocks to pace us.
                 if (speaking.isEmpty()) {
                     idleSpins++

@@ -13,6 +13,7 @@ import app.notmumla.audio.TransmissionMode
 import app.notmumla.audio.routing.AudioRouter
 import app.notmumla.audio.routing.MicContentionMonitor
 import app.notmumla.audio.routing.OutputRoute
+import app.notmumla.audio.routing.SpeakerEcho
 import app.notmumla.data.db.ServerDao
 import dagger.hilt.android.qualifiers.ApplicationContext
 import app.notmumla.data.db.ServerEntity
@@ -92,9 +93,12 @@ class SessionManager @Inject constructor(
     init {
         scope.launch {
             settingsRepo.settings.collect { s ->
-                val routingChanged = router.callMode != s.callMode || router.earpiece != s.phoneEarpiece
+                val echo = if (s.speakerEchoModel == android.os.Build.MODEL) SpeakerEcho.LEAKS else SpeakerEcho.UNKNOWN
+                val routingChanged = router.callMode != s.callMode || router.earpiece != s.phoneEarpiece ||
+                    router.speakerEcho != echo
                 settings = s
                 router.callMode = s.callMode
+                router.speakerEcho = echo
                 router.earpiece = s.phoneEarpiece
                 if (routingChanged) scope.launch(Dispatchers.Main) { if (engine != null) applyRoute(router.current.value) }
                 applyAudioSettings(s)
@@ -314,9 +318,30 @@ class SessionManager @Inject constructor(
             router.markCurrent(route)
         } else {
             val yielded = _micYielded.value
-            eng.applyRoute(router.select(route, shareMic = yielded), captureEnabled = !yielded)
+            val config = router.select(route, shareMic = yielded)
+            eng.applyRoute(config, captureEnabled = !yielded,
+                onSpeakerEcho = if (router.needsEchoCheck(config)) ::onSpeakerEcho else null)
         }
         updateProximityLock()
+    }
+
+    private val _notices = MutableSharedFlow<String>(extraBufferCapacity = 4)
+    /** One-line notices for the user (shown as a toast). */
+    val notices: kotlinx.coroutines.flow.SharedFlow<String> = _notices
+
+    /**
+     * From the audio thread: our playback came back through the mic on the loudspeaker in media
+     * mode. Switch to call mode once and remember it for this phone; never switch back on our own.
+     */
+    private fun onSpeakerEcho() {
+        scope.launch(Dispatchers.Main) {
+            if (router.speakerEcho == SpeakerEcho.LEAKS) return@launch
+            // Set before saving, so the settings collector sees no change and doesn't restart again.
+            router.speakerEcho = SpeakerEcho.LEAKS
+            if (engine != null) applyRoute(router.current.value)
+            _notices.tryEmit("Echo on speaker: switched to call audio")
+            settingsRepo.setSpeakerEchoModel(android.os.Build.MODEL)
+        }
     }
 
     /** Whether the phone has an ear speaker to offer as the phone route's output. */

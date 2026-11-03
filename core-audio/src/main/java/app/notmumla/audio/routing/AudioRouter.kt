@@ -103,6 +103,15 @@ class AudioRouter(context: Context) {
         resolveRoute(route, earpiece, callMode, speakerEcho, micContended, devices())
 
     /**
+     * Whether [config] is the one case Auto still has to learn: the loudspeaker in media mode, where
+     * echo cancelling is up to the device. Earpiece/call/contended configs never qualify.
+     */
+    fun needsEchoCheck(config: RouteConfig): Boolean =
+        callMode == CallModeOverride.AUTO && speakerEcho == SpeakerEcho.UNKNOWN &&
+            config.route == OutputRoute.PHONE_SPEAKER && config.audioMode == AudioManager.MODE_NORMAL &&
+            config.trackUsage == android.media.AudioAttributes.USAGE_MEDIA
+
+    /**
      * Apply [route] at the AudioManager level (audio mode + communication device) and return the
      * [RouteConfig] the engine should adopt. Caller passes the config to AudioEngine.applyRoute.
      * [shareMic] selects the playback-only variant used while another app records.

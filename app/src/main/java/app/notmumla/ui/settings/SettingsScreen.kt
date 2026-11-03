@@ -403,9 +403,11 @@ fun SettingsScreen(
                             Text("Speaker audio mode", fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
                                 color = c.onSurface)
                             Text(when (settings.callMode) {
-                                // TODO(echo detection): Auto picks Call by itself once SpeakerEcho is measured.
-                                CallModeOverride.AUTO -> "Media volume, shared with music and videos. " +
-                                    "Pick Call if others hear an echo of themselves."
+                                CallModeOverride.AUTO ->
+                                    if (settings.speakerEchoModel == android.os.Build.MODEL)
+                                        "Call audio: this phone's speaker echoed in media mode"
+                                    else "Media volume. Switches to call audio by itself if others " +
+                                        "would hear an echo of themselves."
                                 CallModeOverride.CALL -> "Call volume and the phone's call echo " +
                                     "cancelling"
                                 CallModeOverride.MEDIA -> "Always media volume, even if Auto would " +

@@ -56,6 +56,9 @@ class SessionViewModel @Inject constructor(
     fun joinChannel(channelId: Int) = sessionManager.joinChannel(channelId)
     fun setListening(channelId: Int, listen: Boolean) = sessionManager.setListening(channelId, listen)
 
+    /** App notices (e.g. an automatic audio mode switch) to surface as a toast. */
+    val notices: kotlinx.coroutines.flow.SharedFlow<String> = sessionManager.notices
+
     /** Server refusals (e.g. listener limit) to surface as a toast. */
     val denials: kotlinx.coroutines.flow.Flow<String> = sessionManager.events
         .filterIsInstance<app.notmumla.protocol.MumbleClient.Event.Denied>()

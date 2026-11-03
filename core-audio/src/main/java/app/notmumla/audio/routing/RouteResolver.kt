@@ -15,11 +15,11 @@ enum class CallModeOverride { AUTO, CALL, MEDIA }
  * `AcousticEchoCanceler.isAvailable()` doesn't answer this; only measuring it does.
  */
 enum class SpeakerEcho {
-    /** Not measured yet. Treated like [CANCELLED]: media mode keeps the media volume keys. */
+    /**
+     * No echo seen (yet). Media mode, and [app.notmumla.audio.EchoDetector] keeps watching: echo
+     * depends on volume, so "none so far" is never final.
+     */
     UNKNOWN,
-
-    /** Our playback didn't show up in the mic capture in media mode. */
-    CANCELLED,
 
     /** Our playback leaked into the mic in media mode, so others hear themselves. Needs call mode. */
     LEAKS,
@@ -105,7 +105,7 @@ fun resolveRoute(
 private fun speakerWantsMedia(override: CallModeOverride, echo: SpeakerEcho) = when (override) {
     CallModeOverride.CALL -> false
     CallModeOverride.MEDIA -> true
-    CallModeOverride.AUTO -> echo != SpeakerEcho.LEAKS
+    CallModeOverride.AUTO -> echo == SpeakerEcho.UNKNOWN
 }
 
 /** Call mode: the clean, hardware-leveled capture path Mumble/Mumla use. */

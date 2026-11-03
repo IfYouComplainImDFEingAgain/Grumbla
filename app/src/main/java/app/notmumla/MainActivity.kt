@@ -268,7 +268,7 @@ private fun AppNav() {
 
             val toastCtx = androidx.compose.ui.platform.LocalContext.current
             LaunchedEffect(Unit) {
-                vm.denials.collect {
+                kotlinx.coroutines.flow.merge(vm.denials, vm.notices).collect {
                     android.widget.Toast.makeText(toastCtx, it, android.widget.Toast.LENGTH_SHORT).show()
                 }
             }

@@ -37,9 +37,8 @@ class RouteResolverTest {
         assertNull(communicationDeviceId)
     }
 
-    @Test fun `loudspeaker auto defaults to media until echo is measured`() {
+    @Test fun `loudspeaker auto is media while no echo has been seen`() {
         resolve(OutputRoute.PHONE_SPEAKER).assertMedia(1)
-        resolve(OutputRoute.PHONE_SPEAKER, echo = SpeakerEcho.CANCELLED).assertMedia(1)
     }
 
     @Test fun `loudspeaker auto switches to call when playback leaks into the mic`() {
@@ -47,8 +46,7 @@ class RouteResolverTest {
     }
 
     @Test fun `loudspeaker override beats the measurement`() {
-        resolve(OutputRoute.PHONE_SPEAKER, override = CallModeOverride.CALL, echo = SpeakerEcho.CANCELLED)
-            .assertCall(11)
+        resolve(OutputRoute.PHONE_SPEAKER, override = CallModeOverride.CALL).assertCall(11)
         resolve(OutputRoute.PHONE_SPEAKER, override = CallModeOverride.MEDIA, echo = SpeakerEcho.LEAKS)
             .assertMedia(1)
     }
