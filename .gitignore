@@ -20,6 +20,7 @@ core-audio/src/main/cpp/rnnoise/
 # Design handoff (local reference only)
 *.zip
 mumble-android-chat-app/
+mumble-android-chat-app-settings/
 
 # IDE
 .idea/

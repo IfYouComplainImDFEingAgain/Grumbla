@@ -394,6 +394,7 @@ private fun AppNav() {
             SettingsScreen(
                 onBack = { nav.popBackStack() },
                 settings = settings,
+                profileName = connection.self?.name,
                 inputLevel = inputLevel,
                 vadCalibrating = vadCalibrating,
                 onCalibrateVad = session::calibrateVad,
