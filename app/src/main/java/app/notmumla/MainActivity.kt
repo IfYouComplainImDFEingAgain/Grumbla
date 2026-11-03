@@ -426,6 +426,7 @@ private fun AppNav() {
                 onToggleRawMic = settingsVm::setRawMic,
                 onToggleShareMic = settingsVm::setShareMic,
                 onToggleAudioLeveling = settingsVm::setAudioLeveling,
+                onToggleMuteOutputWhilePtt = settingsVm::setMuteOutputWhilePtt,
                 onSetCallMode = settingsVm::setCallMode,
                 onSetPhoneEarpiece = settingsVm::setPhoneEarpiece,
                 onSetBitrate = settingsVm::setAudioBitrate,

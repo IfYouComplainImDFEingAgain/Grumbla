@@ -27,6 +27,7 @@ data class AppSettings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
     val channelLayout: ChannelLayout = ChannelLayout.TREE,
     val transmissionMode: TransmissionMode = TransmissionMode.PTT,
+    val muteOutputWhilePtt: Boolean = false, // silence playback while push-to-talk is held
     val micGainDb: Float = 0f,
     val autoGain: Boolean = true,
     val vadSensitivity: Float = 0.008f, // normalized RMS threshold (used when autoSensitivity=false)
@@ -87,6 +88,7 @@ class SettingsRepository @Inject constructor(
         val THEME = stringPreferencesKey("theme")
         val LAYOUT = stringPreferencesKey("channel_layout")
         val TX_MODE = stringPreferencesKey("transmission_mode")
+        val PTT_MUTE_OUTPUT = booleanPreferencesKey("ptt_mute_output")
         val MIC_GAIN = floatPreferencesKey("mic_gain_db")
         val AUTO_GAIN = booleanPreferencesKey("auto_gain")
         val VAD = floatPreferencesKey("vad_sensitivity")
@@ -177,6 +179,7 @@ class SettingsRepository @Inject constructor(
             echoCancellation = p[Keys.AEC] ?: true,
             shareMic = p[Keys.SHARE_MIC] ?: true,
             audioLeveling = p[Keys.LEVELING] ?: false,
+            muteOutputWhilePtt = p[Keys.PTT_MUTE_OUTPUT] ?: false,
             // Turning "Use media volume" off was the old way to fix echo on speaker; keep that as Call.
             callMode = p[Keys.CALL_MODE]?.let { runCatching { CallModeOverride.valueOf(it) }.getOrNull() }
                 ?: if (p[Keys.MEDIA_VOLUME] == false) CallModeOverride.CALL else CallModeOverride.AUTO,
@@ -212,6 +215,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setEchoCancellation(v: Boolean) = edit { it[Keys.AEC] = v }
     suspend fun setShareMic(v: Boolean) = edit { it[Keys.SHARE_MIC] = v }
     suspend fun setAudioLeveling(v: Boolean) = edit { it[Keys.LEVELING] = v }
+    suspend fun setMuteOutputWhilePtt(v: Boolean) = edit { it[Keys.PTT_MUTE_OUTPUT] = v }
     /** Choosing a mode by hand also forgets detected echo, so going back to Auto checks afresh. */
     suspend fun setCallMode(v: CallModeOverride) = edit {
         it[Keys.CALL_MODE] = v.name

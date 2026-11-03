@@ -60,6 +60,8 @@ class AudioEngine(
     /** When true (default), VAD sensitivity adapts continuously; [vadThreshold] is ignored. */
     @Volatile var autoSensitivity: Boolean = true
     @Volatile private var pttHeld: Boolean = false
+    /** Silence playback while push-to-talk is transmitting (half-duplex, e.g. no speaker bleed into the mic). */
+    @Volatile var muteOutputWhilePtt: Boolean = false
     private val vad = AdaptiveVad()
     @Volatile private var encoderRef: OpusEncoder? = null
 
@@ -336,6 +338,7 @@ class AudioEngine(
         deviceById(config.trackDeviceId)?.let { track.setPreferredDevice(it) }
 
         val out = ShortArray(frame)
+        var outGain = 1f
         try {
             track.play()
             var idleSpins = 0
@@ -355,6 +358,9 @@ class AudioEngine(
                     if (e.value > SPEAKING_HOLD_FRAMES) { iter.remove(); changed = true }
                 }
                 if (changed) _speaking.value = heldFor.keys.toSet()
+                // Keep mixing while muted so jitter buffers drain and talk indicators stay live.
+                val target = if (muteOutputWhilePtt && mode == TransmissionMode.PTT && _transmitting.value) 0f else 1f
+                outGain = applyOutputGain(out, frame, outGain, target)
                 track.write(out, 0, frame)
                 echoDetector?.onPlayback(out, frame)
                 // mixNextFrame consumes one 20ms frame; AudioTrack.write blocks to pace us.
@@ -368,6 +374,17 @@ class AudioEngine(
             runCatching { track.stop() }
             runCatching { track.release() }
         }
+    }
+
+    /** Scale [out] toward [target], ramping linearly across the frame on a change so it doesn't click. */
+    private fun applyOutputGain(out: ShortArray, n: Int, from: Float, target: Float): Float {
+        if (from == 1f && target == 1f) return 1f
+        if (from == 0f && target == 0f) { out.fill(0, 0, n); return 0f }
+        for (i in 0 until n) {
+            val g = from + (target - from) * (i + 1) / n
+            out[i] = (out[i] * g).toInt().toShort()
+        }
+        return target
     }
 
     private fun shouldTransmit(level: Float): Boolean = when (mode) {

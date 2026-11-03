@@ -99,6 +99,7 @@ class SettingsViewModel @Inject constructor(
     fun setEchoCancellation(v: Boolean) = update { repo.setEchoCancellation(v) }
     fun setShareMic(v: Boolean) = update { repo.setShareMic(v) }
     fun setAudioLeveling(v: Boolean) = update { repo.setAudioLeveling(v) }
+    fun setMuteOutputWhilePtt(v: Boolean) = update { repo.setMuteOutputWhilePtt(v) }
     fun setCallMode(v: CallModeOverride) = update { repo.setCallMode(v) }
     fun setPhoneEarpiece(v: Boolean) = update { repo.setPhoneEarpiece(v) }
     fun setAudioBitrate(v: Int) = update { repo.setAudioBitrate(v) }

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Bluetooth
@@ -124,6 +125,7 @@ fun SettingsScreen(
     onToggleRawMic: (Boolean) -> Unit,
     onToggleShareMic: (Boolean) -> Unit,
     onToggleAudioLeveling: (Boolean) -> Unit,
+    onToggleMuteOutputWhilePtt: (Boolean) -> Unit,
     onSetCallMode: (CallModeOverride) -> Unit,
     onSetPhoneEarpiece: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
@@ -233,6 +235,11 @@ fun SettingsScreen(
                     Divider()
                     ToggleRow(Icons.Filled.GraphicEq, "Automatic sensitivity",
                         "Adjusts to your mic & room", settings.autoSensitivity, onToggleAutoSensitivity)
+                } else {
+                    Divider()
+                    ToggleRow(Icons.AutoMirrored.Filled.VolumeOff, "Mute speakers while talking",
+                        "Silence incoming audio while push-to-talk is held",
+                        settings.muteOutputWhilePtt, onToggleMuteOutputWhilePtt)
                 }
                 Divider()
                 InputLevelRow(
