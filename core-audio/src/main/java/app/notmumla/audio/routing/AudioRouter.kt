@@ -133,20 +133,42 @@ class AudioRouter(context: Context) {
             am.clearCommunicationDevice()
         }
         am.mode = config.audioMode
-        // After the mode and communication device: stream volume is stored per output device.
+        handler.removeCallbacksAndMessages(CARRY_TOKEN)
         if (carry != null) {
             val (index0, min0, max0) = carry
             val index = carryVolume(index0, min0, max0, am.getStreamMinVolume(stream), am.getStreamMaxVolume(stream))
-            runCatching { am.setStreamVolume(stream, index, 0) } // refused under Do Not Disturb
+            val target = outputs().firstOrNull { it.id == (config.communicationDeviceId ?: config.trackDeviceId) }
+            if (target != null) setVolumeOn(stream, config.trackUsage, index, target, attempts = 10)
         }
         selected = Selected(route, stream)
         _current.value = route
         return config
     }
 
+    /**
+     * Stream volume is stored per output device and applies to wherever the stream routes *now*.
+     * The mode change lands asynchronously (right after leaving call mode, music still routes to the
+     * earpiece), so wait until the stream reaches [target]; give up rather than set another device.
+     */
+    private fun setVolumeOn(stream: Int, usage: Int, index: Int, target: AudioDeviceInfo, attempts: Int) {
+        val routed = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            val attrs = android.media.AudioAttributes.Builder().setUsage(usage).build()
+            am.getAudioDevicesForAttributes(attrs).any { it.id == target.id }
+        } else {
+            attempts <= 7 // no way to ask before API 33: just give the mode change ~300 ms
+        }
+        if (routed) {
+            runCatching { am.setStreamVolume(stream, index, 0) } // refused under Do Not Disturb
+        } else if (attempts > 1) {
+            handler.postDelayed({ setVolumeOn(stream, usage, index, target, attempts - 1) }, CARRY_TOKEN, 100)
+        }
+    }
+
     private data class Selected(val route: OutputRoute, val stream: Int)
     /** What the live call last selected; null when no call is active. */
     private var selected: Selected? = null
+
+    private companion object { val CARRY_TOKEN = Any() }
 
     private fun streamFor(usage: Int) =
         if (usage == android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION) AudioManager.STREAM_VOICE_CALL
@@ -163,6 +185,7 @@ class AudioRouter(context: Context) {
     /** Restore the system audio mode/routing after a call ends. */
     fun reset() {
         selected = null
+        handler.removeCallbacksAndMessages(CARRY_TOKEN)
         runCatching { am.clearCommunicationDevice() }
         runCatching { am.mode = AudioManager.MODE_NORMAL }
     }
