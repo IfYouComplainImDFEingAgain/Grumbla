@@ -177,8 +177,11 @@ class EchoDetector(
         /** ...and this much quiet to compare against (so a nonstop music bot can't be scored). */
         const val MIN_QUIET_FRACTION = 0.1
         private const val FLOOR_PERCENTILE = 0.1
-        /** Echo, not chance: with working cancelling the two floors stay within a few dB. */
-        const val ECHO_RISE_DB = 10f
+        /**
+         * Echo, not chance. Titan 2: working cancelling ≤3.4 dB; raw mic without cancelling 10.6–12.7 dB.
+         * The steady-delay rule is the main guard, so this sits nearer the cancelled side.
+         */
+        const val ECHO_RISE_DB = 8f
         /** Consecutive scored windows above the threshold, at about the same delay, before we call it. */
         const val WINDOWS_TO_CONFIRM = 3
         /** Delay wobble allowed between confirming windows (buffer timing jitter), 30 ms. */
