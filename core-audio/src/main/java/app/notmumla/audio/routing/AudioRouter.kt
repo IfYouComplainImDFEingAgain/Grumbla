@@ -118,6 +118,13 @@ class AudioRouter(context: Context) {
      */
     fun select(route: OutputRoute, shareMic: Boolean = false): RouteConfig {
         val config = configFor(route, micContended = shareMic)
+        val stream = streamFor(config.trackUsage)
+        // Same output, other mode (share mic, detected echo, setting change): media and call volume
+        // are separate levels, so carry the one the user was hearing over. Not across outputs: a
+        // headset's volume has nothing to do with the loudspeaker's.
+        val carry = selected?.takeIf { it.route == route && it.stream != stream }?.let { prev ->
+            Triple(am.getStreamVolume(prev.stream), am.getStreamMinVolume(prev.stream), am.getStreamMaxVolume(prev.stream))
+        }
         val commId = config.communicationDeviceId
         if (commId != null) {
             am.availableCommunicationDevices.firstOrNull { it.id == commId }
@@ -126,9 +133,24 @@ class AudioRouter(context: Context) {
             am.clearCommunicationDevice()
         }
         am.mode = config.audioMode
+        // After the mode and communication device: stream volume is stored per output device.
+        if (carry != null) {
+            val (index0, min0, max0) = carry
+            val index = carryVolume(index0, min0, max0, am.getStreamMinVolume(stream), am.getStreamMaxVolume(stream))
+            runCatching { am.setStreamVolume(stream, index, 0) } // refused under Do Not Disturb
+        }
+        selected = Selected(route, stream)
         _current.value = route
         return config
     }
+
+    private data class Selected(val route: OutputRoute, val stream: Int)
+    /** What the live call last selected; null when no call is active. */
+    private var selected: Selected? = null
+
+    private fun streamFor(usage: Int) =
+        if (usage == android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION) AudioManager.STREAM_VOICE_CALL
+        else AudioManager.STREAM_MUSIC
 
     /**
      * Record [route] as the one to use without touching AudioManager — for when no call is active,
@@ -140,7 +162,18 @@ class AudioRouter(context: Context) {
 
     /** Restore the system audio mode/routing after a call ends. */
     fun reset() {
+        selected = null
         runCatching { am.clearCommunicationDevice() }
         runCatching { am.mode = AudioManager.MODE_NORMAL }
     }
+}
+
+/**
+ * [index] on a [min]..[max] stream mapped to the same position on [toMin]..[toMax]. Audible stays
+ * audible: the lowest call level (quiet, not muted) mustn't become media level 0.
+ */
+internal fun carryVolume(index: Int, min: Int, max: Int, toMin: Int, toMax: Int): Int {
+    val fraction = if (max <= min) 1f else ((index - min).toFloat() / (max - min)).coerceIn(0f, 1f)
+    val mapped = toMin + Math.round(fraction * (toMax - toMin))
+    return if (index > 0 && mapped == 0 && toMax > 0) 1 else mapped
 }
