@@ -62,6 +62,8 @@ class AudioEngine(
     @Volatile private var pttHeld: Boolean = false
     /** Silence playback while push-to-talk is transmitting (half-duplex, e.g. no speaker bleed into the mic). */
     @Volatile var muteOutputWhilePtt: Boolean = false
+    /** With [muteOutputWhilePtt], only mute when playing through the loudspeaker. */
+    @Volatile var muteOutputLoudspeakerOnly: Boolean = true
     private val vad = AdaptiveVad()
     @Volatile private var encoderRef: OpusEncoder? = null
 
@@ -359,7 +361,9 @@ class AudioEngine(
                 }
                 if (changed) _speaking.value = heldFor.keys.toSet()
                 // Keep mixing while muted so jitter buffers drain and talk indicators stay live.
-                val target = if (muteOutputWhilePtt && mode == TransmissionMode.PTT && _transmitting.value) 0f else 1f
+                val mute = muteOutputWhilePtt && mode == TransmissionMode.PTT && _transmitting.value &&
+                    (!muteOutputLoudspeakerOnly || config.loudspeaker)
+                val target = if (mute) 0f else 1f
                 outGain = applyOutputGain(out, frame, outGain, target)
                 track.write(out, 0, frame)
                 echoDetector?.onPlayback(out, frame)

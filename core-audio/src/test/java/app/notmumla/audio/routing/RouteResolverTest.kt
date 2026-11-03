@@ -5,6 +5,8 @@ import android.media.AudioManager
 import android.media.MediaRecorder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RouteResolverTest {
@@ -97,5 +99,15 @@ class RouteResolverTest {
             resolve(OutputRoute.BT_HEADSET_SCO, override = o).assertCall(15)
             resolve(OutputRoute.BT_HEADSET_SCO, override = o, contended = true).assertMedia(4)
         }
+    }
+
+    @Test fun `only the loudspeaker counts as loudspeaker`() {
+        assertTrue(resolve(OutputRoute.PHONE_SPEAKER).loudspeaker)
+        assertFalse(resolve(OutputRoute.PHONE_SPEAKER, earpiece = true).loudspeaker)
+        assertFalse(resolve(OutputRoute.PHONE_SPEAKER, earpiece = true, contended = true).loudspeaker)
+        assertTrue(resolve(OutputRoute.PHONE_SPEAKER, earpiece = true,
+            devices = devices.copy(earpieceOut = null, earpieceComm = null)).loudspeaker)
+        assertFalse(resolve(OutputRoute.WIRED).loudspeaker)
+        assertFalse(resolve(OutputRoute.BT_A2DP_HQ).loudspeaker)
     }
 }

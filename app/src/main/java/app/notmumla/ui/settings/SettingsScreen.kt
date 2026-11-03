@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.AlertDialog
@@ -126,6 +127,7 @@ fun SettingsScreen(
     onToggleShareMic: (Boolean) -> Unit,
     onToggleAudioLeveling: (Boolean) -> Unit,
     onToggleMuteOutputWhilePtt: (Boolean) -> Unit,
+    onToggleMuteOutputLoudspeakerOnly: (Boolean) -> Unit,
     onSetCallMode: (CallModeOverride) -> Unit,
     onSetPhoneEarpiece: (Boolean) -> Unit,
     onSetBitrate: (Int) -> Unit,
@@ -240,6 +242,12 @@ fun SettingsScreen(
                     ToggleRow(Icons.AutoMirrored.Filled.VolumeOff, "Mute speakers while talking",
                         "Silence incoming audio while push-to-talk is held",
                         settings.muteOutputWhilePtt, onToggleMuteOutputWhilePtt)
+                    if (settings.muteOutputWhilePtt) {
+                        Divider()
+                        ToggleRow(Icons.Filled.Speaker, "Only on loudspeaker",
+                            "Keep listening on headphones, Bluetooth and the ear speaker",
+                            settings.muteOutputLoudspeakerOnly, onToggleMuteOutputLoudspeakerOnly)
+                    }
                 }
                 Divider()
                 InputLevelRow(

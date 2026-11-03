@@ -237,6 +237,7 @@ class SessionManager @Inject constructor(
         engine?.let { eng ->
             eng.mode = s.transmissionMode
             eng.muteOutputWhilePtt = s.muteOutputWhilePtt
+            eng.muteOutputLoudspeakerOnly = s.muteOutputLoudspeakerOnly
             eng.applyAudioSettings(
                 micGain = Math.pow(10.0, s.micGainDb / 20.0).toFloat(),
                 vadThreshold = s.vadSensitivity,

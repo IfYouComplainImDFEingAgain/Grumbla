@@ -70,9 +70,10 @@ fun resolveRoute(
                 voice(route, communicationDeviceId = null).copy(
                     audioMode = AudioManager.MODE_NORMAL,
                     trackDeviceId = devices.earpieceOut,
+                    earpiece = true,
                 )
             } else {
-                voice(route, communicationDeviceId = devices.earpieceComm)
+                voice(route, communicationDeviceId = devices.earpieceComm).copy(earpiece = true)
             }
 
         micContended || speakerWantsMedia(override, speakerEcho) -> media(route, devices.speakerOut)

@@ -35,7 +35,12 @@ data class RouteConfig(
     val trackDeviceId: Int?,
     /** Device to hand to AudioManager.setCommunicationDevice, or null to clear it. */
     val communicationDeviceId: Int?,
+    /** [OutputRoute.PHONE_SPEAKER] playing through the ear speaker rather than the loudspeaker. */
+    val earpiece: Boolean = false,
 ) {
+    /** Playback comes out of the built-in loudspeaker (the route that bleeds into the mic). */
+    val loudspeaker: Boolean get() = route == OutputRoute.PHONE_SPEAKER && !earpiece
+
     companion object {
         /**
          * Default phone loudspeaker/mic route placeholder. The real config (with the loudspeaker as
