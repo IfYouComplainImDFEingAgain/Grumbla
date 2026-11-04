@@ -138,6 +138,8 @@ fun SettingsScreen(
     onToggleShareMic: (Boolean) -> Unit,
     onToggleAudioLeveling: (Boolean) -> Unit,
     onToggleMuteOutputWhilePtt: (Boolean) -> Unit,
+    onToggleFloatingPtt: (Boolean) -> Unit,
+    onSetFloatingPttMode: (app.notmumla.data.FloatingPttMode) -> Unit,
     onToggleMuteOutputLoudspeakerOnly: (Boolean) -> Unit,
     onSetCallMode: (CallModeOverride) -> Unit,
     onSetPhoneEarpiece: (Boolean) -> Unit,
@@ -252,6 +254,7 @@ fun SettingsScreen(
                 onToggleRawMic = onToggleRawMic, onToggleShareMic = onToggleShareMic,
                 onToggleMuteOutputWhilePtt = onToggleMuteOutputWhilePtt,
                 onToggleMuteOutputLoudspeakerOnly = onToggleMuteOutputLoudspeakerOnly,
+                onToggleFloatingPtt = onToggleFloatingPtt, onSetFloatingPttMode = onSetFloatingPttMode,
             )
             SettingsPage.OUTPUT -> AudioOutputPage(
                 onBack = toHub, settings = settings,

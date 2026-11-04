@@ -135,6 +135,8 @@ class SettingsViewModel @Inject constructor(
     fun setAudioLeveling(v: Boolean) = update { repo.setAudioLeveling(v) }
     fun setMuteOutputWhilePtt(v: Boolean) = update { repo.setMuteOutputWhilePtt(v) }
     fun setMuteOutputLoudspeakerOnly(v: Boolean) = update { repo.setMuteOutputLoudspeakerOnly(v) }
+    fun setFloatingPtt(v: Boolean) = update { repo.setFloatingPtt(v) }
+    fun setFloatingPttMode(v: app.notmumla.data.FloatingPttMode) = update { repo.setFloatingPttMode(v) }
     fun setCallMode(v: CallModeOverride) = update { repo.setCallMode(v) }
     fun setPhoneEarpiece(v: Boolean) = update { repo.setPhoneEarpiece(v) }
     fun setAudioBitrate(v: Int) = update { repo.setAudioBitrate(v) }

@@ -21,6 +21,8 @@ import javax.inject.Singleton
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 enum class NoiseSuppression { OFF, STANDARD, AI }
+/** Floating talk button: transmit while pressed, or tap to start and tap again to stop. */
+enum class FloatingPttMode { HOLD, TOGGLE }
 
 /** All persisted user settings, with sensible defaults. */
 data class AppSettings(
@@ -29,6 +31,12 @@ data class AppSettings(
     val transmissionMode: TransmissionMode = TransmissionMode.PTT,
     val muteOutputWhilePtt: Boolean = false, // silence playback while push-to-talk is held
     val muteOutputLoudspeakerOnly: Boolean = true, // ...but only when playing through the loudspeaker
+    /** Talk button drawn over other apps while connected (needs "display over other apps"). */
+    val floatingPtt: Boolean = false,
+    val floatingPttMode: FloatingPttMode = FloatingPttMode.HOLD,
+    /** Last dragged position of the floating button in screen pixels; -1 = not placed yet. */
+    val floatingPttX: Int = -1,
+    val floatingPttY: Int = -1,
     val micGainDb: Float = 0f,
     val autoGain: Boolean = true,
     val vadSensitivity: Float = 0.008f, // normalized RMS threshold (used when autoSensitivity=false)
@@ -95,6 +103,10 @@ class SettingsRepository @Inject constructor(
         val TX_MODE = stringPreferencesKey("transmission_mode")
         val PTT_MUTE_OUTPUT = booleanPreferencesKey("ptt_mute_output")
         val PTT_MUTE_SPEAKER_ONLY = booleanPreferencesKey("ptt_mute_speaker_only")
+        val FLOATING_PTT = booleanPreferencesKey("floating_ptt")
+        val FLOATING_PTT_MODE = stringPreferencesKey("floating_ptt_mode")
+        val FLOATING_PTT_X = intPreferencesKey("floating_ptt_x")
+        val FLOATING_PTT_Y = intPreferencesKey("floating_ptt_y")
         val MIC_GAIN = floatPreferencesKey("mic_gain_db")
         val AUTO_GAIN = booleanPreferencesKey("auto_gain")
         val VAD = floatPreferencesKey("vad_sensitivity")
@@ -189,6 +201,11 @@ class SettingsRepository @Inject constructor(
             audioLeveling = p[Keys.LEVELING] ?: false,
             muteOutputWhilePtt = p[Keys.PTT_MUTE_OUTPUT] ?: false,
             muteOutputLoudspeakerOnly = p[Keys.PTT_MUTE_SPEAKER_ONLY] ?: true,
+            floatingPtt = p[Keys.FLOATING_PTT] ?: false,
+            floatingPttMode = p[Keys.FLOATING_PTT_MODE]?.let { runCatching { FloatingPttMode.valueOf(it) }.getOrNull() }
+                ?: FloatingPttMode.HOLD,
+            floatingPttX = p[Keys.FLOATING_PTT_X] ?: -1,
+            floatingPttY = p[Keys.FLOATING_PTT_Y] ?: -1,
             // Turning "Use media volume" off was the old way to fix echo on speaker; keep that as Call.
             callMode = p[Keys.CALL_MODE]?.let { runCatching { CallModeOverride.valueOf(it) }.getOrNull() }
                 ?: if (p[Keys.MEDIA_VOLUME] == false) CallModeOverride.CALL else CallModeOverride.AUTO,
@@ -228,6 +245,12 @@ class SettingsRepository @Inject constructor(
     suspend fun setAudioLeveling(v: Boolean) = edit { it[Keys.LEVELING] = v }
     suspend fun setMuteOutputWhilePtt(v: Boolean) = edit { it[Keys.PTT_MUTE_OUTPUT] = v }
     suspend fun setMuteOutputLoudspeakerOnly(v: Boolean) = edit { it[Keys.PTT_MUTE_SPEAKER_ONLY] = v }
+    suspend fun setFloatingPtt(v: Boolean) = edit { it[Keys.FLOATING_PTT] = v }
+    suspend fun setFloatingPttMode(v: FloatingPttMode) = edit { it[Keys.FLOATING_PTT_MODE] = v.name }
+    suspend fun setFloatingPttPosition(x: Int, y: Int) = edit {
+        it[Keys.FLOATING_PTT_X] = x
+        it[Keys.FLOATING_PTT_Y] = y
+    }
     /** Choosing a mode by hand also forgets detected echo, so going back to Auto checks afresh. */
     suspend fun setCallMode(v: CallModeOverride) = edit {
         it[Keys.CALL_MODE] = v.name

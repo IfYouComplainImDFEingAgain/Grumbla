@@ -11,10 +11,14 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import app.notmumla.MainActivity
 import app.notmumla.R
+import app.notmumla.AppVisibility
+import app.notmumla.audio.TransmissionMode
 import app.notmumla.data.SessionManager
+import app.notmumla.data.SettingsRepository
 import app.notmumla.protocol.model.ConnectionState
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.combine
@@ -35,9 +39,12 @@ import javax.inject.Inject
 class VoiceService : Service() {
 
     @Inject lateinit var sessionManager: SessionManager
+    @Inject lateinit var settingsRepo: SettingsRepository
 
     private val scope = CoroutineScope(SupervisorJob())
     private var observeJob: Job? = null
+    private var overlayJob: Job? = null
+    @Volatile private var overlay: FloatingPttOverlay? = null
     private var wakeLock: android.os.PowerManager.WakeLock? = null
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
 
@@ -109,6 +116,7 @@ class VoiceService : Service() {
                 applyMuteDeaf(mute = newDeaf || (self?.selfMute ?: false), deaf = newDeaf)
             }
             ACTION_DISCONNECT -> { sessionManager.disconnect(); stopSelf(); return START_NOT_STICKY }
+            ACTION_STOP_TALKING -> overlay?.release()
         }
 
         if (observeJob == null) {
@@ -125,11 +133,43 @@ class VoiceService : Service() {
                     }
             }
         }
+        if (overlayJob == null) overlayJob = scope.launch(Dispatchers.Main) { runFloatingPtt() }
         return START_NOT_STICKY
+    }
+
+    /**
+     * Show the floating talk button while connected in push-to-talk with the setting on, the
+     * overlay permission granted and none of our activities on screen (the in-app button covers that).
+     */
+    private suspend fun runFloatingPtt() {
+        val o = FloatingPttOverlay(
+            this,
+            onPtt = sessionManager::setPttHeld,
+            onMoved = { x, y -> scope.launch { settingsRepo.setFloatingPttPosition(x, y) } },
+        )
+        overlay = o
+        scope.launch(Dispatchers.Main) {
+            o.latched.collect { notificationManager.notify(NOTIFICATION_ID, buildNotification()) }
+        }
+        combine(
+            sessionManager.state, settingsRepo.settings, AppVisibility.visible,
+            sessionManager.localTransmitting, sessionManager.micYielded,
+        ) { state, s, appVisible, tx, yielded ->
+            o.mode = s.floatingPttMode
+            o.transmitting = tx
+            o.disabled = yielded || state.self?.selfMute == true || state.self?.selfDeaf == true
+            val wanted = s.floatingPtt && s.transmissionMode == TransmissionMode.PTT && !appVisible &&
+                state.connection == ConnectionState.CONNECTED &&
+                android.provider.Settings.canDrawOverlays(this)
+            if (wanted) o.show(s.floatingPttX, s.floatingPttY) else o.hide()
+        }.collect {}
     }
 
     override fun onDestroy() {
         observeJob?.cancel()
+        overlayJob?.cancel()
+        overlay?.hide()
+        overlay = null
         releaseLocks()
         super.onDestroy()
     }
@@ -178,8 +218,17 @@ class VoiceService : Service() {
             .setOngoing(true)
             .setContentIntent(contentIntent)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .apply {
+                // Toggle mode latched from the floating button: a way to stop with the screen locked.
+                // Only three actions show, so it takes Deafen's place while latched.
+                if (overlay?.latched?.value == true) addAction(0, "Stop talking", action(ACTION_STOP_TALKING))
+            }
             .addAction(0, if (muted) "Unmute" else "Mute", action(ACTION_TOGGLE_MUTE))
-            .addAction(0, if (deafened) "Undeafen" else "Deafen", action(ACTION_TOGGLE_DEAFEN))
+            .apply {
+                if (overlay?.latched?.value != true) {
+                    addAction(0, if (deafened) "Undeafen" else "Deafen", action(ACTION_TOGGLE_DEAFEN))
+                }
+            }
             .addAction(0, "Disconnect", action(ACTION_DISCONNECT))
             .build()
     }
@@ -199,6 +248,7 @@ class VoiceService : Service() {
         const val ACTION_TOGGLE_MUTE = "app.notmumla.action.TOGGLE_MUTE"
         const val ACTION_TOGGLE_DEAFEN = "app.notmumla.action.TOGGLE_DEAFEN"
         const val ACTION_DISCONNECT = "app.notmumla.action.DISCONNECT"
+        const val ACTION_STOP_TALKING = "app.notmumla.action.STOP_TALKING"
 
         fun start(context: Context) {
             // Throws ForegroundServiceStartNotAllowedException if called from the background.

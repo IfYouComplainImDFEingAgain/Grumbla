@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.SignalCellularAlt
@@ -89,6 +90,7 @@ import app.notmumla.audio.TransmissionMode
 import app.notmumla.audio.routing.CallModeOverride
 import app.notmumla.audio.routing.OutputRoute
 import app.notmumla.data.AppSettings
+import app.notmumla.data.FloatingPttMode
 import app.notmumla.data.NoiseSuppression
 import app.notmumla.data.ThemeMode
 import app.notmumla.ui.theme.MumbleTheme
@@ -425,6 +427,8 @@ internal fun AudioInputPage(
     onToggleShareMic: (Boolean) -> Unit,
     onToggleMuteOutputWhilePtt: (Boolean) -> Unit,
     onToggleMuteOutputLoudspeakerOnly: (Boolean) -> Unit,
+    onToggleFloatingPtt: (Boolean) -> Unit,
+    onSetFloatingPttMode: (FloatingPttMode) -> Unit,
 ) {
     val c = MumbleTheme.colors
     val vad = settings.transmissionMode == TransmissionMode.VAD
@@ -459,6 +463,8 @@ internal fun AudioInputPage(
                         "Keep listening on headphones, Bluetooth and the ear speaker",
                         settings.muteOutputLoudspeakerOnly, onToggleMuteOutputLoudspeakerOnly, indent = true)
                 }
+                Divider()
+                FloatingPttRows(settings, onToggleFloatingPtt, onSetFloatingPttMode)
             }
         }
 
@@ -795,6 +801,62 @@ internal data class PermStatus(
     val permission: String?, // runtime permission, null for the battery exemption
     val granted: Boolean,
 )
+
+/**
+ * Floating talk button (BACKLOG 3.3): the toggle, the hold/toggle choice, and a prompt for the
+ * "display over other apps" special access, re-checked on resume (the grant is a system screen).
+ */
+@Composable
+private fun FloatingPttRows(
+    settings: AppSettings,
+    onToggle: (Boolean) -> Unit,
+    onSetMode: (FloatingPttMode) -> Unit,
+) {
+    val ctx = LocalContext.current
+    var granted by remember { mutableStateOf(android.provider.Settings.canDrawOverlays(ctx)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) granted = android.provider.Settings.canDrawOverlays(ctx)
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    val requestGrant = {
+        runCatching {
+            ctx.startActivity(
+                android.content.Intent(
+                    android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    android.net.Uri.parse("package:${ctx.packageName}"),
+                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+        Unit
+    }
+    ToggleRow(Icons.Filled.TouchApp, "Floating talk button",
+        "Talk from other apps while connected",
+        settings.floatingPtt, { on -> onToggle(on); if (on && !granted) requestGrant() })
+    if (!settings.floatingPtt) return
+    Divider()
+    StackedRow(null, "Button action", if (settings.floatingPttMode == FloatingPttMode.HOLD)
+        "Talk while pressed. Flick it to move it." else "Tap to start, tap again to stop. Drag to move.",
+        indent = true) {
+        SettingsSegmented(
+            listOf("Hold to talk", "Tap to toggle"),
+            if (settings.floatingPttMode == FloatingPttMode.HOLD) 0 else 1,
+            { onSetMode(if (it == 0) FloatingPttMode.HOLD else FloatingPttMode.TOGGLE) },
+        )
+    }
+    if (!granted) {
+        Divider()
+        RowBase(null, "Display over other apps", "Off · tap to allow",
+            trailing = {
+                Icon(Icons.Filled.Error, contentDescription = "Not allowed", tint = MumbleTheme.colors.muted,
+                    modifier = Modifier.size(22.dp))
+            },
+            onClick = requestGrant, indent = true)
+    }
+}
 
 /**
  * Current status of each permission the app needs, re-checked whenever the screen resumes (e.g.

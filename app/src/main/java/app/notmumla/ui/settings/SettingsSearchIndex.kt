@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.ui.graphics.vector.ImageVector
 import app.notmumla.audio.routing.OutputRoute
@@ -77,6 +78,8 @@ internal val SETTINGS_INDEX: List<SearchEntry> = listOf(
         "Silence incoming audio while push-to-talk is held", keywords = "ptt"),
     SearchEntry("Only on loudspeaker", SettingsPage.INPUT, Icons.AutoMirrored.Filled.VolumeOff,
         "Keep listening on headphones, Bluetooth and the ear speaker", keywords = "mute ptt"),
+    SearchEntry("Floating talk button", SettingsPage.INPUT, Icons.Filled.TouchApp,
+        "Talk from other apps while connected", keywords = "ptt overlay bubble float display over other apps toggle"),
     SearchEntry("Automatic sensitivity", SettingsPage.INPUT, Icons.Filled.GraphicEq, "Adjusts to your mic & room",
         keywords = "vad voice activated threshold"),
     SearchEntry("Input level", SettingsPage.INPUT, Icons.Filled.BarChart, "Live mic meter, threshold and test",

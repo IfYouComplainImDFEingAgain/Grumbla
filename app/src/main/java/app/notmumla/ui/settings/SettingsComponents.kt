@@ -196,6 +196,7 @@ internal fun StackedRow(
     title: String,
     subtitle: String?,
     trailing: (@Composable () -> Unit)? = null,
+    indent: Boolean = false, // no icon, but text aligned with the iconned rows above
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val c = MumbleTheme.colors
@@ -203,6 +204,7 @@ internal fun StackedRow(
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             if (icon != null) Icon(icon, null, tint = c.onSurfaceVar, modifier = Modifier.size(22.dp))
+            else if (indent) Spacer(Modifier.width(22.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = c.onSurface)
                 if (subtitle != null) Text(subtitle, fontSize = 13.sp, color = c.onSurfaceVar)
