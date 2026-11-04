@@ -13,6 +13,8 @@ data class User(
     val selfMute: Boolean = false,
     val selfDeaf: Boolean = false,
     val prioritySpeaker: Boolean = false,
+    /** The user's client is recording (`UserState.recording`); Murmur only lets a user set it on itself. */
+    val recording: Boolean = false,
     val comment: String? = null,
     /** SHA-1 (hex) of the comment, sent instead of [comment] when it is 128+ chars. */
     val commentHash: String? = null,

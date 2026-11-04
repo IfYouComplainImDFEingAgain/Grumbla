@@ -21,6 +21,8 @@ data class UiUser(
     val status: UserStatus = UserStatus.ACTIVE,
     val isYou: Boolean = false,
     val isPrioritySpeaker: Boolean = false,
+    /** Their client is recording (`UserState.recording`). */
+    val recording: Boolean = false,
     /** Local per-user volume adjustment in dB (0 = default); shown inline next to the name. */
     val gainDb: Int = 0,
     /** Muted locally by us (we drop their audio); distinct from their own/server mute. */

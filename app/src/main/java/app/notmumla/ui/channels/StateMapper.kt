@@ -38,6 +38,7 @@ private fun User.toUiUser(isYou: Boolean, speaking: Boolean, gainDb: Int, locall
     },
     isYou = isYou,
     isPrioritySpeaker = prioritySpeaker,
+    recording = recording,
     gainDb = gainDb,
     locallyMuted = locallyMuted,
 )

@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MicOff
@@ -529,6 +530,13 @@ private fun TreeLayout(
     }
 }
 
+/** A red dot while the user's client is recording (NEXT 2.2). */
+@Composable
+private fun RecordingBadge(user: UiUser, size: androidx.compose.ui.unit.Dp = 16.dp) {
+    if (user.recording) Icon(Icons.Filled.FiberManualRecord, "recording", tint = MumbleTheme.colors.muted,
+        modifier = Modifier.size(size))
+}
+
 /** Local-only audio state next to a name: a muted speaker icon, else the volume adjustment. */
 @Composable
 private fun LocalAudioBadge(user: UiUser, size: androidx.compose.ui.unit.Dp = 16.dp) {
@@ -622,6 +630,7 @@ private fun UserRow(user: UiUser, onLongPress: () -> Unit) {
         Avatar(user.initials, user.avatar, size = 28.dp, dimmed = user.status == UserStatus.AFK)
         Text(user.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.onSurface,
             modifier = Modifier.weight(1f))
+        RecordingBadge(user)
         LocalAudioBadge(user)
         when (user.status) {
             UserStatus.SPEAKING -> SpeakingBars()
@@ -688,7 +697,8 @@ private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onU
                 Avatar(user.initials, user.avatar, size = 32.dp)
                 Text(user.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     color = c.onSurface, modifier = Modifier.weight(1f))
-                LocalAudioBadge(user)
+                RecordingBadge(user)
+        LocalAudioBadge(user)
                 if (user.status == UserStatus.MUTED)
                     Icon(Icons.Filled.MicOff, "muted", tint = c.muted, modifier = Modifier.size(16.dp))
                 if (user.isYou) Text("YOU", color = c.primary, fontWeight = FontWeight.Bold, fontSize = 11.sp)
@@ -708,6 +718,7 @@ private fun SpeakerBubble(user: UiUser, onLongPress: () -> Unit) {
         Avatar(user.initials, user.avatar, size = 56.dp)
         Text(user.name.substringBefore(" "), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
             color = c.onSurface)
+        RecordingBadge(user)
         LocalAudioBadge(user)
     }
 }
@@ -766,7 +777,8 @@ private fun CompactLayout(
                     }
                     Text(user.name, fontSize = 13.sp, color = c.onSurface,
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    LocalAudioBadge(user)
+                    RecordingBadge(user)
+        LocalAudioBadge(user)
                     if (user.isYou) Text("YOU", color = c.primary, fontWeight = FontWeight.Bold,
                         fontFamily = MonoFamily, fontSize = 10.sp)
                 }

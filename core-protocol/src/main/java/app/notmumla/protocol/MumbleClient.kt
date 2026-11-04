@@ -122,6 +122,13 @@ class MumbleClient(
             val session: Int, val name: String, val toChannel: Int?,
             val channelName: String? = null, val reason: String? = null,
         ) : Event
+        /**
+         * A user in our channel started or stopped recording. [joined] marks a user who entered our channel
+         * (or connected into it) already recording; [recording] is then true. Same gating as [UserJoined].
+         */
+        data class RecordingChanged(
+            val session: Int, val name: String, val recording: Boolean, val joined: Boolean = false,
+        ) : Event
     }
 
     private var channel: ControlChannel? = null
@@ -364,6 +371,7 @@ class MumbleClient(
                 selfMute = msg.self_mute ?: existing?.selfMute ?: false,
                 selfDeaf = msg.self_deaf ?: existing?.selfDeaf ?: false,
                 prioritySpeaker = msg.priority_speaker ?: existing?.prioritySpeaker ?: false,
+                recording = msg.recording ?: existing?.recording ?: false,
                 // Murmur sends either the text or (for 128+ chars) only its hash; a new one replaces both.
                 comment = if (msg.comment != null || msg.comment_hash != null) msg.comment else existing?.comment,
                 commentHash = when {
@@ -388,9 +396,9 @@ class MumbleClient(
     }
 
     /**
-     * Joined/left events for our channel, from a user's state before and after one message (null = not
-     * on the server). Only after `ServerSync`, and never for ourselves: when we move, the users already
-     * in the old or new channel haven't joined or left anything.
+     * Joined/left and recording events for our channel, from a user's state before and after one message
+     * (null = not on the server). Only after `ServerSync`, and never for ourselves: when we move, the users
+     * already in the old or new channel haven't joined or left anything.
      */
     private fun emitPresence(session: Int, before: User?, after: User?, reason: String?) {
         val s = _state.value
@@ -403,6 +411,12 @@ class MumbleClient(
                 events.tryEmit(Event.UserJoined(session, after.name, was, s.channels[was]?.name))
             was == ours && now != ours ->
                 events.tryEmit(Event.UserLeft(session, before.name, now, s.channels[now]?.name, reason))
+        }
+        // After UserJoined, so the chat reads "X connected", then "X is recording".
+        if (after == null || now != ours) return
+        when {
+            was != ours -> if (after.recording) events.tryEmit(Event.RecordingChanged(session, after.name, true, joined = true))
+            after.recording != before?.recording -> events.tryEmit(Event.RecordingChanged(session, after.name, after.recording))
         }
     }
 
@@ -614,7 +628,15 @@ class MumbleClient(
         sendAsync(UserState(session = session, self_mute = selfMute, self_deaf = selfDeaf))
     }
 
-    /** Send a text message to [channelId]. */
+    /**
+     * Tell the server we're recording (or stopped). The app never records; this is for tests. Murmur kicks a
+     * client that starts recording when `allowRecording` is off (`ServerConfig.recording_allowed`).
+     */
+    internal fun setSelfRecording(recording: Boolean) {
+        val session = _state.value.sessionId ?: return
+        sendAsync(UserState(session = session, recording = recording))
+    }
+
     /** Set our own comment (HTML). Murmur stores it only for registered users. */
     fun setSelfComment(comment: String) {
         val session = _state.value.sessionId ?: return

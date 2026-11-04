@@ -492,7 +492,7 @@ class SessionManager @Inject constructor(
         return true
     }
 
-    /** The system chat line for a join/leave in our channel (NEXT 2.1), or null for any other event. */
+    /** The system chat line for a join/leave (NEXT 2.1) or recording change in our channel, or null for any other event. */
     private fun presenceText(event: MumbleClient.Event): String? = when (event) {
         is MumbleClient.Event.UserJoined -> event.fromChannel
             ?.let { "${event.name} moved in from ${event.channelName ?: "another channel"}" }
@@ -501,6 +501,12 @@ class SessionManager @Inject constructor(
             ?.let { "${event.name} moved to ${event.channelName ?: "another channel"}" }
             ?: event.reason?.let { "${event.name} left ($it)" }
             ?: "${event.name} disconnected"
+        // NEXT 2.2. Murmur only sends its own "started recording" text to pre-1.2.3 clients.
+        is MumbleClient.Event.RecordingChanged -> when {
+            event.joined -> "${event.name} is recording"
+            event.recording -> "${event.name} started recording"
+            else -> "${event.name} stopped recording"
+        }
         else -> null
     }
 
@@ -654,6 +660,8 @@ class SessionManager @Inject constructor(
                     appendChat(ChatLine(chatId++, "", it, System.currentTimeMillis(), isSystem = true))
                 }
                 if (event is MumbleClient.Event.UserJoined) onUserJoinedAlert(event.name)
+                // Always toasted, unlike join alerts: being recorded isn't something to opt into hearing about.
+                if (event is MumbleClient.Event.RecordingChanged) presenceText(event)?.let { _notices.tryEmit(it) }
                 if (event is MumbleClient.Event.PluginData) when (event.dataId) {
                     GameMessage.DATA_ID -> game.onData(event.sender, event.data)
                     NudgeMessage.DATA_ID -> onNudge(event.sender, event.data)
