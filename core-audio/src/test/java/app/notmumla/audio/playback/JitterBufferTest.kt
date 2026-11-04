@@ -78,9 +78,35 @@ class JitterBufferTest {
         repeat(5) { assertTrue(jb.pull().let { it.conceal && !it.fadeOut }) }
         assertTrue(jb.pull().let { it.conceal && it.fadeOut && !it.endOfStream })
         assertTrue(jb.pull().isEmpty)
-        // Packets for the concealed slots (6..10) are late; the rest re-prime.
+        // An underrun doesn't skip ahead: the packet we were waiting for was delayed, not lost.
         for (i in 6 until 17) jb.put(i.toLong(), pkt(i))
-        assertEquals(11, jb.played())
+        assertEquals(6, jb.played())
+    }
+
+    @Test fun lateDesktopPacketAfterUnderrunStillPlays() {
+        // A 60 ms sender: one packet arriving 10 ms late used to be dropped whole.
+        val jb = JitterBuffer()
+        val p60 = { tag: Int -> byteArrayOf(((31 shl 3) or 3).toByte(), 3, tag.toByte()) }
+        jb.put(0, p60(0)); jb.put(6, p60(1))
+        assertArrayEquals(p60(0), jb.pull().opus)
+        assertArrayEquals(p60(1), jb.pull().opus)
+        assertTrue(jb.pull().conceal) // ran dry: packet 12 is 10 ms late
+        jb.put(12, p60(2))
+        val late = jb.pull()
+        assertArrayEquals(p60(2), late.opus)
+        assertEquals(0, late.skipUnits)
+    }
+
+    @Test fun reorderedPacketStraddlingConcealmentPlaysTheRest() {
+        val jb = JitterBuffer()
+        jb.put(0, pkt(0, 20)); jb.put(4, pkt(4, 20)); jb.put(6, pkt(6, 20))
+        assertEquals(0, jb.played())
+        assertTrue(jb.pull().conceal) // 2..3 missing: conceal 10 ms of it
+        jb.put(2, pkt(2, 20))         // arrives reordered, half already concealed
+        val p = jb.pull()
+        assertEquals(2, p.opus?.get(1)?.toInt())
+        assertEquals(1, p.skipUnits)
+        assertEquals(4, jb.played())
     }
 
     @Test fun burstPastCapTrimsToTarget() {

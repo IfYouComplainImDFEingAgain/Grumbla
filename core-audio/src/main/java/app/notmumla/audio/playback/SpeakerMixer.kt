@@ -120,7 +120,7 @@ class SpeakerMixer(private val frameSamples: Int = AudioConstants.FRAME_SAMPLES)
         // Fade concealment to silence where the stream stops, instead of cutting the waveform.
         if (pull.fadeOut) for (i in 0 until n) speaker.decodeBuf[i] = (speaker.decodeBuf[i] * (1f - (i + 1f) / n)).toInt().toShort()
         speaker.pendingLen = n
-        speaker.pendingPos = 0
+        speaker.pendingPos = minOf(n, pull.skipUnits * AudioConstants.FRAME_SAMPLES)
         if (opus != null) updateLeveling(speaker, n)
         return true
     }
