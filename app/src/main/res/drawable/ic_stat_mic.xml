@@ -1,21 +1,10 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Microphone glyph, centered in the adaptive-icon safe zone -->
-    <group android:scaleX="2.6" android:scaleY="2.6" android:translateX="40.2" android:translateY="40.2">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M9,3m3,0a3,3 0,1 0,6 0a3,3 0,1 0,-6 0l0,8a3,3 0,1 0,6 0l0,-8" />
-        <path
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="2"
-            android:pathData="M6,11a6,6 0,0 0,12 0" />
-        <path
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="2"
-            android:strokeLineCap="round"
-            android:pathData="M12,17v3M8.5,20h7" />
-    </group>
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Status-bar notification icon: 24dp, white-only, glyph centered on the canvas -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,14c1.66,0 3,-1.34 3,-3V5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3zM17.3,11c0,3 -2.54,5.1 -5.3,5.1S6.7,14 6.7,11H5c0,3.41 2.72,6.23 6,6.72V21h2v-3.28c3.28,-0.49 6,-3.31 6,-6.72h-1.7z" />
 </vector>
