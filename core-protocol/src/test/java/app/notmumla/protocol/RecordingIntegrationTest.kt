@@ -57,9 +57,9 @@ class RecordingIntegrationTest {
         val seen = CopyOnWriteArrayList<MumbleClient.Event.RecordingChanged>()
         obs.events.onEach { if (it is MumbleClient.Event.RecordingChanged) seen += it }.launchIn(scope)
 
-        obs.connect(ConnectConfig(host = host, port = port, username = "r-obs-$tag"))
+        obs.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "r-obs-$tag"))
         assertTrue(awaitConnected(obs))
-        rec.connect(ConnectConfig(host = host, port = port, username = "r-rec-$tag"))
+        rec.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "r-rec-$tag"))
         assertTrue(awaitConnected(rec))
         val r = rec.state.value.sessionId!!
         assertEquals(false, await { obs.state.value.users[r] }?.recording)

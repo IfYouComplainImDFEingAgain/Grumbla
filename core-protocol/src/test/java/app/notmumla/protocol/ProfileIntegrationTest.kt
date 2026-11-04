@@ -57,8 +57,8 @@ class ProfileIntegrationTest {
         val tag = System.currentTimeMillis().toString(36)
         val alice = MumbleClient(IdentityCertificate.generate("pr-a-$tag"), scope, osVersion = "test")
         val bob = MumbleClient(IdentityCertificate.generate("pr-b-$tag"), scope, osVersion = "test")
-        alice.connect(ConnectConfig(host = host, port = port, username = "pr-a-$tag"))
-        bob.connect(ConnectConfig(host = host, port = port, username = "pr-b-$tag"))
+        alice.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "pr-a-$tag"))
+        bob.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "pr-b-$tag"))
         assertTrue(awaitConnected(alice))
         assertTrue(awaitConnected(bob))
         val a = alice.state.value.sessionId!!

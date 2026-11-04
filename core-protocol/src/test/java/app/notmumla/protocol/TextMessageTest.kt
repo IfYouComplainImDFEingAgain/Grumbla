@@ -45,8 +45,8 @@ class TextMessageTest {
             }
         }
 
-        alice.connect(ConnectConfig(host = host, port = port, username = "alice"))
-        bob.connect(ConnectConfig(host = host, port = port, username = "bob"))
+        alice.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "alice"))
+        bob.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "bob"))
         assertTrue(awaitConnected(alice)); assertTrue(awaitConnected(bob))
         delay(400)
 
@@ -75,9 +75,9 @@ class TextMessageTest {
         scope.launch { bob.events.collect { if (it is MumbleClient.Event.Text) bobGot += it.text } }
         scope.launch { carol.events.collect { if (it is MumbleClient.Event.Text) carolGot += it.text } }
 
-        alice.connect(ConnectConfig(host = host, port = port, username = "alice"))
-        bob.connect(ConnectConfig(host = host, port = port, username = "bob"))
-        carol.connect(ConnectConfig(host = host, port = port, username = "carol"))
+        alice.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "alice"))
+        bob.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "bob"))
+        carol.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "carol"))
         assertTrue(awaitConnected(alice)); assertTrue(awaitConnected(bob)); assertTrue(awaitConnected(carol))
         delay(400)
 

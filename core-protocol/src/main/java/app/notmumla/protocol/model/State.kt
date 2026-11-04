@@ -60,8 +60,12 @@ data class ServerState(
     val users: Map<Int, User> = emptyMap(),
     val welcomeText: String? = null,
     val serverFingerprintSha256: String? = null,
-    /** Set when the connection failed because the server's cert no longer matches the pinned one. */
-    val certMismatchFingerprint: String? = null,
+    /**
+     * Set when the connection failed because the server's cert isn't trusted: nothing pinned yet
+     * ([untrustedCertFirstUse]) or it no longer matches the pin. The UI asks the user to accept it.
+     */
+    val untrustedCertFingerprint: String? = null,
+    val untrustedCertFirstUse: Boolean = false,
     /** Max length of an image (HTML) message the server accepts; 0 = unknown (use a safe default). */
     val imageMessageLength: Int = 0,
     val allowHtml: Boolean = true,

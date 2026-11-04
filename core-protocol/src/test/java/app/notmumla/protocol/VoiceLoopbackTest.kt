@@ -34,7 +34,7 @@ class VoiceLoopbackTest {
                 got += opus
             }
         }
-        client.connect(ConnectConfig(host = host, port = port, username = "echo"))
+        client.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "echo"))
         val connected = withTimeoutOrNull(15_000) {
             while (client.state.value.connection != ConnectionState.CONNECTED) {
                 if (client.state.value.connection == ConnectionState.FAILED) return@withTimeoutOrNull false

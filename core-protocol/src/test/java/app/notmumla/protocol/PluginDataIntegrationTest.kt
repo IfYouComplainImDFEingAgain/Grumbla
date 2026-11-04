@@ -49,7 +49,7 @@ class PluginDataIntegrationTest {
         val bob = MumbleClient(IdentityCertificate.generate("p-bob"), scope, osVersion = "test")
         val carol = MumbleClient(IdentityCertificate.generate("p-carol"), scope, osVersion = "test")
         for ((c, n) in listOf(alice to "p-alice", bob to "p-bob", carol to "p-carol")) {
-            c.connect(ConnectConfig(host = host, port = port, username = n))
+            c.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = n))
         }
         for (c in listOf(alice, bob, carol)) assertTrue(awaitConnected(c))
         delay(500)

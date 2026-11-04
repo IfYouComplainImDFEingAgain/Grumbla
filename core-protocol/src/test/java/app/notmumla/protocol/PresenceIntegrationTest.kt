@@ -59,15 +59,15 @@ class PresenceIntegrationTest {
             .launchIn(scope)
 
         // mover is already in Root when obs logs in: its UserState is part of the pre-sync flood.
-        mover.connect(ConnectConfig(host = host, port = port, username = "p-mover-$tag"))
+        mover.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "p-mover-$tag"))
         assertTrue(awaitConnected(mover))
         val m = mover.state.value.sessionId!!
-        obs.connect(ConnectConfig(host = host, port = port, username = "p-obs-$tag"))
+        obs.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "p-obs-$tag"))
         assertTrue(awaitConnected(obs))
         delay(500)
         assertTrue("no events for users present before ServerSync: $seen", seen.isEmpty())
 
-        late.connect(ConnectConfig(host = host, port = port, username = "p-late-$tag"))
+        late.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "p-late-$tag"))
         assertTrue(awaitConnected(late))
         val l = late.state.value.sessionId!!
         assertEquals(

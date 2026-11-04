@@ -36,8 +36,8 @@ class ImageMessageTest {
         val received = CopyOnWriteArrayList<String>()
         scope.launch { bob.events.collect { if (it is MumbleClient.Event.Text) received += it.text.message } }
 
-        alice.connect(ConnectConfig(host = host, port = port, username = "alice-img"))
-        bob.connect(ConnectConfig(host = host, port = port, username = "bob-img"))
+        alice.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "alice-img"))
+        bob.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "bob-img"))
         assertTrue(awaitConnected(alice)); assertTrue(awaitConnected(bob))
         delay(400)
 

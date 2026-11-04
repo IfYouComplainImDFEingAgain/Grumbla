@@ -32,8 +32,8 @@ class TextLatencyTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val alice = MumbleClient(IdentityCertificate.generate("alice"), scope, osVersion = "test")
         val bob = MumbleClient(IdentityCertificate.generate("bob"), scope, osVersion = "test")
-        alice.connect(ConnectConfig(host = host, port = port, username = "alice"))
-        bob.connect(ConnectConfig(host = host, port = port, username = "bob"))
+        alice.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "alice"))
+        bob.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "bob"))
         awaitConnected(alice); awaitConnected(bob)
         delay(500)
 

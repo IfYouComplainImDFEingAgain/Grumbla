@@ -627,7 +627,7 @@ class SessionManager @Inject constructor(
                     lastKnownListening = it.listeningChannels
                 }
                 if (s.connection == ConnectionState.FAILED &&
-                    s.certMismatchFingerprint == null && !s.fatal && shouldReconnect()
+                    s.untrustedCertFingerprint == null && !s.fatal && shouldReconnect()
                 ) {
                     // Suppress the failure from the UI and retry instead of dropping to Connect.
                     _state.value = s.copy(connection = ConnectionState.CONNECTING, error = null)
@@ -708,8 +708,6 @@ class SessionManager @Inject constructor(
         }
         val id = activeServerId ?: return
         scope.launch {
-            val fp = state.serverFingerprintSha256
-            if (fp != null && server.pinnedSha256 == null) serverDao.setPin(id, fp)
             serverDao.markConnected(id, System.currentTimeMillis(), state.self?.channelId)
         }
     }
@@ -805,10 +803,13 @@ class SessionManager @Inject constructor(
 
     val autoReconnectEnabled: Boolean get() = settings.autoReconnect
 
-    /** Accept the server's changed certificate: update the pin and reconnect. */
+    /**
+     * The user accepted the server's untrusted certificate (first connect or changed): pin it and
+     * reconnect. The only place a pin is stored (NEXT 2.3); auto-reconnect never pins.
+     */
     fun trustNewCertificate() {
         val server = lastServer ?: return
-        val newFp = _state.value.certMismatchFingerprint ?: return
+        val newFp = _state.value.untrustedCertFingerprint ?: return
         reconnectAttempts = 0
         activeServerId?.let { id -> scope.launch { serverDao.setPin(id, newFp) } }
         doConnect(server.copy(pinnedSha256 = newFp))

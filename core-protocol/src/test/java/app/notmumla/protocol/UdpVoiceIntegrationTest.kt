@@ -53,7 +53,7 @@ class UdpVoiceIntegrationTest {
             }
         }
 
-        client.connect(ConnectConfig(host = host, port = port, username = "udptester"))
+        client.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "udptester"))
         assertTrue("connected", awaitConnected(client))
 
         // Wait for the encrypted UDP ping to be echoed and decrypted — proves OCB2 interop both ways.

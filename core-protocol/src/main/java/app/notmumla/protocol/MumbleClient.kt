@@ -9,6 +9,7 @@ import app.notmumla.protocol.model.ServerState
 import app.notmumla.protocol.model.User
 import app.notmumla.protocol.net.ControlChannel
 import app.notmumla.protocol.net.TofuTrustManager
+import app.notmumla.protocol.net.UntrustedServerCertificateException
 import app.notmumla.protocol.proto.MessageType
 import app.notmumla.protocol.udp.CryptStateOCB2
 import app.notmumla.protocol.udp.LegacyAudio
@@ -57,8 +58,10 @@ data class ConnectConfig(
     val username: String,
     val password: String? = null,
     val tokens: List<String> = emptyList(),
-    /** Pinned server fingerprint (SHA-256). Null on first connection (trust-on-first-use). */
+    /** Pinned server fingerprint (SHA-256). Null on first connection: fails until the user accepts. */
     val pinnedServerSha256: String? = null,
+    /** Connect to an unpinned server without asking. Tests against a local server only. */
+    val trustUnpinned: Boolean = false,
 )
 
 /** A chat message received from the server. */
@@ -172,7 +175,7 @@ class MumbleClient(
         connectConfig = config
         _state.update { ServerState(connection = ConnectionState.CONNECTING) }
         readJob = scope.launch(Dispatchers.IO) {
-            val trust = TofuTrustManager(config.pinnedServerSha256)
+            val trust = TofuTrustManager(config.pinnedServerSha256, config.trustUnpinned)
             val control = ControlChannel(trust)
             channel = control
             try {
@@ -193,14 +196,19 @@ class MumbleClient(
                 startStats()
                 readLoop(control)
             } catch (t: Throwable) {
-                val mismatch = generateSequence(t) { it.cause }
-                    .any { it.message?.contains("fingerprint mismatch", ignoreCase = true) == true }
+                val untrusted = generateSequence(t) { it.cause }
+                    .filterIsInstance<UntrustedServerCertificateException>().firstOrNull()
                 if (isActive) {
                     _state.update {
                         it.copy(
                             connection = ConnectionState.FAILED,
-                            error = if (mismatch) "Server certificate changed" else t.message,
-                            certMismatchFingerprint = if (mismatch) trust.observedSha256 else null,
+                            error = when {
+                                untrusted == null -> t.message
+                                untrusted.firstUse -> "Server certificate not trusted yet"
+                                else -> "Server certificate changed"
+                            },
+                            untrustedCertFingerprint = untrusted?.fingerprint,
+                            untrustedCertFirstUse = untrusted?.firstUse == true,
                         )
                     }
                     events.tryEmit(Event.Disconnected(t.message))

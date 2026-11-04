@@ -38,7 +38,7 @@ class ListenForAudioTest {
                 frames.incrementAndGet(); senders += session
             }
         }
-        client.connect(ConnectConfig(host = host, port = port, username = "listener"))
+        client.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "listener"))
         withTimeoutOrNull(15_000) {
             while (client.state.value.connection != ConnectionState.CONNECTED) delay(100); true
         }

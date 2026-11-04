@@ -50,8 +50,8 @@ class VoiceTunnelIntegrationTest {
             }
         }
 
-        alice.connect(ConnectConfig(host = host, port = port, username = "alice"))
-        bob.connect(ConnectConfig(host = host, port = port, username = "bob"))
+        alice.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "alice"))
+        bob.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "bob"))
 
         assertTrue("alice connected", awaitConnected(alice))
         assertTrue("bob connected", awaitConnected(bob))

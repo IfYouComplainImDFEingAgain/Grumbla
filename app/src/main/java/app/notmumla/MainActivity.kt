@@ -131,20 +131,28 @@ private object Routes {
 }
 
 @Composable
-private fun CertChangedDialog(fingerprint: String, onTrust: () -> Unit, onCancel: () -> Unit) {
+private fun CertTrustDialog(fingerprint: String, firstUse: Boolean, onTrust: () -> Unit, onCancel: () -> Unit) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onCancel,
-        title = { androidx.compose.material3.Text("Server certificate changed") },
+        title = {
+            androidx.compose.material3.Text(if (firstUse) "Trust this server?" else "Server certificate changed")
+        },
         text = {
             androidx.compose.material3.Text(
-                "This server's security certificate is different from the one you trusted before. " +
-                    "This is normal if the server was reinstalled — but could also mean someone is " +
-                    "intercepting the connection.\n\nNew fingerprint (SHA-256):\n$fingerprint",
+                if (firstUse) {
+                    "First connection to this server. Check that its certificate fingerprint matches " +
+                        "the one the server admin gave you. Once trusted, you'll be warned if it ever " +
+                        "changes.\n\nFingerprint (SHA-256):\n$fingerprint"
+                } else {
+                    "This server's security certificate is different from the one you trusted before. " +
+                        "This is normal if the server was reinstalled — but could also mean someone is " +
+                        "intercepting the connection.\n\nNew fingerprint (SHA-256):\n$fingerprint"
+                },
             )
         },
         confirmButton = {
             androidx.compose.material3.TextButton(onClick = onTrust) {
-                androidx.compose.material3.Text("Trust & reconnect")
+                androidx.compose.material3.Text(if (firstUse) "Trust & connect" else "Trust & reconnect")
             }
         },
         dismissButton = {
@@ -248,17 +256,18 @@ private fun AppNav() {
                 ) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
 
-            // Leave the session screen if the connection is rejected/fails — unless it's a cert
-            // change, which we surface as a trust prompt instead.
-            LaunchedEffect(state.connection, state.certMismatchFingerprint) {
-                if (state.connection == ConnectionState.FAILED && state.certMismatchFingerprint == null) {
+            // Leave the session screen if the connection is rejected/fails — unless it's an untrusted
+            // cert (first connect or changed), which we surface as a trust prompt instead.
+            LaunchedEffect(state.connection, state.untrustedCertFingerprint) {
+                if (state.connection == ConnectionState.FAILED && state.untrustedCertFingerprint == null) {
                     nav.popBackStack(Routes.CONNECT, inclusive = false)
                 }
             }
 
-            state.certMismatchFingerprint?.let { fp ->
-                CertChangedDialog(
+            state.untrustedCertFingerprint?.let { fp ->
+                CertTrustDialog(
                     fingerprint = fp,
+                    firstUse = state.untrustedCertFirstUse,
                     onTrust = { vm.trustNewCertificate() },
                     onCancel = {
                         vm.disconnect()

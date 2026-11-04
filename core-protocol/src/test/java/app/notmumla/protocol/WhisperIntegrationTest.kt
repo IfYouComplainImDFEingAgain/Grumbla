@@ -55,7 +55,7 @@ class WhisperIntegrationTest {
         carol.voiceSink = sink(carolGot)
 
         for ((c, n) in listOf(alice to "w-alice", bob to "w-bob", carol to "w-carol")) {
-            c.connect(ConnectConfig(host = host, port = port, username = n))
+            c.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = n))
         }
         for (c in listOf(alice, bob, carol)) assertTrue(awaitConnected(c))
         delay(500)

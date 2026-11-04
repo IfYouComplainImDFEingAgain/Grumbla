@@ -53,8 +53,8 @@ class LegacyVoiceTest {
             }
         }
 
-        alice.connect(ConnectConfig(host = host, port = port, username = "alice-legacy"))
-        bob.connect(ConnectConfig(host = host, port = port, username = "bob-legacy"))
+        alice.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "alice-legacy"))
+        bob.connect(ConnectConfig(host = host, port = port, trustUnpinned = true, username = "bob-legacy"))
         assertTrue(awaitConnected(alice)); assertTrue(awaitConnected(bob))
         val aliceSession = alice.state.value.sessionId!!
         delay(500)
