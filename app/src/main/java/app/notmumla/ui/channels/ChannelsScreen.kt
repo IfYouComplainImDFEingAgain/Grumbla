@@ -109,6 +109,10 @@ fun ChannelsScreen(
     earpiece: Boolean? = null,
     onSetEarpiece: (Boolean) -> Unit = {},
     onNudge: (UiUser) -> Unit = {},
+    /** Live profile data for a user session, or null once they've left. */
+    profileOf: (Int) -> app.notmumla.ui.UiUserProfile? = { null },
+    /** Fetch a user's comment/avatar blobs that the server sent only as hashes. */
+    onRequestProfile: (Int) -> Unit = {},
     /** Emits the sender's name for each nudge we receive; the screen shakes. */
     nudges: kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.emptyFlow(),
     /** Four in a Row: null until the easter egg is unlocked. */
@@ -138,6 +142,7 @@ fun ChannelsScreen(
     val layout = ChannelLayout.TREE
     var quickSettings by remember { mutableStateOf(false) }
     var volumeUser by remember { mutableStateOf<UiUser?>(null) }
+    var profileUserId by remember { mutableStateOf<Int?>(null) }
     // Id, not the UiChannel, so the sheet reflects listener changes while open.
     var actionChannelId by remember { mutableStateOf<Int?>(null) }
 
@@ -250,9 +255,16 @@ fun ChannelsScreen(
                 onWhisper = { onWhisper(u); volumeUser = null },
                 onMessage = { onStartPrivateChat(u.id, u.name); volumeUser = null; showTab(1) },
                 onNudge = { onNudge(u); volumeUser = null },
+                onViewProfile = { profileUserId = u.id; volumeUser = null },
                 onChallenge = onChallenge?.let { { it(u); volumeUser = null } },
                 onDismiss = { volumeUser = null },
             )
+        }
+        profileUserId?.let { id ->
+            // Closes by itself if they leave the server while it's open.
+            val profile = profileOf(id)
+            if (profile == null) LaunchedEffect(id) { profileUserId = null }
+            else UserProfileDialog(profile, onRequestBlobs = { onRequestProfile(id) }, onDismiss = { profileUserId = null })
         }
         gameActions?.let { app.notmumla.ui.game.GameOverlay(gameState, it) }
     }
@@ -333,6 +345,7 @@ private fun UserVolumeSheet(
     onWhisper: () -> Unit,
     onMessage: () -> Unit,
     onNudge: () -> Unit,
+    onViewProfile: () -> Unit,
     onChallenge: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
@@ -376,6 +389,11 @@ private fun UserVolumeSheet(
                     }
                 }
                 Spacer(Modifier.height(16.dp))
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = onViewProfile,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("View profile") }
+                Spacer(Modifier.height(12.dp))
                 androidx.compose.material3.FilledTonalButton(
                     onClick = onWhisper,
                     modifier = Modifier.fillMaxWidth(),

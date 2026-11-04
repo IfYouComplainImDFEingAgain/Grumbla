@@ -5,6 +5,7 @@ import app.notmumla.protocol.model.ServerState
 import app.notmumla.protocol.model.User
 import app.notmumla.ui.UiChannel
 import app.notmumla.ui.UiUser
+import app.notmumla.ui.UiUserProfile
 import app.notmumla.ui.UserStatus
 import kotlin.math.abs
 
@@ -81,4 +82,19 @@ fun ServerState.toUiChannels(
     }
     walk(null, 0)
     return out
+}
+
+/** The profile view's data for [session], or null once they've left. */
+fun ServerState.toUiProfile(session: Int): UiUserProfile? {
+    val u = users[session] ?: return null
+    return UiUserProfile(
+        id = u.session,
+        name = u.name,
+        registered = u.registered,
+        channelName = channels[u.channelId]?.name,
+        commentHtml = u.comment?.takeIf { it.isNotBlank() },
+        commentPending = u.comment == null && u.commentHash != null,
+        avatar = u.texture,
+        avatarPending = u.texture == null && u.textureHash != null,
+    )
 }

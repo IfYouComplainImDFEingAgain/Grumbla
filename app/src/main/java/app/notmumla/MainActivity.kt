@@ -34,6 +34,7 @@ import app.notmumla.protocol.model.ConnectionState
 import app.notmumla.ui.channels.ChannelsScreen
 import app.notmumla.ui.channels.initialsFor
 import app.notmumla.ui.channels.toUiChannels
+import app.notmumla.ui.channels.toUiProfile
 import app.notmumla.ui.connect.ConnectScreen
 import app.notmumla.ui.settings.SettingsScreen
 import app.notmumla.ui.theme.MumbleTheme
@@ -353,6 +354,8 @@ private fun AppNav() {
                         }
                     },
                     nudges = vm.nudges,
+                    profileOf = { id -> state.toUiProfile(id) },
+                    onRequestProfile = vm::requestProfile,
                     onChallenge = if (appSettings.gamesUnlocked) { u -> vm.challenge(u.id, u.name) } else null,
                     gameState = gameState,
                     gameActions = vm.gameActions,

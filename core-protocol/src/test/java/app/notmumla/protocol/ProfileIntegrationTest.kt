@@ -21,7 +21,7 @@ import java.net.Socket
 
 /**
  * Our own profile through a real server: comment (short = text, 128+ chars = hash only), avatar
- * texture (hash), and self-registration surfacing a user_id.
+ * texture (hash), fetching both with RequestBlob, and self-registration surfacing a user_id.
  */
 class ProfileIntegrationTest {
 
@@ -73,14 +73,21 @@ class ProfileIntegrationTest {
         assertNotNull("a 128+ char comment arrives as a hash", seen)
         assertNull(seen!!.comment)
         assertEquals(long.encodeUtf8().sha1().hex(), seen.commentHash)
+        bob.requestBlobs(comments = listOf(a))
+        assertNotNull("RequestBlob fetches the full comment", bob.awaitUser(a) { it.comment == long })
 
         val png = ByteArray(500) { it.toByte() }
         alice.setSelfTexture(png)
         val tex = bob.awaitUser(a) { it.textureHash != null }
         assertEquals(png.toByteString().sha1().hex(), tex?.textureHash)
+        assertNull("a 128+ byte texture arrives as a hash only", tex!!.texture)
+        bob.requestBlobs(textures = listOf(a))
+        val fetched = bob.awaitUser(a) { it.texture != null }
+        assertTrue("RequestBlob fetches the avatar bytes", fetched?.texture?.contentEquals(png) == true)
+        assertEquals("the hash survives the blob reply", tex.textureHash, fetched!!.textureHash)
 
         alice.setSelfTexture(ByteArray(0))
-        assertNotNull("an empty texture clears it", bob.awaitUser(a) { it.textureHash == null })
+        assertNotNull("an empty texture clears it", bob.awaitUser(a) { it.textureHash == null && it.texture == null })
 
         // Murmur rate-limits each user's messages (burst 5, then ~1/s) and silently drops the excess.
         delay(2_500)

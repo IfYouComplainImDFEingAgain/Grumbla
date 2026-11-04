@@ -20,6 +20,12 @@ data class User(
     val commentHash: String? = null,
     /** SHA-1 (hex) of the avatar ("texture"); null when the user has none. */
     val textureHash: String? = null,
+    /**
+     * The avatar image bytes, once we have them. Murmur sends small ones inline and only the hash for the
+     * rest, which then need a `RequestBlob`. Kept across updates while [textureHash] doesn't change, so
+     * the array instance (and any image cache keyed on it) stays the same.
+     */
+    val texture: ByteArray? = null,
     /** Registered user id on this server; null for a guest (unregistered) session. */
     val userId: Int? = null,
     val certHash: String? = null,

@@ -29,6 +29,21 @@ data class UiUser(
     val locallyMuted: Boolean = false,
 )
 
+/** What the profile view shows for one user; built on demand from live state, not per row. */
+@Immutable
+class UiUserProfile(
+    val id: Int,
+    val name: String,
+    val registered: Boolean,
+    val channelName: String?,
+    /** The comment as Mumble HTML, or null if they have none or it hasn't arrived yet ([commentPending]). */
+    val commentHtml: String?,
+    val commentPending: Boolean,
+    /** Avatar image bytes, or null if they have none or it hasn't arrived yet ([avatarPending]). */
+    val avatar: ByteArray?,
+    val avatarPending: Boolean,
+)
+
 @Immutable
 data class UiChannel(
     val id: Int,

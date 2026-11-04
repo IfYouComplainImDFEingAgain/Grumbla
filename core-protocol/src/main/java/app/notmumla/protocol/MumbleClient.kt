@@ -39,6 +39,7 @@ import MumbleProto.PermissionDenied
 import MumbleProto.PluginDataTransmission
 import MumbleProto.Ping
 import MumbleProto.Reject
+import MumbleProto.RequestBlob
 import MumbleProto.ServerConfig
 import MumbleProto.ServerSync
 import MumbleProto.TextMessage
@@ -370,6 +371,11 @@ class MumbleClient(
         val before = _state.value.users[session]
         _state.update { s ->
             val existing = s.users[session]
+            val textureHash = when {
+                msg.texture_hash != null -> msg.texture_hash!!.hex().ifEmpty { null }
+                msg.texture != null -> msg.texture!!.takeIf { it.size > 0 }?.sha1()?.hex()
+                else -> existing?.textureHash
+            }
             val updated = (existing ?: User(session = session, name = msg.name ?: "")).copy(
                 name = msg.name ?: existing?.name ?: "",
                 channelId = msg.channel_id ?: existing?.channelId ?: 0,
@@ -387,10 +393,11 @@ class MumbleClient(
                     msg.comment != null -> null
                     else -> existing?.commentHash
                 },
-                textureHash = when {
-                    msg.texture_hash != null -> msg.texture_hash!!.hex().ifEmpty { null }
-                    msg.texture != null -> msg.texture!!.takeIf { it.size > 0 }?.sha1()?.hex()
-                    else -> existing?.textureHash
+                textureHash = textureHash,
+                texture = when {
+                    msg.texture != null -> msg.texture!!.takeIf { it.size > 0 }?.toByteArray()
+                    textureHash == existing?.textureHash -> existing?.texture
+                    else -> null
                 },
                 userId = msg.user_id ?: existing?.userId,
                 certHash = msg.hash ?: existing?.certHash,
@@ -655,6 +662,15 @@ class MumbleClient(
     fun setSelfTexture(image: ByteArray) {
         val session = _state.value.sessionId ?: return
         sendAsync(UserState(session = session, texture = image.toByteString()))
+    }
+
+    /**
+     * Ask for the full comments and avatars that Murmur sent only as hashes. The answers arrive as
+     * ordinary `UserState`s carrying the text or image.
+     */
+    fun requestBlobs(textures: List<Int> = emptyList(), comments: List<Int> = emptyList()) {
+        if (textures.isEmpty() && comments.isEmpty()) return
+        sendAsync(RequestBlob(session_texture = textures, session_comment = comments))
     }
 
     /**

@@ -492,6 +492,16 @@ class SessionManager @Inject constructor(
         return true
     }
 
+    /** Fetch [session]'s comment and avatar if the server sent only their hashes (for the profile view). */
+    fun requestProfile(session: Int) {
+        val mc = client ?: return
+        val u = _state.value.users[session] ?: return
+        mc.requestBlobs(
+            textures = listOfNotNull(session.takeIf { u.textureHash != null && u.texture == null }),
+            comments = listOfNotNull(session.takeIf { u.commentHash != null && u.comment == null }),
+        )
+    }
+
     /** The system chat line for a join/leave (NEXT 2.1) or recording change in our channel, or null for any other event. */
     private fun presenceText(event: MumbleClient.Event): String? = when (event) {
         is MumbleClient.Event.UserJoined -> event.fromChannel
