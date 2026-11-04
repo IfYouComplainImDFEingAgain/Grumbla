@@ -29,6 +29,11 @@ class Notifier @Inject constructor(
             NotificationChannel(CHANNEL_ID, "Messages", NotificationManager.IMPORTANCE_HIGH)
                 .apply { description = "Chat messages and mentions" },
         )
+        // Silent: the join chime (if on) already plays from SessionManager.
+        manager.createNotificationChannel(
+            NotificationChannel(ACTIVITY_CHANNEL_ID, "Channel activity", NotificationManager.IMPORTANCE_LOW)
+                .apply { description = "Users joining and recording, while the app is in the background" },
+        )
     }
 
     /**
@@ -65,7 +70,31 @@ class Notifier @Inject constructor(
         if (nextId > 2100) nextId = 2000
     }
 
+    /**
+     * A low-priority, auto-cancelled channel-activity notification (NEXT 2.4). Posts with the same [tag]
+     * replace each other, so a run of joins or one user's start/stop recording doesn't pile up.
+     */
+    fun postActivity(tag: String, text: String) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) return
+        val open = PendingIntent.getActivity(
+            context, 0, Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val notification = NotificationCompat.Builder(context, ACTIVITY_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_mic)
+            .setContentTitle(text)
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        NotificationManagerCompat.from(context).notify(tag, ACTIVITY_ID, notification)
+    }
+
     private companion object {
         const val CHANNEL_ID = "messages"
+        const val ACTIVITY_CHANNEL_ID = "channel_activity"
+        const val ACTIVITY_ID = 3000
     }
 }

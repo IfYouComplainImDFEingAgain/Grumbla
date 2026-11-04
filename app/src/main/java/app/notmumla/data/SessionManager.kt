@@ -520,14 +520,22 @@ class SessionManager @Inject constructor(
         else -> null
     }
 
-    /** The opt-in join alert: chime + toast, at most one per [JOIN_ALERT_GAP_MS] so a mass move isn't a barrage. */
+    /**
+     * Surface a channel-activity alert: a toast while our activity is on screen (MainActivity collects
+     * [notices]), otherwise a silent notification, since toasts don't show from the background (NEXT 2.4).
+     */
+    private fun alert(tag: String, text: String) {
+        if (app.notmumla.AppVisibility.visible.value) _notices.tryEmit(text) else notifier.postActivity(tag, text)
+    }
+
+    /** The opt-in join alert: chime + toast/notification, at most one per [JOIN_ALERT_GAP_MS] so a mass move isn't a barrage. */
     private fun onUserJoinedAlert(name: String) {
         if (!settings.joinAlerts) return
         val now = android.os.SystemClock.elapsedRealtime()
         if (now - lastJoinAlertMs < JOIN_ALERT_GAP_MS) return
         lastJoinAlertMs = now
         joinChime.play(deafened = _state.value.self?.selfDeaf == true)
-        _notices.tryEmit("$name joined the channel")
+        alert("join", "$name joined the channel")
     }
 
     private fun onNudge(sender: Int, data: ByteArray) {
@@ -670,8 +678,8 @@ class SessionManager @Inject constructor(
                     appendChat(ChatLine(chatId++, "", it, System.currentTimeMillis(), isSystem = true))
                 }
                 if (event is MumbleClient.Event.UserJoined) onUserJoinedAlert(event.name)
-                // Always toasted, unlike join alerts: being recorded isn't something to opt into hearing about.
-                if (event is MumbleClient.Event.RecordingChanged) presenceText(event)?.let { _notices.tryEmit(it) }
+                // Always shown, unlike join alerts: being recorded isn't something to opt into hearing about.
+                if (event is MumbleClient.Event.RecordingChanged) presenceText(event)?.let { alert("rec:${event.session}", it) }
                 if (event is MumbleClient.Event.PluginData) when (event.dataId) {
                     GameMessage.DATA_ID -> game.onData(event.sender, event.data)
                     NudgeMessage.DATA_ID -> onNudge(event.sender, event.data)
