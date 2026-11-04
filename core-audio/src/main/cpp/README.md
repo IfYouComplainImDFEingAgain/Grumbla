@@ -22,5 +22,5 @@ git clone https://github.com/xiph/rnnoise.git /tmp/rnnoise && \
 ```
 
 The Gradle `externalNativeBuild` compiles each as a static lib and links them into `libopusjni.so`
-and `librnnoisejni.so` for `arm64-v8a` and `x86_64`. Requires NDK r27 (`ndkVersion` in
+and `librnnoisejni.so` for `arm64-v8a`, `armeabi-v7a` and `x86_64` (see `docs/BUILD.md` "Native ABIs"). Requires NDK r27 (`ndkVersion` in
 `core-audio/build.gradle.kts`) and CMake 3.22.1.

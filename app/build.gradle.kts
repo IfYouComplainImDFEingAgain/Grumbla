@@ -79,6 +79,9 @@ android {
         // devices via mmap. Otherwise debug builds compress them and 16 KB loading fails.
         jniLibs {
             useLegacyPackaging = false
+            // AndroidX ships stray 32-bit x86 libs, but :core-audio doesn't build Opus for x86. Drop
+            // them so x86-only devices refuse the install instead of crashing on connect (NEXT 1.3).
+            excludes += "/lib/x86/**"
         }
         resources {
             // BouncyCastle ships duplicate multi-release metadata across its jars.

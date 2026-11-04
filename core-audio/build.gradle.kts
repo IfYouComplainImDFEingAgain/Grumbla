@@ -18,8 +18,10 @@ android {
             }
         }
         ndk {
-            // Match the dev device (arm64) plus the common emulator ABI.
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            // arm64 for the dev device, armeabi-v7a for 32-bit-userspace budget phones (NEXT 1.3:
+            // AndroidX ships v7a libs, so without ours the APK installs there and then crashes), x86_64
+            // for the emulator.
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
     }
 
