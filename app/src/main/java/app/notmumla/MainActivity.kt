@@ -455,6 +455,7 @@ private fun AppNav() {
                 onToggleTts = settingsVm::setTtsReadAloud,
                 onToggleMentionSound = settingsVm::setMentionSound,
                 onToggleAllowNudges = settingsVm::setAllowNudges,
+                onToggleJoinAlerts = settingsVm::setJoinAlerts,
                 onToggleRichComposer = settingsVm::setRichComposer,
                 onToggleDebugOverlay = settingsVm::setDebugOverlay,
                 onSetGamesUnlocked = settingsVm::setGamesUnlocked,

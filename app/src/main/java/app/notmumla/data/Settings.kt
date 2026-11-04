@@ -54,6 +54,8 @@ data class AppSettings(
     val mentionSound: Boolean = true,
     /** Let other not-mumla users nudge us (screen shake, short buzz, sound). */
     val allowNudges: Boolean = true,
+    /** Chime and toast when another user enters our channel (NEXT 2.1). Off by default: noisy on busy servers. */
+    val joinAlerts: Boolean = false,
     /** Chat composer with a formatting toolbar (WYSIWYG) instead of typed Markdown. */
     val richComposer: Boolean = false,
     val debugOverlay: Boolean = false,
@@ -116,6 +118,7 @@ class SettingsRepository @Inject constructor(
         val RICH_COMPOSER = booleanPreferencesKey("rich_composer")
         val MENTION = booleanPreferencesKey("mention_sound")
         val NUDGES = booleanPreferencesKey("allow_nudges")
+        val JOIN_ALERTS = booleanPreferencesKey("join_alerts")
         val DEBUG = booleanPreferencesKey("debug_overlay")
         val GAMES = booleanPreferencesKey("games_unlocked")
         val ROUTE_PRIORITY = stringPreferencesKey("route_priority") // comma-separated OutputRoute names
@@ -198,6 +201,7 @@ class SettingsRepository @Inject constructor(
             ttsReadAloud = p[Keys.TTS] ?: false,
             mentionSound = p[Keys.MENTION] ?: true,
             allowNudges = p[Keys.NUDGES] ?: true,
+            joinAlerts = p[Keys.JOIN_ALERTS] ?: false,
             richComposer = p[Keys.RICH_COMPOSER] ?: false,
             debugOverlay = p[Keys.DEBUG] ?: false,
             gamesUnlocked = p[Keys.GAMES] ?: false,
@@ -238,6 +242,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setTtsReadAloud(v: Boolean) = edit { it[Keys.TTS] = v }
     suspend fun setMentionSound(v: Boolean) = edit { it[Keys.MENTION] = v }
     suspend fun setAllowNudges(v: Boolean) = edit { it[Keys.NUDGES] = v }
+    suspend fun setJoinAlerts(v: Boolean) = edit { it[Keys.JOIN_ALERTS] = v }
     suspend fun setRichComposer(v: Boolean) = edit { it[Keys.RICH_COMPOSER] = v }
     suspend fun setDebugOverlay(v: Boolean) = edit { it[Keys.DEBUG] = v }
     suspend fun setGamesUnlocked(v: Boolean) = edit { it[Keys.GAMES] = v }

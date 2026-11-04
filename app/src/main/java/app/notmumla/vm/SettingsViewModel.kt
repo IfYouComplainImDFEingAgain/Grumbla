@@ -144,6 +144,7 @@ class SettingsViewModel @Inject constructor(
     fun setTtsReadAloud(v: Boolean) = update { repo.setTtsReadAloud(v) }
     fun setMentionSound(v: Boolean) = update { repo.setMentionSound(v) }
     fun setAllowNudges(v: Boolean) = update { repo.setAllowNudges(v) }
+    fun setJoinAlerts(v: Boolean) = update { repo.setJoinAlerts(v) }
     fun setRichComposer(v: Boolean) = update { repo.setRichComposer(v) }
     fun setDebugOverlay(v: Boolean) = update { repo.setDebugOverlay(v) }
     fun setGamesUnlocked(v: Boolean) = update { repo.setGamesUnlocked(v) }

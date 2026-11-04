@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.ScreenLockPortrait
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.SettingsBrightness
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.AccountCircle
@@ -763,6 +764,7 @@ internal fun NotificationsPage(
     onToggleTts: (Boolean) -> Unit,
     onToggleMentionSound: (Boolean) -> Unit,
     onToggleAllowNudges: (Boolean) -> Unit,
+    onToggleJoinAlerts: (Boolean) -> Unit,
 ) {
     SettingsPageScaffold("Notifications", onBack) {
         GroupGap()
@@ -776,6 +778,10 @@ internal fun NotificationsPage(
             ToggleRow(Icons.Filled.Vibration, "Allow nudges",
                 "Other Grumbla users can shake your screen and buzz your phone",
                 settings.allowNudges, onToggleAllowNudges)
+            Divider()
+            ToggleRow(Icons.Filled.PersonAdd, "Join alerts",
+                "A sound and a pop-up when someone enters your channel",
+                settings.joinAlerts, onToggleJoinAlerts)
         }
     }
 }

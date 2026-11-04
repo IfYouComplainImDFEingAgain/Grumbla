@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.ScreenLockPortrait
 import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Speaker
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -123,6 +124,8 @@ internal val SETTINGS_INDEX: List<SearchEntry> = listOf(
         keywords = "ping alert"),
     SearchEntry("Allow nudges", SettingsPage.NOTIFICATIONS, Icons.Filled.Vibration,
         "Others can shake your screen and buzz your phone", keywords = "vibrate shake buzz"),
+    SearchEntry("Join alerts", SettingsPage.NOTIFICATIONS, Icons.Filled.PersonAdd,
+        "A sound and a pop-up when someone enters your channel", keywords = "join leave connect sound toast"),
     // Privacy & permissions
     SearchEntry("Microphone", SettingsPage.PRIVACY, Icons.Filled.Mic, keywords = "permission record audio",
         permissionLabel = "Microphone"),

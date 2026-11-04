@@ -33,11 +33,13 @@ class HandshakeIntegrationTest {
     fun connectsAndReachesServerSync() = runBlocking {
         assumeTrue("No Mumble server on $host:$port — skipping", serverReachable())
 
-        val identity = IdentityCertificate.generate(commonName = "user")
+        // Unique: a phone logged in to the same server as "user" would get this rejected as a duplicate.
+        val name = "hs-" + System.nanoTime().toString(36).takeLast(6)
+        val identity = IdentityCertificate.generate(commonName = name)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val client = MumbleClient(identity = identity, scope = scope, osVersion = "test")
 
-        client.connect(ConnectConfig(host = host, port = port, username = "user"))
+        client.connect(ConnectConfig(host = host, port = port, username = name))
 
         val reached = withTimeoutOrNull(15_000) {
             while (true) {
@@ -62,7 +64,7 @@ class HandshakeIntegrationTest {
 
         val self = state.self
         assertNotNull(self)
-        assertEquals("user", self!!.name)
+        assertEquals(name, self!!.name)
 
         client.disconnect()
     }

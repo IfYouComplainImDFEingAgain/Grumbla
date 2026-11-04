@@ -26,6 +26,7 @@ import app.notmumla.game.house.HouseArena
 import app.notmumla.game.house.HouseMessage
 import app.notmumla.game.tank.TankArena
 import app.notmumla.game.tank.TankMessage
+import app.notmumla.nudge.JoinChime
 import app.notmumla.nudge.NudgeEffects
 import app.notmumla.nudge.NudgeLimiter
 import app.notmumla.nudge.NudgeMessage
@@ -470,6 +471,8 @@ class SessionManager @Inject constructor(
 
     private val nudgeLimiter = NudgeLimiter()
     private val nudgeEffects = NudgeEffects(context)
+    private val joinChime = JoinChime(context)
+    private var lastJoinAlertMs = 0L
     private var lastNudgeSent = 0L
     private val _nudges = MutableSharedFlow<String>(extraBufferCapacity = 4)
     /** Name of each user whose nudge got through (drives the screen shake). */
@@ -487,6 +490,28 @@ class SessionManager @Inject constructor(
         mc.sendPluginData(listOf(session), NudgeMessage.DATA_ID, NudgeMessage.encode())
         appendChat(ChatLine(chatId++, "", "You nudged $name", now, isSystem = true))
         return true
+    }
+
+    /** The system chat line for a join/leave in our channel (NEXT 2.1), or null for any other event. */
+    private fun presenceText(event: MumbleClient.Event): String? = when (event) {
+        is MumbleClient.Event.UserJoined -> event.fromChannel
+            ?.let { "${event.name} moved in from ${event.channelName ?: "another channel"}" }
+            ?: "${event.name} connected"
+        is MumbleClient.Event.UserLeft -> event.toChannel
+            ?.let { "${event.name} moved to ${event.channelName ?: "another channel"}" }
+            ?: event.reason?.let { "${event.name} left ($it)" }
+            ?: "${event.name} disconnected"
+        else -> null
+    }
+
+    /** The opt-in join alert: chime + toast, at most one per [JOIN_ALERT_GAP_MS] so a mass move isn't a barrage. */
+    private fun onUserJoinedAlert(name: String) {
+        if (!settings.joinAlerts) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastJoinAlertMs < JOIN_ALERT_GAP_MS) return
+        lastJoinAlertMs = now
+        joinChime.play(deafened = _state.value.self?.selfDeaf == true)
+        _notices.tryEmit("$name joined the channel")
     }
 
     private fun onNudge(sender: Int, data: ByteArray) {
@@ -625,6 +650,10 @@ class SessionManager @Inject constructor(
         eventJob = scope.launch {
             mc.events.collect { event ->
                 if (event is MumbleClient.Event.Text) onIncomingText(event.text)
+                presenceText(event)?.let {
+                    appendChat(ChatLine(chatId++, "", it, System.currentTimeMillis(), isSystem = true))
+                }
+                if (event is MumbleClient.Event.UserJoined) onUserJoinedAlert(event.name)
                 if (event is MumbleClient.Event.PluginData) when (event.dataId) {
                     GameMessage.DATA_ID -> game.onData(event.sender, event.data)
                     NudgeMessage.DATA_ID -> onNudge(event.sender, event.data)
@@ -940,6 +969,7 @@ class SessionManager @Inject constructor(
     }
 
     private companion object {
+        const val JOIN_ALERT_GAP_MS = 2_000L
         const val MAX_RECONNECT_ATTEMPTS = 8
         /** Voice target slot we register for whispers (0 = normal talk, 31 = server loopback). */
         const val WHISPER_TARGET_ID = 1

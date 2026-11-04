@@ -148,6 +148,7 @@ fun SettingsScreen(
     onToggleTts: (Boolean) -> Unit,
     onToggleMentionSound: (Boolean) -> Unit,
     onToggleAllowNudges: (Boolean) -> Unit,
+    onToggleJoinAlerts: (Boolean) -> Unit,
     onToggleRichComposer: (Boolean) -> Unit,
     onToggleDebugOverlay: (Boolean) -> Unit,
     onSetGamesUnlocked: (Boolean) -> Unit,
@@ -264,7 +265,7 @@ fun SettingsScreen(
             )
             SettingsPage.CHAT -> ChatPage(toHub, settings, onToggleRichComposer)
             SettingsPage.NOTIFICATIONS -> NotificationsPage(toHub, settings, onToggleTts, onToggleMentionSound,
-                onToggleAllowNudges)
+                onToggleAllowNudges, onToggleJoinAlerts)
             SettingsPage.PRIVACY -> PrivacyPage(toHub)
             SettingsPage.ABOUT -> AboutPage(toHub, settings, onSetGamesUnlocked, onToggleDebugOverlay, onOpenLicenses)
         }
@@ -331,7 +332,7 @@ private fun SettingsHub(
         HubGroup {
             HubRow(SettingsPage.CHAT, "Formatting toolbar", onOpen = onOpen)
             Divider()
-            HubRow(SettingsPage.NOTIFICATIONS, "Text-to-speech, mention sound, nudges", onOpen = onOpen)
+            HubRow(SettingsPage.NOTIFICATIONS, "Text-to-speech, mention sound, nudges, join alerts", onOpen = onOpen)
         }
         HubGroup {
             HubRow(SettingsPage.PRIVACY, privacySummary, alert = missing.isNotEmpty(), onOpen = onOpen)

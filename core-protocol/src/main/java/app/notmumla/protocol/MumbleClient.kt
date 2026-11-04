@@ -91,7 +91,8 @@ class MumbleClient(
     private val _state = MutableStateFlow(ServerState())
     val state: StateFlow<ServerState> = _state.asStateFlow()
 
-    val events = MutableSharedFlow<Event>(extraBufferCapacity = 32)
+    // Roomy: a mass move emits one presence event per user, and tryEmit drops on overflow.
+    val events = MutableSharedFlow<Event>(extraBufferCapacity = 256)
 
     sealed interface Event {
         data class Text(val text: IncomingText) : Event
@@ -104,6 +105,23 @@ class MumbleClient(
          * by the server, so it can be trusted; [data] cannot — any user on the server may send it.
          */
         class PluginData(val sender: Int, val dataId: String, val data: ByteArray) : Event
+        /**
+         * Another user entered our channel: connected straight into it ([fromChannel] null) or moved in
+         * from [fromChannel]. Never emitted for the user list sent before `ServerSync`, nor for our own moves.
+         * [channelName] is [fromChannel]'s name when the event fired: an emptied temp channel is gone a moment later.
+         */
+        data class UserJoined(
+            val session: Int, val name: String, val fromChannel: Int?, val channelName: String? = null,
+        ) : Event
+        /**
+         * Another user left our channel: disconnected ([toChannel] null) or moved to [toChannel].
+         * [channelName] is [toChannel]'s name. [reason] is set when the server removed them ("Kicked: …",
+         * "Banned from the server").
+         */
+        data class UserLeft(
+            val session: Int, val name: String, val toChannel: Int?,
+            val channelName: String? = null, val reason: String? = null,
+        ) : Event
     }
 
     private var channel: ControlChannel? = null
@@ -334,6 +352,7 @@ class MumbleClient(
 
     private fun onUserState(msg: UserState) {
         val session = msg.session ?: return
+        val before = _state.value.users[session]
         _state.update { s ->
             val existing = s.users[session]
             val updated = (existing ?: User(session = session, name = msg.name ?: "")).copy(
@@ -365,25 +384,52 @@ class MumbleClient(
             )
             s.copy(users = s.users + (session to updated))
         }
+        emitPresence(session, before, _state.value.users[session], reason = null)
+    }
+
+    /**
+     * Joined/left events for our channel, from a user's state before and after one message (null = not
+     * on the server). Only after `ServerSync`, and never for ourselves: when we move, the users already
+     * in the old or new channel haven't joined or left anything.
+     */
+    private fun emitPresence(session: Int, before: User?, after: User?, reason: String?) {
+        val s = _state.value
+        if (s.connection != ConnectionState.CONNECTED || session == s.sessionId) return
+        val ours = s.self?.channelId ?: return
+        val was = before?.channelId
+        val now = after?.channelId
+        when {
+            now == ours && was != ours ->
+                events.tryEmit(Event.UserJoined(session, after.name, was, s.channels[was]?.name))
+            was == ours && now != ours ->
+                events.tryEmit(Event.UserLeft(session, before.name, now, s.channels[now]?.name, reason))
+        }
+    }
+
+    private fun removalReason(msg: UserRemove): String? {
+        val reason = msg.reason?.takeIf { it.isNotBlank() }
+        val banned = msg.ban == true
+        return when {
+            banned && reason != null -> "Banned: $reason"
+            banned -> "Banned from the server"
+            reason != null -> "Kicked: $reason"
+            msg.actor != null -> "Kicked"
+            else -> null
+        }
     }
 
     private fun onUserRemove(msg: UserRemove) {
         // If the removed session is *us*, the server kicked or banned us — surface why instead of
         // letting the socket close into a generic "connection lost" a moment later.
         if (msg.session == _state.value.sessionId) {
-            val banned = msg.ban == true
-            val reason = msg.reason?.takeIf { it.isNotBlank() }
-            val text = when {
-                banned && reason != null -> "Banned: $reason"
-                banned -> "Banned from the server"
-                reason != null -> "Kicked: $reason"
-                else -> "Removed from the server"
-            }
+            val text = removalReason(msg) ?: "Removed from the server"
             _state.update { it.copy(connection = ConnectionState.FAILED, error = text, fatal = true) }
             events.tryEmit(Event.Disconnected(text))
             return
         }
+        val before = _state.value.users[msg.session]
         _state.update { it.copy(users = it.users - msg.session) }
+        emitPresence(msg.session, before, after = null, reason = removalReason(msg))
     }
 
     private fun onServerSync(msg: ServerSync) {
@@ -592,6 +638,14 @@ class MumbleClient(
 
     fun sendText(channelId: Int, message: String) {
         sendAsync(TextMessage(message = message, channel_id = listOf(channelId)))
+    }
+
+    /**
+     * Ask the server to create a channel under [parentId]. Murmur moves the creator into a new temporary
+     * channel and deletes it once empty. The default ACL only lets registered users make temp channels.
+     */
+    fun createChannel(parentId: Int, name: String, temporary: Boolean = true) {
+        sendAsync(ChannelState(parent = parentId, name = name, temporary = temporary))
     }
 
     /** Send a private text message to the user with session [session]. */
