@@ -6,6 +6,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -33,9 +36,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.notmumla.ui.chat.rememberChatImage
 import app.notmumla.ui.theme.MumbleTheme
 
-/** Circular initial avatar, optionally pulsing when speaking. */
+/** Circular avatar: [image] (JPEG/PNG bytes) once decoded, else initials on [color]. */
 @Composable
 fun Avatar(
     initials: String,
@@ -43,7 +47,17 @@ fun Avatar(
     size: Dp = 40.dp,
     dimmed: Boolean = false,
     modifier: Modifier = Modifier,
+    image: ByteArray? = null,
 ) {
+    val bitmap = image?.let { rememberChatImage(it, with(LocalDensity.current) { size.roundToPx() }).value }
+    if (bitmap != null) {
+        Image(
+            bitmap, null, contentScale = ContentScale.Crop,
+            alpha = if (dimmed) 0.55f else 1f,
+            modifier = modifier.size(size).clip(CircleShape),
+        )
+        return
+    }
     Box(
         modifier = modifier
             .size(size)

@@ -502,6 +502,34 @@ class SessionManager @Inject constructor(
         )
     }
 
+    /** Avatars already asked for this connection, by session → the texture hash asked for. */
+    private val avatarsRequested = HashMap<Int, String>()
+    private val avatarsQueued = LinkedHashSet<Int>()
+    private var avatarFlush: Job? = null
+
+    /**
+     * Fetch [session]'s avatar for a channel row (BACKLOG 3.4a). Rows call this as they compose, so
+     * only users scrolled into view are fetched. Requests within [AVATAR_BATCH_MS] go out as one
+     * `RequestBlob`: Murmur's rate limit silently drops a burst of separate messages.
+     */
+    fun requestAvatar(session: Int) {
+        if (!settings.showAvatars) return
+        val u = _state.value.users[session] ?: return
+        val hash = u.textureHash ?: return
+        if (u.texture != null) return
+        synchronized(avatarsRequested) {
+            if (avatarsRequested[session] == hash) return
+            avatarsRequested[session] = hash
+            avatarsQueued += session
+            if (avatarFlush?.isActive == true) return
+            avatarFlush = scope.launch {
+                delay(AVATAR_BATCH_MS)
+                val batch = synchronized(avatarsRequested) { avatarsQueued.toList().also { avatarsQueued.clear() } }
+                client?.requestBlobs(textures = batch)
+            }
+        }
+    }
+
     /** The system chat line for a join/leave (NEXT 2.1) or recording change in our channel, or null for any other event. */
     private fun presenceText(event: MumbleClient.Event): String? = when (event) {
         is MumbleClient.Event.UserJoined -> event.fromChannel
@@ -619,6 +647,7 @@ class SessionManager @Inject constructor(
             osVersion = Build.VERSION.RELEASE ?: "",
         )
         client = mc
+        synchronized(avatarsRequested) { avatarsRequested.clear(); avatarsQueued.clear() }
 
         var spurtTarget: Int? = null
         val eng = AudioEngine(audioManager) { opus, terminator ->
@@ -997,6 +1026,7 @@ class SessionManager @Inject constructor(
 
     private companion object {
         const val JOIN_ALERT_GAP_MS = 2_000L
+        const val AVATAR_BATCH_MS = 150L
         const val MAX_RECONNECT_ATTEMPTS = 8
         /** Voice target slot we register for whispers (0 = normal talk, 31 = server loopback). */
         const val WHISPER_TARGET_ID = 1

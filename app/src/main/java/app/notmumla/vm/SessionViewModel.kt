@@ -91,6 +91,7 @@ class SessionViewModel @Inject constructor(
     val nudges: kotlinx.coroutines.flow.SharedFlow<String> = sessionManager.nudges
     fun nudge(session: Int, name: String): Boolean = sessionManager.nudge(session, name)
     fun requestProfile(session: Int) = sessionManager.requestProfile(session)
+    fun requestAvatar(session: Int) = sessionManager.requestAvatar(session)
 
     // Four in a Row (easter egg).
     val gameState: StateFlow<app.notmumla.game.GameState> = sessionManager.game.state

@@ -27,6 +27,10 @@ data class UiUser(
     val gainDb: Int = 0,
     /** Muted locally by us (we drop their audio); distinct from their own/server mute. */
     val locallyMuted: Boolean = false,
+    /** Their avatar image bytes (identity-compared), or null: none, not fetched yet, or avatars off. */
+    val avatarImage: ByteArray? = null,
+    /** They have an avatar we haven't fetched; the row requests it when it composes. */
+    val avatarPending: Boolean = false,
 )
 
 /** What the profile view shows for one user; built on demand from live state, not per row. */

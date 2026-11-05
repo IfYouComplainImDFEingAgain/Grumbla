@@ -113,6 +113,8 @@ fun ChannelsScreen(
     profileOf: (Int) -> app.notmumla.ui.UiUserProfile? = { null },
     /** Fetch a user's comment/avatar blobs that the server sent only as hashes. */
     onRequestProfile: (Int) -> Unit = {},
+    /** Fetch a user's avatar for their row (only rows on screen ask; the manager batches them). */
+    onNeedAvatar: (Int) -> Unit = {},
     /** Emits the sender's name for each nudge we receive; the screen shakes. */
     nudges: kotlinx.coroutines.flow.Flow<String> = kotlinx.coroutines.flow.emptyFlow(),
     /** Four in a Row: null until the easter egg is unlocked. */
@@ -186,8 +188,8 @@ fun ChannelsScreen(
                         val onUserLongPress: (UiUser) -> Unit = { if (!it.isYou) volumeUser = it }
                         val onChannelLongPress: (Int) -> Unit = { actionChannelId = it }
                         when (layout) {
-                            ChannelLayout.TREE -> TreeLayout(channels, onJoinChannel, onChannelLongPress, onUserLongPress)
-                            ChannelLayout.SPEAKERS -> SpeakersLayout(channels, onJoinChannel, onUserLongPress)
+                            ChannelLayout.TREE -> TreeLayout(channels, onJoinChannel, onChannelLongPress, onUserLongPress, onNeedAvatar)
+                            ChannelLayout.SPEAKERS -> SpeakersLayout(channels, onJoinChannel, onUserLongPress, onNeedAvatar)
                             ChannelLayout.COMPACT -> CompactLayout(channels, onJoinChannel, onChannelLongPress, onUserLongPress)
                         }
                     }
@@ -531,6 +533,7 @@ private fun TreeLayout(
     onJoin: (Int) -> Unit,
     onChannelLongPress: (Int) -> Unit,
     onUserLongPress: (UiUser) -> Unit,
+    onNeedAvatar: (Int) -> Unit,
 ) {
     val c = MumbleTheme.colors
     if (channels.isEmpty()) { EmptyChannels(); return }
@@ -543,9 +546,16 @@ private fun TreeLayout(
         items(channels) { channel ->
             ChannelHeaderRow(channel, onJoin, onChannelLongPress)
             channel.listeners.forEach { ListenerRow(it) { onUserLongPress(it) } }
-            channel.users.forEach { user -> UserRow(user) { onUserLongPress(user) } }
+            channel.users.forEach { user -> UserRow(user, onNeedAvatar) { onUserLongPress(user) } }
         }
     }
+}
+
+/** [Avatar] for a channel row; asks for the image while it's on screen and not fetched yet. */
+@Composable
+private fun UserAvatar(user: UiUser, size: androidx.compose.ui.unit.Dp, onNeedAvatar: (Int) -> Unit, dimmed: Boolean = false) {
+    if (user.avatarPending) LaunchedEffect(user.id) { onNeedAvatar(user.id) }
+    Avatar(user.initials, user.avatar, size = size, dimmed = dimmed, image = user.avatarImage)
 }
 
 /** A red dot while the user's client is recording (NEXT 2.2). */
@@ -636,7 +646,7 @@ private fun ListenerRow(
 }
 
 @Composable
-private fun UserRow(user: UiUser, onLongPress: () -> Unit) {
+private fun UserRow(user: UiUser, onNeedAvatar: (Int) -> Unit, onLongPress: () -> Unit) {
     val c = MumbleTheme.colors
     Row(
         Modifier.fillMaxWidth()
@@ -645,7 +655,7 @@ private fun UserRow(user: UiUser, onLongPress: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        Avatar(user.initials, user.avatar, size = 28.dp, dimmed = user.status == UserStatus.AFK)
+        UserAvatar(user, 28.dp, onNeedAvatar, dimmed = user.status == UserStatus.AFK)
         Text(user.name, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = c.onSurface,
             modifier = Modifier.weight(1f))
         RecordingBadge(user)
@@ -668,7 +678,12 @@ private fun UserRow(user: UiUser, onLongPress: () -> Unit) {
 /* ---------------- Speakers layout ---------------- */
 
 @Composable
-private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onUserLongPress: (UiUser) -> Unit) {
+private fun SpeakersLayout(
+    channels: List<UiChannel>,
+    onJoin: (Int) -> Unit,
+    onUserLongPress: (UiUser) -> Unit,
+    onNeedAvatar: (Int) -> Unit,
+) {
     val c = MumbleTheme.colors
     val current = channels.firstOrNull { it.isCurrent } ?: channels.firstOrNull()
     if (current == null) { EmptyChannels(); return }
@@ -691,7 +706,7 @@ private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onU
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
-                    ) { speakers.forEach { s -> SpeakerBubble(s) { onUserLongPress(s) } } }
+                    ) { speakers.forEach { s -> SpeakerBubble(s, onNeedAvatar) { onUserLongPress(s) } } }
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -712,7 +727,7 @@ private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onU
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Avatar(user.initials, user.avatar, size = 32.dp)
+                UserAvatar(user, 32.dp, onNeedAvatar)
                 Text(user.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     color = c.onSurface, modifier = Modifier.weight(1f))
                 RecordingBadge(user)
@@ -726,14 +741,14 @@ private fun SpeakersLayout(channels: List<UiChannel>, onJoin: (Int) -> Unit, onU
 }
 
 @Composable
-private fun SpeakerBubble(user: UiUser, onLongPress: () -> Unit) {
+private fun SpeakerBubble(user: UiUser, onNeedAvatar: (Int) -> Unit, onLongPress: () -> Unit) {
     val c = MumbleTheme.colors
     Column(
         Modifier.combinedClickable(onClick = {}, onLongClick = onLongPress),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Avatar(user.initials, user.avatar, size = 56.dp)
+        UserAvatar(user, 56.dp, onNeedAvatar)
         Text(user.name.substringBefore(" "), fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
             color = c.onSurface)
         RecordingBadge(user)

@@ -303,7 +303,9 @@ private fun AppNav() {
                     connectionLabel = connectionLabel,
                     // Remembered so unrelated updates (e.g. `transmitting` flipping) hand the screen the
                     // same list instances and Compose can skip the channel tree / chat entirely.
-                    channels = remember(state, speaking, userVolumes, mutedUsers) { state.toUiChannels(speaking, userVolumes, mutedUsers) },
+                    channels = remember(state, speaking, userVolumes, mutedUsers, appSettings.showAvatars) {
+                        state.toUiChannels(speaking, userVolumes, mutedUsers, appSettings.showAvatars)
+                    },
                     chatMessages = remember(chat) { chat.map { it.toUiMessage() } },
                     selfMuted = self?.selfMute ?: false,
                     selfDeafened = self?.selfDeaf ?: false,
@@ -356,6 +358,7 @@ private fun AppNav() {
                     nudges = vm.nudges,
                     profileOf = { id -> state.toUiProfile(id) },
                     onRequestProfile = vm::requestProfile,
+                    onNeedAvatar = vm::requestAvatar,
                     onChallenge = if (appSettings.gamesUnlocked) { u -> vm.challenge(u.id, u.name) } else null,
                     gameState = gameState,
                     gameActions = vm.gameActions,
