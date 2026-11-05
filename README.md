@@ -74,9 +74,6 @@ Use the wrapper (`./gradlew`), not a system Gradle. Gradle 9.x doesn't work with
 the wrapper is pinned to 8.11.1. The first native build is slow because it compiles libopus for
 `arm64-v8a` and `x86_64`.
 
-Release signing, multiple phones, and connecting a phone to a local server are covered in
-[`docs/BUILD.md`](docs/BUILD.md).
-
 ## Configuration
 
 Most of it is in Settings. The ones worth knowing about:
@@ -162,8 +159,6 @@ Mumble's brute-force auto-ban (10 per 120 s) partway through, and the remaining 
   certificate prompts.
 - No DNS SRV lookup. Connect by host and port.
 - Some settings are still visual only: master volume, priority speaker, join/leave sounds.
-
-The full backlog is in [`NEXT.md`](NEXT.md) and [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ## License
 
