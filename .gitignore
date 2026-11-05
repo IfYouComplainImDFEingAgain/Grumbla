@@ -34,3 +34,9 @@ CLAUDE.md
 .claude/settings.local.json
 logs/claude-loop/
 STOP
+
+# Session docs (local only)
+PROMPT.md
+PROGRESS.md
+NEXT.md
+docs/
